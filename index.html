@@ -11,10 +11,16 @@
      executed them in place during the initial parse — so anything in there
      runs twice. Two Supabase clients in one tab race over the same session. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js"></script>
-<script src="supabaseClient.js"></script>
-<script src="importer.js"></script>
-<script src="db.js"></script>
+
+<!-- ?v=N is bumped, on all four together, whenever any of them changes. There
+     is no build step to fingerprint them, and GitHub Pages serves a .js with a
+     ten-minute cache: without this a returning tab can run a new index.html
+     against an old db.js and call a function that does not exist yet. They
+     move as one version because they are one layer. -->
+<script src="config.js?v=2"></script>
+<script src="supabaseClient.js?v=2"></script>
+<script src="importer.js?v=2"></script>
+<script src="db.js?v=2"></script>
 </head>
 <body>
 <x-dc>
@@ -620,6 +626,12 @@ textarea.input { min-height: 90px; resize: vertical; }
     <sc-if value="{{sStudents}}" hint-placeholder-val="{{false}}">
       <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Tutor</div>
       <h1 style="margin:4px 0 24px">My students</h1>
+      <sc-if value="{{hasLogBanner}}" hint-placeholder-val="{{false}}">
+        <div class="card blueprint" style="margin-bottom:24px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-color:#8c1d18">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <span style="font-size:14px;color:#8c1d18">{{logBannerText}}</span>
+        </div>
+      </sc-if>
       <sc-if value="{{noStudents}}" hint-placeholder-val="{{false}}"><p style="font-size:14px;opacity:0.65">No tutees linked to you yet — ask an admin.</p></sc-if>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px">
         <sc-for list="{{students}}" as="s" hint-placeholder-count="3">
@@ -634,6 +646,22 @@ textarea.input { min-height: 90px; resize: vertical; }
               <span class="{{s.errorTagClass}}">{{s.errorText}}</span>
               <a href="#" style="font-size:12px;text-decoration:none" sc-camel-on-click="{{s.openLog}}">View error log</a>
             </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <sc-if value="{{s.logStale}}" hint-placeholder-val="{{false}}">
+                <span class="tag" style="border:1px solid #8c1d18;color:#8c1d18">{{s.logText}}</span>
+              </sc-if>
+              <sc-if value="{{s.logFresh}}" hint-placeholder-val="{{true}}">
+                <span class="tag tag-neutral">{{s.logText}}</span>
+              </sc-if>
+              <sc-if value="{{s.noProfile}}" hint-placeholder-val="{{false}}">
+                <span class="tag" style="border:1px solid #8c1d18;color:#8c1d18">No profile yet</span>
+              </sc-if>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn btn-secondary" style="padding:3px 10px;font-size:12px" sc-camel-on-click="{{s.openProfile}}">Profile</button>
+              <button type="button" class="btn btn-secondary" style="padding:3px 10px;font-size:12px" sc-camel-on-click="{{s.openLogs}}">Session Logs</button>
+              <button type="button" class="btn btn-primary" style="padding:3px 10px;font-size:12px" sc-camel-on-click="{{s.logSession}}">Log session</button>
+            </div>
             <sc-if value="{{s.hasModules}}" hint-placeholder-val="{{true}}">
               <div style="border-top:1px solid var(--color-neutral-300);padding-top:8px;display:flex;flex-direction:column;gap:6px">
                 <sc-for list="{{s.modules}}" as="am" hint-placeholder-count="2">
@@ -641,6 +669,207 @@ textarea.input { min-height: 90px; resize: vertical; }
                     <span style="flex:1">{{am.title}}</span>
                     <span style="opacity:0.6">{{am.progress}}</span>
                     <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{am.unassign}}">Unassign</button>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sProfile}}" hint-placeholder-val="{{false}}">
+      <a href="#" sc-camel-on-click="{{spBack}}" style="font-size:13px;text-decoration:none">← My students</a>
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55;margin-top:16px">Student profile</div>
+      <h1 style="margin:4px 0 6px">{{spName}}</h1>
+      <p style="margin:0 0 24px;font-size:14px;opacity:0.65">Complete once at intake. Update goals and notes as they change.</p>
+      <div class="card blueprint" style="max-width:640px;display:flex;flex-direction:column;gap:14px">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div class="field"><label>STUDENT NAME &amp; GRADE</label>
+          <div style="display:flex;gap:10px;align-items:center">
+            <span style="flex:1;font-size:14px">{{spName}}</span>
+            <input class="input" style="max-width:200px" placeholder="Grade" value="{{spGrade}}" sc-camel-on-change="{{onSpGrade}}">
+          </div>
+        </div>
+        <div class="field"><label>SUBJECT(S)</label><input class="input" value="{{spSubjects}}" sc-camel-on-change="{{onSpSubjects}}"></div>
+        <div class="field" style="max-width:220px"><label>START DATE</label><input class="input" type="date" value="{{spStartDate}}" sc-camel-on-change="{{onSpStartDate}}"></div>
+        <div class="field"><label>REGULAR SCHEDULE</label><input class="input" value="{{spSchedule}}" sc-camel-on-change="{{onSpSchedule}}"></div>
+        <div class="field"><label>PARENT / GUARDIAN CONTACT</label><input class="input" value="{{spContact}}" sc-camel-on-change="{{onSpContact}}"></div>
+        <div class="field"><label>GOALS</label><textarea class="input" rows="3" value="{{spGoals}}" sc-camel-on-change="{{onSpGoals}}"></textarea></div>
+        <div class="field"><label>LEARNING STYLE, INTERESTS, EXTRA NOTES ABOUT THEM AS A PERSON</label><textarea class="input" rows="4" value="{{spNotes}}" sc-camel-on-change="{{onSpNotes}}"></textarea></div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button type="button" class="btn btn-primary blueprint" disabled="{{spBusy}}" sc-camel-on-click="{{spSave}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Save profile</button>
+          <span style="font-size:12px;opacity:0.6">{{spUpdated}}</span>
+        </div>
+        <sc-if value="{{hasSpMsg}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;border-left:2px solid var(--color-accent);padding-left:10px">{{spMsg}}</p></sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sLogForm}}" hint-placeholder-val="{{false}}">
+      <a href="#" sc-camel-on-click="{{lfBack}}" style="font-size:13px;text-decoration:none">{{lfBackLabel}}</a>
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55;margin-top:16px">{{lfKicker}}</div>
+      <h1 style="margin:4px 0 6px">{{lfTitle}}</h1>
+      <p style="margin:0 0 24px;font-size:14px;opacity:0.65">One sheet per session. Fill every field before you leave the session: date and duration, what you covered, homework set, a 1–5 progress mark, anything the student struggled with, and any message passed to the parent. Initial each sheet.</p>
+      <div class="card blueprint" style="max-width:640px;display:flex;flex-direction:column;gap:14px">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div class="field" style="flex:1;min-width:150px"><label>DATE</label><input class="input" type="date" value="{{lfDate}}" sc-camel-on-change="{{onLfDate}}"></div>
+          <div class="field" style="flex:1;min-width:150px"><label>DURATION</label><input class="input" placeholder="e.g. 60 min" value="{{lfDuration}}" sc-camel-on-change="{{onLfDuration}}"></div>
+          <div class="field" style="flex:1;min-width:120px"><label>TUTOR INITIALS</label><input class="input" value="{{lfInitials}}" sc-camel-on-change="{{onLfInitials}}"></div>
+        </div>
+        <div class="field"><label>TOPICS COVERED</label><textarea class="input" rows="3" value="{{lfTopics}}" sc-camel-on-change="{{onLfTopics}}"></textarea></div>
+        <div class="field"><label>HOMEWORK ASSIGNED</label><textarea class="input" rows="2" value="{{lfHomework}}" sc-camel-on-change="{{onLfHomework}}"></textarea></div>
+        <div class="field"><label>PROGRESS THIS SESSION (1 = STRUGGLED · 5 = MASTERED — MARK ONE)</label>
+          <div class="seg" style="display:inline-flex;flex-wrap:wrap">
+            <sc-for list="{{lfProgressOpts}}" as="o" hint-placeholder-count="5">
+              <label class="seg-opt"><input type="radio" name="lfprog" checked="{{o.active}}" sc-camel-on-change="{{o.pick}}">{{o.label}}</label>
+            </sc-for>
+          </div>
+        </div>
+        <div class="field"><label>STRUGGLES / AREAS TO REVIEW</label><textarea class="input" rows="3" value="{{lfStruggles}}" sc-camel-on-change="{{onLfStruggles}}"></textarea></div>
+        <div class="field"><label>PARENT COMMUNICATION</label><textarea class="input" rows="3" value="{{lfParent}}" sc-camel-on-change="{{onLfParent}}"></textarea></div>
+        <div class="field"><label>PAYMENT STATUS (MARK ONE)</label>
+          <div class="seg" style="display:inline-flex;flex-wrap:wrap">
+            <sc-for list="{{lfPaymentOpts}}" as="o" hint-placeholder-count="4">
+              <label class="seg-opt"><input type="radio" name="lfpay" checked="{{o.active}}" sc-camel-on-change="{{o.pick}}">{{o.label}}</label>
+            </sc-for>
+          </div>
+        </div>
+        <sc-if value="{{hasLfErr}}" hint-placeholder-val="{{false}}">
+          <p style="margin:0;font-size:13px;line-height:1.6;border-left:2px solid #8c1d18;padding-left:10px;color:#8c1d18">{{lfErr}}</p>
+        </sc-if>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <sc-if value="{{lfCanDraft}}" hint-placeholder-val="{{true}}">
+            <button type="button" class="btn btn-secondary" disabled="{{lfBusy}}" sc-camel-on-click="{{lfSaveDraft}}">Save as draft</button>
+          </sc-if>
+          <button type="button" class="btn btn-primary blueprint" disabled="{{lfBusy}}" sc-camel-on-click="{{lfSubmit}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>{{lfSubmitLabel}}</button>
+          <sc-if value="{{lfCanDelete}}" hint-placeholder-val="{{false}}">
+            <button type="button" class="btn btn-ghost" style="margin-left:auto;color:#8c1d18" sc-camel-on-click="{{lfDelete}}">Discard draft</button>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sLogs}}" hint-placeholder-val="{{false}}">
+      <a href="#" sc-camel-on-click="{{slBack}}" style="font-size:13px;text-decoration:none">← My students</a>
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55;margin-top:16px">Session logs</div>
+      <h1 style="margin:4px 0 6px">{{slName}}</h1>
+      <p style="margin:0 0 20px;font-size:14px;opacity:0.65">{{slIntro}}</p>
+      <button type="button" class="btn btn-primary blueprint" style="margin-bottom:24px" sc-camel-on-click="{{slNew}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Log session</button>
+      <sc-if value="{{slEmpty}}" hint-placeholder-val="{{false}}"><p style="font-size:14px;opacity:0.65">No sessions logged yet.</p></sc-if>
+      <div style="display:flex;flex-direction:column;gap:12px;max-width:760px">
+        <sc-for list="{{slLogs}}" as="g" hint-placeholder-count="3">
+          <div class="card blueprint" style="display:flex;flex-direction:column;gap:10px">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;cursor:pointer" sc-camel-on-click="{{g.toggle}}">
+              <span class="card-kicker">{{g.dateText}}</span>
+              <span class="{{g.statusClass}}">{{g.statusLabel}}</span>
+              <span style="font-size:13px;opacity:0.7">{{g.summary}}</span>
+              <span style="margin-left:auto;font-size:12px;opacity:0.6">{{g.toggleLabel}}</span>
+            </div>
+            <sc-if value="{{g.open}}" hint-placeholder-val="{{false}}">
+              <div style="display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--color-neutral-300);padding-top:12px">
+                <sc-for list="{{g.fields}}" as="f" hint-placeholder-count="9">
+                  <div>
+                    <div style="font-size:11px;letter-spacing:0.06em;opacity:0.55">{{f.label}}</div>
+                    <div style="font-size:14px;line-height:1.6;white-space:pre-wrap">{{f.value}}</div>
+                  </div>
+                </sc-for>
+                <sc-if value="{{g.canEdit}}" hint-placeholder-val="{{false}}">
+                  <div><button type="button" class="btn btn-secondary" sc-camel-on-click="{{g.edit}}">{{g.editLabel}}</button></div>
+                </sc-if>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sAdminLogs}}" hint-placeholder-val="{{false}}">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Admin</div>
+      <h1 style="margin:4px 0 6px">Session logs</h1>
+      <p style="margin:0 0 20px;font-size:14px;opacity:0.65">Every session sheet, newest first. Filter, read, or export what you filtered.</p>
+      <div class="card blueprint" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:24px">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div class="field" style="flex:1;min-width:170px"><label>Tutor</label>
+          <sc-raw-select class="input" value="{{alTutor}}" sc-camel-on-change="{{onAlTutor}}">
+            <sc-for list="{{alTutorOpts}}" as="o"><option value="{{o.id}}">{{o.label}}</option></sc-for>
+          </sc-raw-select>
+        </div>
+        <div class="field" style="flex:1;min-width:170px"><label>Tutee</label>
+          <sc-raw-select class="input" value="{{alTutee}}" sc-camel-on-change="{{onAlTutee}}">
+            <sc-for list="{{alTuteeOpts}}" as="o"><option value="{{o.id}}">{{o.label}}</option></sc-for>
+          </sc-raw-select>
+        </div>
+        <div class="field" style="flex:1;min-width:150px"><label>From</label><input class="input" type="date" value="{{alFrom}}" sc-camel-on-change="{{onAlFrom}}"></div>
+        <div class="field" style="flex:1;min-width:150px"><label>To</label><input class="input" type="date" value="{{alTo}}" sc-camel-on-change="{{onAlTo}}"></div>
+        <button type="button" class="btn btn-ghost" sc-camel-on-click="{{alClear}}">Clear</button>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <span style="font-size:13px;opacity:0.7">{{alCountText}}</span>
+        <button type="button" class="btn btn-secondary" disabled="{{alCantExport}}" sc-camel-on-click="{{alExport}}">Export CSV</button>
+      </div>
+      <div style="overflow-x:auto">
+        <sc-raw-table class="table">
+          <sc-raw-thead><sc-raw-tr>
+            <sc-raw-th>Date</sc-raw-th><sc-raw-th>Tutee</sc-raw-th><sc-raw-th>Tutor</sc-raw-th>
+            <sc-raw-th>Duration</sc-raw-th><sc-raw-th>Progress</sc-raw-th><sc-raw-th>Payment</sc-raw-th>
+            <sc-raw-th>Status</sc-raw-th><sc-raw-th></sc-raw-th>
+          </sc-raw-tr></sc-raw-thead>
+          <sc-raw-tbody>
+            <sc-for list="{{alRows}}" as="r" hint-placeholder-count="5">
+              <sc-raw-tr>
+                <sc-raw-td>{{r.dateText}}</sc-raw-td><sc-raw-td>{{r.tuteeName}}</sc-raw-td>
+                <sc-raw-td class="text-muted">{{r.tutorName}}</sc-raw-td><sc-raw-td>{{r.duration}}</sc-raw-td>
+                <sc-raw-td>{{r.progress}}</sc-raw-td><sc-raw-td>{{r.payment}}</sc-raw-td>
+                <sc-raw-td><span class="{{r.statusClass}}">{{r.statusLabel}}</span></sc-raw-td>
+                <sc-raw-td><a href="#" style="font-size:12px;text-decoration:none" sc-camel-on-click="{{r.toggle}}">{{r.toggleLabel}}</a></sc-raw-td>
+              </sc-raw-tr>
+            </sc-for>
+          </sc-raw-tbody>
+        </sc-raw-table>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px;max-width:760px">
+        <sc-for list="{{alOpenLogs}}" as="g" hint-placeholder-count="1">
+          <div class="card blueprint" style="display:flex;flex-direction:column;gap:12px">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <span class="card-kicker">{{g.heading}}</span>
+              <span class="{{g.statusClass}}">{{g.statusLabel}}</span>
+              <a href="#" style="margin-left:auto;font-size:12px;text-decoration:none" sc-camel-on-click="{{g.toggle}}">Close</a>
+            </div>
+            <sc-for list="{{g.fields}}" as="f" hint-placeholder-count="9">
+              <div>
+                <div style="font-size:11px;letter-spacing:0.06em;opacity:0.55">{{f.label}}</div>
+                <div style="font-size:14px;line-height:1.6;white-space:pre-wrap">{{f.value}}</div>
+              </div>
+            </sc-for>
+            <div><button type="button" class="btn btn-secondary" sc-camel-on-click="{{g.edit}}">Edit log</button></div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sMySessions}}" hint-placeholder-val="{{false}}">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Student</div>
+      <h1 style="margin:4px 0 6px">My sessions</h1>
+      <p style="margin:0 0 20px;font-size:14px;opacity:0.65">What your tutor recorded after each session, newest first.</p>
+      <sc-if value="{{msEmpty}}" hint-placeholder-val="{{false}}"><p style="font-size:14px;opacity:0.65">No sessions have been written up yet.</p></sc-if>
+      <div style="display:flex;flex-direction:column;gap:12px;max-width:760px">
+        <sc-for list="{{msLogs}}" as="g" hint-placeholder-count="3">
+          <div class="card blueprint" style="display:flex;flex-direction:column;gap:10px">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;cursor:pointer" sc-camel-on-click="{{g.toggle}}">
+              <span class="card-kicker">{{g.dateText}}</span>
+              <span style="font-size:13px;opacity:0.7">{{g.summary}}</span>
+              <span style="margin-left:auto;font-size:12px;opacity:0.6">{{g.toggleLabel}}</span>
+            </div>
+            <sc-if value="{{g.open}}" hint-placeholder-val="{{false}}">
+              <div style="display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--color-neutral-300);padding-top:12px">
+                <sc-for list="{{g.fields}}" as="f" hint-placeholder-count="9">
+                  <div>
+                    <div style="font-size:11px;letter-spacing:0.06em;opacity:0.55">{{f.label}}</div>
+                    <div style="font-size:14px;line-height:1.6;white-space:pre-wrap">{{f.value}}</div>
                   </div>
                 </sc-for>
               </div>
@@ -1125,7 +1354,16 @@ class Component extends DCLogic {
     errAdd: this.blankErrAdd(),
     // picked  which tutee a tutor or admin is looking at
     // drafts  entry id -> unsaved comment text
-    errlog: { picked: '', drafts: {} }
+    errlog: { picked: '', drafts: {} },
+    // The two session sheets are edit buffers, seeded from db when the screen
+    // opens and dropped when it closes, so a half-typed sheet never reaches
+    // the cache and a cancelled edit leaves nothing behind.
+    sprof: null,
+    slog: null,
+    // log id -> true. One map for all three screens that expand a log; no two
+    // of them are ever on screen together.
+    openLogs: {},
+    alogs: { tutor: '', tutee: '', from: '', to: '' }
   };
 
   componentDidMount() {
@@ -1172,6 +1410,102 @@ class Component extends DCLogic {
   // the route moves so it never carries a note onto the next problem.
   blankErrAdd() { return { open: false, comment: '', busy: false }; }
   setImp(patch) { this.setState({ imp: Object.assign({}, this.state.imp, patch) }); }
+
+  // ---- session sheets -------------------------------------------------------
+
+  // The nine fields of the paper sheet, in the order they appear on it. One
+  // list drives the read-only views, the "you left this blank" check and the
+  // CSV export, so none of the three can drift from the handbook.
+  //
+  // `short` is the same label with the paper's marking instruction dropped —
+  // "MARK ONE" means nothing in a column heading or in a form the tutor has
+  // already filled in.
+  sessionFields() {
+    return [
+      { key: 'sessionDate',         label: 'DATE' },
+      { key: 'duration',            label: 'DURATION' },
+      { key: 'tutorInitials',       label: 'TUTOR INITIALS' },
+      { key: 'topicsCovered',       label: 'TOPICS COVERED' },
+      { key: 'homeworkAssigned',    label: 'HOMEWORK ASSIGNED' },
+      { key: 'progressRating',      label: 'PROGRESS THIS SESSION (1 = STRUGGLED \u00b7 5 = MASTERED)', short: 'PROGRESS THIS SESSION' },
+      { key: 'struggles',           label: 'STRUGGLES / AREAS TO REVIEW' },
+      { key: 'parentCommunication', label: 'PARENT COMMUNICATION' },
+      { key: 'paymentStatus',       label: 'PAYMENT STATUS' }
+    ].map((f) => Object.assign({ short: f.label }, f));
+  }
+
+  // Session Nº 01 of the handbook offers four; sheets 02–30 omit "Free
+  // Session". The superset is offered on every sheet, since a free session can
+  // happen at any point and the handbook allows for it once.
+  paymentOptions() {
+    return [
+      { value: 'paid',         label: 'Paid' },
+      { value: 'invoiced',     label: 'Invoiced' },
+      { value: 'pending',      label: 'Pending' },
+      { value: 'free_session', label: 'Free Session' }
+    ];
+  }
+
+  // Local date, not toISOString(): west of UTC an evening session would
+  // otherwise be filed under tomorrow.
+  todayLocal() {
+    const d = new Date(), p = (n) => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
+  blankSProf(tuteeId) {
+    const p = (window.db && window.db.getStudentProfile(tuteeId)) || {};
+    return {
+      tuteeId: tuteeId,
+      grade: p.grade || '', subjects: p.subjects || '', startDate: p.startDate || '',
+      regularSchedule: p.regularSchedule || '', parentContact: p.parentContact || '',
+      goals: p.goals || '', learningStyleNotes: p.learningStyleNotes || '',
+      msg: '', busy: false
+    };
+  }
+
+  // A blank id means a new sheet; otherwise the buffer is a copy of the stored
+  // log, so abandoning the edit leaves the stored one untouched.
+  blankSLog(tuteeId, id) {
+    const db = window.db;
+    const l = (id && db && db.getSessionLog(id)) || null;
+    const me = db ? db.me() : null;
+    // "Initial each sheet" — prefilled from the signed-in name so the tutor
+    // only corrects it when the initials are not the obvious ones.
+    const initials = me ? me.name.split(/\s+/).map((w) => w.charAt(0)).join('').slice(0, 3).toUpperCase() : '';
+    return {
+      id: l ? l.id : '',
+      tuteeId: l ? l.tuteeId : tuteeId,
+      sessionDate: l ? l.sessionDate : this.todayLocal(),
+      duration: l ? l.duration : '',
+      tutorInitials: l ? l.tutorInitials : initials,
+      topicsCovered: l ? l.topicsCovered : '',
+      homeworkAssigned: l ? l.homeworkAssigned : '',
+      progressRating: l ? l.progressRating : null,
+      struggles: l ? l.struggles : '',
+      parentCommunication: l ? l.parentCommunication : '',
+      paymentStatus: l ? l.paymentStatus : '',
+      status: l ? l.status : 'draft',
+      err: '', busy: false
+    };
+  }
+
+  // RFC 4180: quote every cell and double the quotes inside it, so a comma or
+  // a newline in "topics covered" cannot shift the columns. The BOM is what
+  // makes Excel read the file as UTF-8 rather than as the local codepage.
+  downloadCsv(filename, rows) {
+    const cell = (x) => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"';
+    const body = rows.map((r) => r.map(cell).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob(['\ufeff' + body], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Revoked a tick later, not immediately: Safari has not started the
+    // download by the time click() returns.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 
   // Shared by the file picker and the drop target. Several files are read as
   // one import so a folder of modules can go in at once.
@@ -1280,11 +1614,17 @@ class Component extends DCLogic {
     v.roleLabel = me.role === 'student' ? 'Student' : me.role === 'tutor' ? 'Tutor' : 'Admin';
     v.logout = () => { db.auth.signOut(); };
     v.goHome = () => this.setState({ route: this.homeRoute(me.role) });
-    const linkDefs = me.role === 'student' ? [['Dashboard', 'dash'], ['Error Log', 'errorLog']]
+    // A tutor reaches session logs through a tutee on My Students rather than
+    // through a tab of their own — there is nothing useful on such a tab that
+    // is not already per-student.
+    const linkDefs = me.role === 'student' ? [['Dashboard', 'dash'], ['My Sessions', 'mySessions'], ['Error Log', 'errorLog']]
       : me.role === 'tutor' ? [['My Students', 'students'], ['Module Library', 'library'], ['Assign', 'assign'], ['Results', 'results'], ['Error Logs', 'errorLogs']]
-      : [['Users', 'users'], ['Modules', 'modules'], ['Import', 'import'], ['Error Logs', 'errorLogs']];
-    const activeOf = { dash: 'dash', module: 'dash', problem: 'dash', students: 'students', library: 'library', preview: 'library', assign: 'assign', results: 'results', resultDetail: 'results', users: 'users', modules: 'modules', editor: 'modules', import: 'import', errorLog: 'errorLog', errorLogs: 'errorLogs' };
-    v.navLinks = linkDefs.map(([label, name]) => ({ label: label, cur: activeOf[route.name] === name ? 'page' : undefined, go: goE(name) }));
+      : [['Users', 'users'], ['Modules', 'modules'], ['Import', 'import'], ['Session Logs', 'adminLogs'], ['Error Logs', 'errorLogs']];
+    const activeOf = { dash: 'dash', module: 'dash', problem: 'dash', students: 'students', profile: 'students', logs: 'students', library: 'library', preview: 'library', assign: 'assign', results: 'results', resultDetail: 'results', users: 'users', modules: 'modules', editor: 'modules', import: 'import', errorLog: 'errorLog', errorLogs: 'errorLogs', adminLogs: 'adminLogs', mySessions: 'mySessions' };
+    // The log form is reached from two different tabs, so it lights whichever
+    // one sent us there rather than picking one.
+    const activeTab = route.name === 'logForm' ? (route.from === 'adminLogs' ? 'adminLogs' : 'students') : activeOf[route.name];
+    v.navLinks = linkDefs.map(([label, name]) => ({ label: label, cur: activeTab === name ? 'page' : undefined, go: goE(name) }));
 
     v.sDash = route.name === 'dash'; v.sModule = route.name === 'module'; v.sProblem = route.name === 'problem';
     v.sStudents = route.name === 'students'; v.sLibrary = route.name === 'library'; v.sPreview = route.name === 'preview';
@@ -1294,6 +1634,13 @@ class Component extends DCLogic {
     // A tutee reads their own log, a tutor or admin reads someone else's; one
     // screen, told apart by the role rather than by the route.
     v.sErrorLog = route.name === 'errorLog' || route.name === 'errorLogs';
+    // The two sheet forms need their edit buffer as well as the route. The
+    // buffer is always set in the same setState as the route, so requiring it
+    // only guards against a route that outlived its buffer.
+    v.sProfile = route.name === 'profile' && !!st.sprof;
+    v.sLogForm = route.name === 'logForm' && !!st.slog;
+    v.sLogs = route.name === 'logs'; v.sAdminLogs = route.name === 'adminLogs';
+    v.sMySessions = route.name === 'mySessions';
 
     const scorePct = (correct, answered) => answered ? Math.round(100 * correct / answered) + '%' : '\u2014';
     const plural = (n, one, many) => n + ' ' + (n === 1 ? one : (many || one + 's'));
@@ -1452,12 +1799,68 @@ class Component extends DCLogic {
       }
     }
 
+    // ---- session sheets ----
+    // Shared by My Students, the tutor's log list, the admin table and the
+    // tutee's read-only tab, so one log reads the same on all four.
+    const SESSION_FIELDS = this.sessionFields();
+    const PAYMENTS = this.paymentOptions();
+    const paymentLabel = (val) => { const o = PAYMENTS.find((p) => p.value === val); return o ? o.label : ''; };
+    // With the year, unlike fmtDate: a log list runs across years and "Mar 4"
+    // alone would put two of them next to each other.
+    const fmtLogDate = (iso) => {
+      if (!iso) return '\u2014';
+      try { return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return iso; }
+    };
+    const logValue = (log, key) => {
+      if (key === 'sessionDate') return fmtLogDate(log.sessionDate);
+      if (key === 'progressRating') return log.progressRating ? log.progressRating + ' / 5' : '';
+      if (key === 'paymentStatus') return paymentLabel(log.paymentStatus);
+      return log[key] || '';
+    };
+    const logFields = (log) => SESSION_FIELDS.map((f) => ({ label: f.label, value: logValue(log, f.key) || '\u2014' }));
+    // The collapsed line. Topics covered is what a tutor scans the list for.
+    const summarise = (log) => {
+      const t = String(log.topicsCovered || '').replace(/\s+/g, ' ').trim();
+      if (!t) return 'No topics recorded';
+      return t.length > 80 ? t.slice(0, 80) + '\u2026' : t;
+    };
+    const isOpen = (id) => !!st.openLogs[id];
+    const toggleLog = (id) => (e) => {
+      if (e && e.preventDefault) e.preventDefault();
+      const next = Object.assign({}, this.state.openLogs);
+      if (next[id]) delete next[id]; else next[id] = true;
+      this.setState({ openLogs: next });
+    };
+    const statusClass = (log) => (log.status === 'submitted' ? 'tag tag-accent' : 'tag tag-outline');
+    const statusLabel = (log) => (log.status === 'submitted' ? 'Submitted' : 'Draft');
+    // A submitted sheet is frozen for its tutor and editable by an admin. The
+    // UPDATE policy on session_logs says the same thing, so hiding the button
+    // is a courtesy rather than the control.
+    const mayEdit = (log) => me.role === 'admin' || log.status === 'draft';
+    const openLogForm = (tuteeId, logId, from) => () =>
+      this.setState({ route: { name: 'logForm', tuteeId: tuteeId, logId: logId || '', from: from }, slog: this.blankSLog(tuteeId, logId) });
+    // A week without a submitted sheet is what the badge and the banner both
+    // count as behind, so they cannot disagree.
+    const STALE_DAYS = 7;
+    const logAge = (tuteeId) => {
+      const days = db.daysSinceLastLog(tuteeId);
+      return {
+        days: days,
+        stale: days === null || days > STALE_DAYS,
+        text: days === null ? 'Never logged' : days === 0 ? 'Logged today' : plural(days, 'day') + ' since last log'
+      };
+    };
+
     if (v.sStudents) {
+      const behind = db.getStudentsOf(me.id).filter((s) => logAge(s.id).stale).length;
+      v.hasLogBanner = behind > 0;
+      v.logBannerText = 'You have ' + plural(behind, 'student') + ' without a log this week.';
       v.students = db.getStudentsOf(me.id).map((s) => {
         const as = db.getAssignments(s.id);
         let answered = 0, total = 0, correct = 0;
         as.forEach((a) => { const pr = db.getProgress(a.id); answered += pr.answered; total += pr.total; correct += pr.correct; });
         const unresolved = db.unresolvedCount(s.id);
+        const age = logAge(s.id);
         const mods = as.filter((a) => db.getModule(a.moduleId));
         return {
           name: s.name, email: s.email,
@@ -1471,6 +1874,11 @@ class Component extends DCLogic {
             if (e && e.preventDefault) e.preventDefault();
             this.setState({ route: { name: 'errorLogs' }, errlog: Object.assign({}, this.state.errlog, { picked: s.id }) });
           },
+          logText: age.text, logStale: age.stale, logFresh: !age.stale,
+          noProfile: !db.getStudentProfile(s.id),
+          openProfile: () => this.setState({ route: { name: 'profile', tuteeId: s.id }, sprof: this.blankSProf(s.id) }),
+          openLogs: () => this.setState({ route: { name: 'logs', tuteeId: s.id } }),
+          logSession: openLogForm(s.id, '', 'students'),
           hasModules: mods.length > 0,
           modules: mods.map((a) => {
             const pr = db.getProgress(a.id);
@@ -1483,6 +1891,208 @@ class Component extends DCLogic {
         };
       });
       v.noStudents = v.students.length === 0;
+    }
+
+    if (v.sProfile) {
+      const P = st.sprof, tutee = db.getUser(P.tuteeId);
+      const setP = (patch) => this.setState({ sprof: Object.assign({}, this.state.sprof, patch) });
+      // Typing clears the last "saved" note, so it can never be read as
+      // covering the edit now on screen.
+      const fp = (key) => (e) => setP({ [key]: e.target.value, msg: '' });
+      v.spBack = (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ route: { name: 'students' }, sprof: null }); };
+      v.spName = tutee ? tutee.name : 'Student profile';
+      v.spGrade = P.grade; v.onSpGrade = fp('grade');
+      v.spSubjects = P.subjects; v.onSpSubjects = fp('subjects');
+      v.spStartDate = P.startDate; v.onSpStartDate = fp('startDate');
+      v.spSchedule = P.regularSchedule; v.onSpSchedule = fp('regularSchedule');
+      v.spContact = P.parentContact; v.onSpContact = fp('parentContact');
+      v.spGoals = P.goals; v.onSpGoals = fp('goals');
+      v.spNotes = P.learningStyleNotes; v.onSpNotes = fp('learningStyleNotes');
+      const saved = db.getStudentProfile(P.tuteeId);
+      v.spUpdated = saved && saved.updatedAt
+        ? 'Last updated ' + new Date(saved.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : 'Never completed';
+      v.spBusy = P.busy;
+      // Nothing here is required: the sheet says to update goals and notes as
+      // they change, so a profile filled in over several sittings is normal.
+      v.spSave = () => {
+        if (P.busy) return;
+        setP({ busy: true, msg: '' });
+        db.saveStudentProfile(P.tuteeId, {
+          grade: P.grade, subjects: P.subjects, startDate: P.startDate,
+          regularSchedule: P.regularSchedule, parentContact: P.parentContact,
+          goals: P.goals, learningStyleNotes: P.learningStyleNotes
+        }).then(
+          () => setP({ busy: false, msg: 'Profile saved.' }),
+          // db has already toasted the reason.
+          () => setP({ busy: false, msg: '' })
+        );
+      };
+      v.spMsg = P.msg; v.hasSpMsg = !!P.msg;
+    }
+
+    if (v.sLogForm) {
+      const G = st.slog, tutee = db.getUser(G.tuteeId);
+      const setG = (patch) => this.setState({ slog: Object.assign({}, this.state.slog, patch) });
+      const fg = (key) => (e) => setG({ [key]: e.target.value, err: '' });
+      const from = route.from === 'adminLogs' ? 'adminLogs' : route.from === 'logs' ? 'logs' : 'students';
+      const back = from === 'adminLogs' ? { name: 'adminLogs' }
+        : from === 'logs' ? { name: 'logs', tuteeId: G.tuteeId }
+        : { name: 'students' };
+      const leave = () => this.setState({ route: back, slog: null });
+      v.lfBack = (e) => { if (e && e.preventDefault) e.preventDefault(); leave(); };
+      v.lfBackLabel = from === 'students' ? '\u2190 My students' : '\u2190 Session logs';
+      v.lfKicker = G.id ? 'Edit session log' : 'New session log';
+      v.lfTitle = tutee ? tutee.name : 'Session log';
+      v.lfDate = G.sessionDate; v.onLfDate = fg('sessionDate');
+      v.lfDuration = G.duration; v.onLfDuration = fg('duration');
+      v.lfInitials = G.tutorInitials; v.onLfInitials = fg('tutorInitials');
+      v.lfTopics = G.topicsCovered; v.onLfTopics = fg('topicsCovered');
+      v.lfHomework = G.homeworkAssigned; v.onLfHomework = fg('homeworkAssigned');
+      v.lfProgressOpts = [1, 2, 3, 4, 5].map((n) => ({
+        label: String(n), active: G.progressRating === n, pick: () => setG({ progressRating: n, err: '' })
+      }));
+      v.lfStruggles = G.struggles; v.onLfStruggles = fg('struggles');
+      v.lfParent = G.parentCommunication; v.onLfParent = fg('parentCommunication');
+      v.lfPaymentOpts = PAYMENTS.map((p) => ({
+        label: p.label, active: G.paymentStatus === p.value, pick: () => setG({ paymentStatus: p.value, err: '' })
+      }));
+
+      // "Fill every field before you leave the session" — the handbook, so all
+      // nine are required to submit. A draft is exempt: its whole purpose is to
+      // hold a sheet that is not finished yet.
+      const blanks = () => SESSION_FIELDS
+        .filter((f) => String(G[f.key] == null ? '' : G[f.key]).trim() === '')
+        .map((f) => f.short);
+
+      const persist = (status) => {
+        if (G.busy) return;
+        if (status === 'submitted') {
+          const gaps = blanks();
+          if (gaps.length) { setG({ err: 'Fill every field before submitting. Still empty: ' + gaps.join(', ') + '.' }); return; }
+        }
+        setG({ busy: true, err: '' });
+        db.saveSessionLog({
+          id: G.id || undefined,
+          tuteeId: G.tuteeId,
+          sessionDate: G.sessionDate, duration: G.duration, tutorInitials: G.tutorInitials,
+          topicsCovered: G.topicsCovered, homeworkAssigned: G.homeworkAssigned,
+          progressRating: G.progressRating, struggles: G.struggles,
+          parentCommunication: G.parentCommunication, paymentStatus: G.paymentStatus,
+          status: status
+        }).then(leave, () => setG({ busy: false }));
+      };
+      // Offered only while the sheet is still a draft: on a submitted one the
+      // button would quietly withdraw it, and for a tutor the UPDATE policy
+      // would refuse the write anyway.
+      v.lfCanDraft = G.status !== 'submitted';
+      v.lfSaveDraft = () => persist('draft');
+      v.lfSubmit = () => persist('submitted');
+      v.lfSubmitLabel = G.status === 'submitted' ? 'Save changes' : 'Submit log';
+      v.lfBusy = G.busy;
+      v.lfErr = G.err; v.hasLfErr = !!G.err;
+      v.lfCanDelete = !!G.id && G.status === 'draft';
+      v.lfDelete = () => openDialog({
+        kicker: 'Discard draft',
+        title: 'Discard this draft?',
+        body: 'It was never submitted, so nobody has read it.',
+        confirmLabel: 'Discard',
+        run: () => db.deleteSessionLog(G.id).then(leave)
+      });
+    }
+
+    if (v.sLogs) {
+      const tid = route.tuteeId, tutee = db.getUser(tid), logs = db.getSessionLogs(tid);
+      const age = logAge(tid);
+      v.slBack = (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ route: { name: 'students' } }); };
+      v.slName = tutee ? tutee.name : 'Session logs';
+      v.slIntro = age.days === null ? 'No sheet has been submitted yet.'
+        : age.days === 0 ? 'Last submitted sheet is from today.'
+        : 'Last submitted sheet is ' + plural(age.days, 'day') + ' old.';
+      v.slNew = openLogForm(tid, '', 'logs');
+      v.slEmpty = logs.length === 0;
+      v.slLogs = logs.map((l) => ({
+        dateText: fmtLogDate(l.sessionDate),
+        statusClass: statusClass(l), statusLabel: statusLabel(l),
+        summary: summarise(l),
+        open: isOpen(l.id),
+        toggleLabel: isOpen(l.id) ? 'Hide' : 'Read',
+        toggle: toggleLog(l.id),
+        fields: logFields(l),
+        canEdit: mayEdit(l),
+        editLabel: l.status === 'draft' ? 'Finish draft' : 'Edit log',
+        edit: openLogForm(tid, l.id, 'logs')
+      }));
+    }
+
+    if (v.sAdminLogs) {
+      const A = st.alogs, all = db.getAllSessionLogs(), users = db.getUsers();
+      const setA = (patch) => this.setState({ alogs: Object.assign({}, this.state.alogs, patch) });
+      const nameOf = (id) => { const u = id && db.getUser(id); return u ? u.name : '\u2014'; };
+      const named = (role) => users.filter((u) => u.role === role).sort((a, b) => a.name.localeCompare(b.name));
+      v.alTutor = A.tutor; v.onAlTutor = (e) => setA({ tutor: e.target.value });
+      v.alTutorOpts = [{ id: '', label: 'All tutors' }].concat(named('tutor').map((u) => ({ id: u.id, label: u.name })));
+      v.alTutee = A.tutee; v.onAlTutee = (e) => setA({ tutee: e.target.value });
+      v.alTuteeOpts = [{ id: '', label: 'All students' }].concat(named('student').map((u) => ({ id: u.id, label: u.name })));
+      v.alFrom = A.from; v.onAlFrom = (e) => setA({ from: e.target.value });
+      v.alTo = A.to; v.onAlTo = (e) => setA({ to: e.target.value });
+      v.alClear = () => setA({ tutor: '', tutee: '', from: '', to: '' });
+
+      // session_date is stored as an ISO date and the two pickers hand back the
+      // same shape, so the range is a string comparison rather than a parse.
+      const rows = all.filter((l) =>
+        (!A.tutor || l.tutorId === A.tutor)
+        && (!A.tutee || l.tuteeId === A.tutee)
+        && (!A.from || String(l.sessionDate) >= A.from)
+        && (!A.to || String(l.sessionDate) <= A.to));
+
+      v.alCountText = rows.length === all.length
+        ? plural(all.length, 'log')
+        : plural(rows.length, 'log') + ' of ' + all.length;
+      v.alCantExport = rows.length === 0;
+      // Exports what the filters selected, in the order on screen, with every
+      // field of the sheet rather than only the columns the table has room for.
+      v.alExport = () => {
+        const header = ['Tutee', 'Tutor'].concat(SESSION_FIELDS.map((f) => f.short), ['Status']);
+        const body = rows.map((l) => [nameOf(l.tuteeId), nameOf(l.tutorId)]
+          .concat(SESSION_FIELDS.map((f) => (f.key === 'sessionDate' ? l.sessionDate : logValue(l, f.key))), [statusLabel(l)]));
+        this.downloadCsv('session-logs-' + this.todayLocal() + '.csv', [header].concat(body));
+      };
+
+      v.alRows = rows.map((l) => ({
+        dateText: fmtLogDate(l.sessionDate),
+        tuteeName: nameOf(l.tuteeId), tutorName: nameOf(l.tutorId),
+        duration: l.duration || '\u2014',
+        progress: l.progressRating ? l.progressRating + ' / 5' : '\u2014',
+        payment: paymentLabel(l.paymentStatus) || '\u2014',
+        statusClass: statusClass(l), statusLabel: statusLabel(l),
+        toggle: toggleLog(l.id),
+        toggleLabel: isOpen(l.id) ? 'Close' : 'Read'
+      }));
+      // The expanded sheets sit under the table rather than inside it, so a row
+      // opening does not push a nine-field block through the column layout.
+      v.alOpenLogs = rows.filter((l) => isOpen(l.id)).map((l) => ({
+        heading: nameOf(l.tuteeId) + ' \u00b7 ' + fmtLogDate(l.sessionDate),
+        statusClass: statusClass(l), statusLabel: statusLabel(l),
+        toggle: toggleLog(l.id),
+        fields: logFields(l),
+        edit: openLogForm(l.tuteeId, l.id, 'adminLogs')
+      }));
+    }
+
+    if (v.sMySessions) {
+      // Drafts are the tutor's scratch copy and are not shown. Every field of a
+      // submitted sheet is: the handbook marks none of them internal.
+      const logs = db.getSessionLogs(me.id).filter((l) => l.status === 'submitted');
+      v.msEmpty = logs.length === 0;
+      v.msLogs = logs.map((l) => ({
+        dateText: fmtLogDate(l.sessionDate),
+        summary: summarise(l),
+        open: isOpen(l.id),
+        toggleLabel: isOpen(l.id) ? 'Hide' : 'Read',
+        toggle: toggleLog(l.id),
+        fields: logFields(l)
+      }));
     }
 
     if (v.sLibrary) {

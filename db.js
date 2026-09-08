@@ -53,6 +53,8 @@
     links: [],              // { tutor_id, tutee_id }
     subs: new Map(),        // "tuteeId:problemId" -> { answer, correct }
     errors: new Map(),      // id -> UI error log entry
+    sprofiles: new Map(),   // tuteeId -> UI student profile (intake sheet)
+    logs: new Map(),        // id -> UI session log
     loaded: false,
     // True until the first getSession() (and any profile load it triggers)
     // settles. The UI shows a neutral splash rather than flashing the login
@@ -72,7 +74,7 @@
   function clear() {
     S.meId = null;
     S.users.clear(); S.modules.clear(); S.assignments.clear(); S.subs.clear();
-    S.errors.clear();
+    S.errors.clear(); S.sprofiles.clear(); S.logs.clear();
     S.links = [];
     S.loaded = false;
   }
@@ -188,6 +190,48 @@
     });
   }
 
+  // The intake sheet from the handbook. The student's name is not stored here —
+  // it lives on the profile — so only the grade half of "STUDENT NAME & GRADE"
+  // has a column.
+  const text = (v) => (v == null ? '' : String(v));
+
+  function putStudentProfile(row) {
+    S.sprofiles.set(row.tutee_id, {
+      tuteeId: row.tutee_id,
+      grade: text(row.grade),
+      subjects: text(row.subjects),
+      startDate: text(row.start_date),
+      regularSchedule: text(row.regular_schedule),
+      parentContact: text(row.parent_contact),
+      goals: text(row.goals),
+      learningStyleNotes: text(row.learning_style_notes),
+      updatedAt: row.updated_at
+    });
+  }
+
+  // One session sheet. Field for field, and in the order they appear on paper.
+  function putSessionLog(row) {
+    S.logs.set(row.id, {
+      id: row.id,
+      tutorId: row.tutor_id || '',
+      tuteeId: row.tutee_id,
+      sessionDate: text(row.session_date),
+      duration: text(row.duration),
+      tutorInitials: text(row.tutor_initials),
+      topicsCovered: text(row.topics_covered),
+      homeworkAssigned: text(row.homework_assigned),
+      // Null until the tutor marks one of the five. Kept as a number so the UI
+      // can compare it to the radio it is rendering.
+      progressRating: row.progress_rating == null ? null : Number(row.progress_rating),
+      struggles: text(row.struggles),
+      parentCommunication: text(row.parent_communication),
+      paymentStatus: text(row.payment_status),
+      status: row.status === 'submitted' ? 'submitted' : 'draft',
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    });
+  }
+
   // ---- loading ------------------------------------------------------------
 
   const rows = (res, where) => {
@@ -248,7 +292,7 @@
     // Both id lists are bounded by this tutee's own assignments, so those two
     // reads cannot run long. The rest can: a handful of assigned modules is
     // already more than a thousand problems.
-    const [profRes, modRes, probs, revealed, subs, errors] = await Promise.all([
+    const [profRes, modRes, probs, revealed, subs, errors, sprofs, logs] = await Promise.all([
       tutorIds.length ? sb.from('profiles').select('*').in('id', tutorIds) : NONE,
       moduleIds.length ? sb.from('modules').select('*').in('id', moduleIds) : NONE,
       moduleIds.length ? allRows('problems_public', { filter: (q) => q.in('module_id', moduleIds) }) : NO_ROWS,
@@ -256,7 +300,12 @@
       allRows('submissions', { filter: (q) => q.eq('tutee_id', id) }),
       // Unfiltered on purpose: the view returns only this tutee's own rows,
       // and it keeps entries whose module has since been unassigned.
-      allRows('error_log_view')
+      allRows('error_log_view'),
+      // At most one row, but the filter costs nothing and says what is meant.
+      allRows('student_profiles', { order: ['tutee_id'], filter: (q) => q.eq('tutee_id', id) }),
+      // A weekly session for a few years is still well under one page, but this
+      // is the table that accumulates fastest of anything a tutee reads.
+      allRows('session_logs', { filter: (q) => q.eq('tutee_id', id) })
     ]);
 
     rows(profRes, 'profiles').forEach(putUser);
@@ -265,6 +314,8 @@
     applyRevealed(revealed);
     subs.forEach(putSubmission);
     errors.forEach(putErrorEntry);
+    sprofs.forEach(putStudentProfile);
+    logs.forEach(putSessionLog);
   }
 
   async function loadTutor(id) {
@@ -275,14 +326,20 @@
     // A tutor reads the whole library — every module and every problem in it,
     // not just what they have assigned — so this is the read that first outgrew
     // one page.
-    const [profRes, mods, probs, asg, subs, errors] = await Promise.all([
+    const [profRes, mods, probs, asg, subs, errors, sprofs, logs] = await Promise.all([
       tuteeIds.length ? sb.from('profiles').select('*').in('id', tuteeIds) : NONE,
       allRows('modules', { order: CREATED_ORDER }),
       allRows('problems'),
       tuteeIds.length ? allRows('assignments', { filter: (q) => q.in('tutee_id', tuteeIds) }) : NO_ROWS,
       tuteeIds.length ? allRows('submissions', { filter: (q) => q.in('tutee_id', tuteeIds) }) : NO_ROWS,
       // The view already restricts a tutor to their own tutees.
-      allRows('error_log_view')
+      allRows('error_log_view'),
+      // No id column here — the key is tutee_id, which is unique by definition.
+      allRows('student_profiles', { order: ['tutee_id'] }),
+      // Unfiltered rather than .in(tuteeIds): the policy also returns logs this
+      // tutor wrote for a tutee since reassigned, and those must not vanish from
+      // their own Session Logs screen.
+      allRows('session_logs')
     ]);
 
     rows(profRes, 'profiles').forEach(putUser);
@@ -291,11 +348,13 @@
     asg.forEach(putAssignment);
     subs.forEach(putSubmission);
     errors.forEach(putErrorEntry);
+    sprofs.forEach(putStudentProfile);
+    logs.forEach(putSessionLog);
   }
 
   async function loadAdmin() {
     // Every one of these is the whole table, unfiltered.
-    const [profs, links, mods, probs, asg, subs, errors] = await Promise.all([
+    const [profs, links, mods, probs, asg, subs, errors, sprofs, logs] = await Promise.all([
       allRows('profiles', { order: CREATED_ORDER }),
       // No id column on this one: the primary key is (tutor_id, tutee_id), and
       // a tutee has at most one tutor, so tutee_id alone is a total order.
@@ -304,7 +363,9 @@
       allRows('problems'),
       allRows('assignments'),
       allRows('submissions'),
-      allRows('error_log_view')
+      allRows('error_log_view'),
+      allRows('student_profiles', { order: ['tutee_id'] }),
+      allRows('session_logs')
     ]);
 
     profs.forEach(putUser);
@@ -314,6 +375,8 @@
     asg.forEach(putAssignment);
     subs.forEach(putSubmission);
     errors.forEach(putErrorEntry);
+    sprofs.forEach(putStudentProfile);
+    logs.forEach(putSessionLog);
   }
 
   let loading = null;
@@ -870,6 +933,134 @@
     if (error) { S.errors.set(id, e); notify(); throw fail('deleteErrorEntry', error); }
   }
 
+  // ---- session logs -------------------------------------------------------
+
+  const blankProfile = (tuteeId) => ({
+    tuteeId: tuteeId, grade: '', subjects: '', startDate: '', regularSchedule: '',
+    parentContact: '', goals: '', learningStyleNotes: '', updatedAt: null
+  });
+
+  // Empty strings go to Postgres as null rather than '', so "not filled in" has
+  // one representation and the profile-complete check has one thing to test.
+  const orNull = (v) => {
+    const t = String(v == null ? '' : v).trim();
+    return t === '' ? null : t;
+  };
+
+  // Upsert rather than insert-or-update: the tutor has no way to know whether a
+  // row exists, and tutee_id is the primary key.
+  async function saveStudentProfile(tuteeId, patch) {
+    const before = S.sprofiles.get(tuteeId) || null;
+    const next = Object.assign(blankProfile(tuteeId), before || {}, patch, { tuteeId: tuteeId });
+    S.sprofiles.set(tuteeId, next);
+    notify();
+
+    const { error } = await sb.from('student_profiles').upsert({
+      tutee_id: tuteeId,
+      grade: orNull(next.grade),
+      subjects: orNull(next.subjects),
+      start_date: orNull(next.startDate),
+      regular_schedule: orNull(next.regularSchedule),
+      parent_contact: orNull(next.parentContact),
+      goals: orNull(next.goals),
+      learning_style_notes: orNull(next.learningStyleNotes)
+    });
+    if (error) {
+      if (before) S.sprofiles.set(tuteeId, before); else S.sprofiles.delete(tuteeId);
+      notify();
+      throw fail('saveStudentProfile', error);
+    }
+    return next;
+  }
+
+  // The columns behind the paper sheet, in sheet order. One place, so the
+  // insert, the update and the CSV export cannot drift out of step.
+  const logColumns = (log) => ({
+    session_date: log.sessionDate || null,
+    duration: orNull(log.duration),
+    tutor_initials: orNull(log.tutorInitials),
+    topics_covered: orNull(log.topicsCovered),
+    homework_assigned: orNull(log.homeworkAssigned),
+    progress_rating: log.progressRating == null || log.progressRating === '' ? null : Number(log.progressRating),
+    struggles: orNull(log.struggles),
+    parent_communication: orNull(log.parentCommunication),
+    payment_status: orNull(log.paymentStatus),
+    status: log.status === 'submitted' ? 'submitted' : 'draft'
+  });
+
+  // Creates on a missing id, updates on a present one. `status` rides in the
+  // patch, so submitting is just a save that sets it — the same call the
+  // "Submit" button and the "Save draft" button both make.
+  async function saveSessionLog(patch) {
+    const id = patch.id || uuid();
+    const before = patch.id ? S.logs.get(patch.id) : null;
+    if (patch.id && !before) return null;
+
+    const next = Object.assign({
+      id: id,
+      tutorId: S.meId,
+      tuteeId: patch.tuteeId,
+      sessionDate: '', duration: '', tutorInitials: '', topicsCovered: '',
+      homeworkAssigned: '', progressRating: null, struggles: '',
+      parentCommunication: '', paymentStatus: '', status: 'draft',
+      createdAt: new Date().toISOString(), updatedAt: null
+    }, before || {}, patch, { id: id });
+
+    S.logs.set(id, next);
+    notify();
+
+    const row = Object.assign(logColumns(next), {
+      id: id,
+      tutee_id: next.tuteeId,
+      // Pinned by the insert policy to the caller anyway; sent explicitly so an
+      // admin editing someone else's log does not rewrite its author.
+      tutor_id: next.tutorId || null
+    });
+    const { error } = before
+      ? await sb.from('session_logs').update(row).eq('id', id)
+      : await sb.from('session_logs').insert(row);
+    if (error) {
+      if (before) S.logs.set(id, before); else S.logs.delete(id);
+      notify();
+      throw fail('saveSessionLog', error);
+    }
+    return next;
+  }
+
+  async function deleteSessionLog(id) {
+    const log = S.logs.get(id);
+    if (!log) return;
+    S.logs.delete(id);
+    notify();
+    const { error } = await sb.from('session_logs').delete().eq('id', id);
+    if (error) { S.logs.set(id, log); notify(); throw fail('deleteSessionLog', error); }
+  }
+
+  // Newest session first, which is the order every screen shows. session_date
+  // is the tutor's own account of when the session happened, so it — not
+  // created_at — is what "newest" means; created_at only breaks ties between
+  // two sessions logged for the same day.
+  const sessionLogsOf = (tuteeId) => Array.from(S.logs.values())
+    .filter((l) => l.tuteeId === tuteeId)
+    .sort((a, b) => String(b.sessionDate).localeCompare(String(a.sessionDate))
+      || String(b.createdAt).localeCompare(String(a.createdAt)));
+
+  const DAY_MS = 86400000;
+
+  // Whole days between the most recent submitted log and today, or null when
+  // there has never been one. Drafts do not count: an unfinished sheet is not a
+  // record of a session.
+  function daysSinceLastLog(tuteeId) {
+    const last = sessionLogsOf(tuteeId).find((l) => l.status === 'submitted');
+    if (!last || !last.sessionDate) return null;
+    const then = Date.parse(last.sessionDate + 'T00:00:00');
+    if (isNaN(then)) return null;
+    const today = new Date();
+    const midnight = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    // A log dated in the future reads as zero days rather than negative.
+    return Math.max(0, Math.round((midnight - then) / DAY_MS));
+  }
+
   // ---- public API (synchronous reads, same shapes as the old mock) --------
 
   window.db = {
@@ -971,7 +1162,23 @@
     addErrorEntry: addErrorEntry,
     saveErrorComment: saveErrorComment,
     setErrorResolved: setErrorResolved,
-    deleteErrorEntry: deleteErrorEntry
+    deleteErrorEntry: deleteErrorEntry,
+
+    // Null when the intake sheet has never been filled in, which is what the
+    // warning badge on My Students is testing.
+    getStudentProfile: (tuteeId) => S.sprofiles.get(tuteeId) || null,
+    saveStudentProfile: saveStudentProfile,
+
+    getSessionLogs: sessionLogsOf,
+    getSessionLog: (id) => S.logs.get(id) || null,
+    daysSinceLastLog: daysSinceLastLog,
+    saveSessionLog: saveSessionLog,
+    deleteSessionLog: deleteSessionLog,
+    // Everything the caller may read, for the admin screen's filters. Newest
+    // first across all tutees.
+    getAllSessionLogs: () => Array.from(S.logs.values())
+      .sort((a, b) => String(b.sessionDate).localeCompare(String(a.sessionDate))
+        || String(b.createdAt).localeCompare(String(a.createdAt)))
   };
 
   // Start resolving the session now rather than waiting for the component to

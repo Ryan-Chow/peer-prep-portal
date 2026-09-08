@@ -22,6 +22,14 @@ for incremental changes — it stays as the baseline the migrations build on.
 Write migrations to be re-runnable: `if not exists`, `create or replace`,
 `drop policy if exists` before `create policy`.
 
+## Script cache versions
+
+`index.html` loads the local scripts with `?v=N`. Bump **all four together**
+(`config.js`, `supabaseClient.js`, `importer.js`, `db.js`) whenever any one of
+them changes. There is no build step to fingerprint them, and a returning tab
+that pairs a fresh `index.html` with a cached `db.js` calls functions that are
+not there yet.
+
 ## Layout
 
 - `index.html` — the whole UI: a dc-runtime template (`<x-dc>`) plus one
