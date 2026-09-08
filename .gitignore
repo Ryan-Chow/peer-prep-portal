@@ -1,0 +1,31 @@
+# macOS
+.DS_Store
+._*
+
+# Editor / tooling
+.vscode/
+.idea/
+.claude/
+*.swp
+
+# Node (only used for the local `npx serve` preview)
+node_modules/
+npm-debug.log*
+*.log
+
+# Scratch files
+_*.py
+_*.backup.html
+_unpacked/
+
+# Secrets — never commit these.
+# config.js is deliberately NOT ignored: the publishable key is a public,
+# RLS-gated credential and GitHub Pages needs it at runtime. Secret keys live
+# only in Supabase Edge Function secrets.
+.env
+.env.*
+*.pem
+
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/

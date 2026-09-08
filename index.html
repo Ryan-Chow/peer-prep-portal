@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="assets/react.production.min.js"></script>
+<script src="assets/react-dom.production.min.js"></script>
+<script src="assets/dc-runtime.js"></script>
+
+<!-- These must live in the real <head>, not in <helmet>. dc-runtime copies
+     helmet scripts into the head at mount time, but the browser has already
+     executed them in place during the initial parse — so anything in there
+     runs twice. Two Supabase clients in one tab race over the same session. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="supabaseClient.js"></script>
+<script src="db.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>/* Industry — design-system tokens and component classes. This file is the source of truth for the system's look; retune it here and see readme.md. */
+/* vietnamese */
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/fonts/e24b1706-b839-4a8f-b718-0082652ae213.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/fonts/ce8e9887-0f31-4289-80a5-822b3fc9ceb1.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/fonts/8f5f035e-883f-4551-a911-c8fc12eedb01.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/fonts/ef3cd319-d84f-45f6-80ec-0744bffbb784.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/fonts/9f5a011a-381f-4e96-a9ff-3bce58fb65f6.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/fonts/02de766e-bda2-4f94-a844-aaac70515cc8.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("assets/fonts/9736e1df-22d5-4481-aefb-5b0c84454b3c.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("assets/fonts/9d424ddd-a996-4959-90ab-377753699369.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("assets/fonts/551952ae-8953-4df7-8d24-50289d071c5b.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/fonts/3caeec82-6f28-4cb4-89ec-a0ca96a20882.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/fonts/e0f890ec-c778-4543-9ee5-9fac93439af5.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/fonts/1cff53b2-80fc-4c15-a9c6-b5e157626898.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("assets/fonts/4e675636-555d-443a-8dfe-c89636edaa05.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("assets/fonts/13e871c9-dd3b-4f22-8c54-cf52ff0a4b59.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("assets/fonts/38269f90-c558-4a5a-a713-68be47d3bb28.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+
+:root {
+  --color-bg: #f2f2f3;
+  --color-surface: #e9e9ea;
+  --color-text: #1d1f20;
+  --color-accent: #5980a6;
+  --color-accent-2: #728fab;
+  --color-divider: color-mix(in srgb, #1d1f20 16%, transparent);
+
+  /* Tonal ramps — generated in OKLCH on one shared lightness scale, so the
+     same step of any role matches the others in visual value. */
+  --color-neutral-100: #f5f5f8;
+  --color-neutral-200: #e7e7ea;
+  --color-neutral-300: #d4d4d7;
+  --color-neutral-400: #b7b7ba;
+  --color-neutral-500: #98989b;
+  --color-neutral-600: #7a7a7d;
+  --color-neutral-700: #5d5d60;
+  --color-neutral-800: #424244;
+  --color-neutral-900: #2b2b2d;
+
+  --color-accent-100: #eef6ff;
+  --color-accent-200: #d6ebff;
+  --color-accent-300: #b5d9fd;
+  --color-accent-400: #94bce3;
+  --color-accent-500: #749dc4;
+  --color-accent-600: #597ea3;
+  --color-accent-700: #416180;
+  --color-accent-800: #2c455d;
+  --color-accent-900: #1d2d3d;
+
+  --color-accent-2-100: #eef6ff;
+  --color-accent-2-200: #d6ebff;
+  --color-accent-2-300: #bdd8f2;
+  --color-accent-2-400: #9ebbd8;
+  --color-accent-2-500: #7e9cb8;
+  --color-accent-2-600: #627d98;
+  --color-accent-2-700: #486077;
+  --color-accent-2-800: #314457;
+  --color-accent-2-900: #1f2d3a;
+
+  --font-heading: "Barlow Condensed", system-ui, sans-serif;
+  --font-heading-weight: 600;
+  --font-body: "Barlow", system-ui, sans-serif;
+
+  --space-1: 3.4px;
+  --space-2: 6.8px;
+  --space-3: 10.2px;
+  --space-4: 13.6px;
+  --space-6: 20.4px;
+  --space-8: 27.2px;
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 7px;
+
+  /* Elevation — derived from the ground: soft ink-tinted shadows on a
+     light theme, a hairline edge + ambient darkness on a dark one. */
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2b2b2d 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2b2b2d 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2b2b2d 22%, transparent);
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: var(--font-heading-weight); }
+
+.blueprint {
+  position: relative;
+  border: 1px solid var(--color-divider);
+  border-radius: 0;
+}
+/* The overlay image treatments (halftone, duotone) clip their overlay
+   (overflow:hidden); a blueprint wrapper draws its registration marks
+   outside the box, so when both classes share a wrapper the frame must
+   win. */
+.blueprint.halftone, .blueprint.plate, .blueprint.duotone { overflow: visible; }
+.blueprint > .corner {
+  position: absolute; width: 11px; height: 11px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.blueprint > .corner::before, .blueprint > .corner::after {
+  content: ""; position: absolute; background: currentColor;
+}
+.blueprint > .corner::before { left: 5px; top: 0; width: 1px; height: 100%; }
+.blueprint > .corner::after  { top: 5px; left: 0; width: 100%; height: 1px; }
+.blueprint > .corner.tl { top: -6px; left: -6px; }
+.blueprint > .corner.tr { top: -6px; right: -6px; }
+.blueprint > .corner.bl { bottom: -6px; left: -6px; }
+.blueprint > .corner.br { bottom: -6px; right: -6px; }
+
+.duotone{position:relative;overflow:hidden}
+.duotone::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:var(--color-accent);mix-blend-mode:color}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Components — built with the tokens above. Plain CSS
+   on plain HTML: no JavaScript, no build step. Each class is documented in
+   readme.md and demonstrated in foundations/ and components/.
+   ══════════════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; font-size: 15px; line-height: 1.55; font-weight: 400; }
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  line-height: 1.12; letter-spacing: -0.015em; margin: 0 0 var(--space-2);
+}
+h1 { font-size: 42px; }
+h2 { font-size: 32px; }
+h3 { font-size: 25px; }
+h4 { font-size: 20px; }
+h5 { font-size: 16px; }
+h6 { font-size: 13px; }
+h6 { letter-spacing: 0.08em; text-transform: uppercase; }
+p { margin: 0 0 var(--space-3); }
+a { color: var(--color-accent); text-underline-offset: 3px; }
+img { display: block; max-width: 100%; }
+figure { margin: 0; }
+figcaption {
+  font-size: 11px; margin-top: var(--space-1);
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.text-muted { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }
+
+/* — rules — */
+.hr {
+  height: 1px; border: 0; margin: var(--space-4) 0;
+  background: var(--color-divider);
+}
+
+/* — buttons — */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  cursor: pointer; text-decoration: none;
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 14px; line-height: 1.2; color: var(--color-text); /* matches the .input's 14px —
+     the pair sits side by side in sign-up rows */
+  background: transparent; border: 1px solid transparent;
+  padding: var(--space-2) calc(var(--space-3) * 1.2);
+  border-radius: var(--radius-md);
+}
+.btn svg { display: block; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary { background: var(--color-accent); color: var(--color-bg); }
+.btn-primary:hover { background: var(--color-accent-600); }
+.btn-primary:active { background: var(--color-accent-700); }
+.btn-secondary { border-color: var(--color-divider); }
+.btn-secondary:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+.btn-secondary:active { background: color-mix(in srgb, var(--color-text) 14%, transparent); }
+.btn-ghost { color: var(--color-accent); padding-inline: var(--space-1); }
+.btn-ghost:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+.btn-ghost:active { background: color-mix(in srgb, var(--color-accent) 18%, transparent); }
+.btn-icon { width: 36px; height: 36px; padding: 0; }
+.btn-block { width: 100%; margin-top: var(--space-2); }
+
+/* — forms — */
+.field > label {
+  display: block; font-size: 12px; margin-bottom: 5px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+.input {
+  width: 100%; min-height: 36px; padding: 6px 10px; font: inherit;
+  font-size: 14px; color: var(--color-text); caret-color: var(--color-accent);
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider); border-radius: var(--radius-md);
+}
+.input:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+.input:focus-visible { border-color: var(--color-accent); outline-offset: 0; }
+textarea.input { min-height: 90px; resize: vertical; }
+.radio { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
+.radio input, .seg-opt input {
+  position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none;
+}
+.radio .dot {
+  width: 16px; height: 16px; flex: none; border-radius: 50%;
+  border: 1.5px solid var(--color-divider);
+}
+.radio:hover .dot { border-color: var(--color-accent); }
+.radio input:checked + .dot {
+  border-color: var(--color-accent); background: var(--color-accent);
+  box-shadow: inset 0 0 0 4px var(--color-bg);
+}
+.radio input:focus-visible + .dot { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.seg {
+  display: inline-flex; overflow: hidden;
+  border: 1px solid var(--color-divider); border-radius: var(--radius-md);
+}
+.seg-opt {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; font-size: 13px; cursor: pointer;
+}
+.seg-opt + .seg-opt { border-left: 1px solid var(--color-divider); }
+.seg-opt:has(input:checked) { background: var(--color-accent); color: var(--color-bg); }
+.seg-opt:not(:has(input:checked)):hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+.seg-opt:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+
+/* — cards — */
+.card {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-3); border-radius: var(--radius-md); background: var(--color-surface);
+}
+.card-kicker { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent); }
+.card-title {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 17px; line-height: 1.2;
+}
+.card-body { margin: 0; font-size: 13px; opacity: 0.8; flex: 1; }
+.card-meta {
+  display: flex; align-items: center; gap: 6px; font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+.elev-sm { box-shadow: var(--shadow-sm); }
+.elev-md { box-shadow: var(--shadow-md); }
+.elev-lg { box-shadow: var(--shadow-lg); }
+
+/* — tags — */
+.tag {
+  display: inline-flex; align-items: center; font-size: 11px;
+  letter-spacing: 0.02em; padding: 3px 10px;
+  border-radius: calc(var(--radius-md) * 0.75);
+}
+.tag-accent { background: var(--color-accent-100); color: var(--color-accent-800); }
+.tag-accent-2 { background: var(--color-accent-2-100); color: var(--color-accent-2-800); }
+.tag-neutral { background: var(--color-neutral-100); color: var(--color-neutral-800); }
+.tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
+
+/* — navigation — */
+.nav {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: none;
+}
+.nav-brand {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 18px; margin-right: auto;
+}
+.nav a { color: inherit; text-decoration: none; font-size: 14px; }
+.nav a:hover, .nav a[aria-current='page'] { color: var(--color-accent); }
+
+/* — tables — */
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th {
+  text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  padding: var(--space-2); border-bottom: 1px solid var(--color-divider);
+}
+.table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
+}
+.table tbody tr:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
+
+/* — dialog — */
+.dialog-backdrop {
+  position: fixed; inset: 0; display: grid; place-items: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--color-neutral-900) 50%, transparent);
+}
+.dialog {
+  width: min(440px, 100%); display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-4); border-radius: var(--radius-lg);
+  background: var(--color-surface); box-shadow: var(--shadow-lg);
+}
+.dialog-title {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 20px;
+}
+.dialog-body { font-size: 14px; opacity: 0.85; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-2); }
+
+/* — blueprint frame: components are wireframe objects (see .blueprint
+     and .corner above) — square, transparent, hairline-bordered — */
+.card, .btn, .input, .tag, .seg, .dialog { border-radius: 0; }
+.card, .dialog { background: transparent; border: 1px solid var(--color-divider); }
+.btn { border: 1px solid var(--color-divider); }
+.btn-primary { border-color: var(--color-accent); }
+.btn-ghost { border-color: transparent; }
+
+</style>
+  <script src="assets/ds-bundle.js"></script>
+  <style>@font-face{font-family:KaTeX_AMS;font-style:normal;font-weight:400;src:url("assets/fonts/ce0702f9-4abb-47e8-8b69-abd51794a158.woff2") format("woff2"),url("assets/fonts/12186513-48f9-4fb0-afbf-2a679c2931ed.woff") format("woff"),url("assets/fonts/d04280e7-adc2-43f3-ac8c-b616156a6aec.ttf") format("truetype")}@font-face{font-family:KaTeX_Caligraphic;font-style:normal;font-weight:700;src:url("assets/fonts/7834a965-1272-4605-9ae3-52af9cc63530.woff2") format("woff2"),url("assets/fonts/78a9746a-050c-4bf9-ae8a-e97b12464aa3.woff") format("woff"),url("assets/fonts/1358bae0-b067-497f-b686-d347832d9e41.ttf") format("truetype")}@font-face{font-family:KaTeX_Caligraphic;font-style:normal;font-weight:400;src:url("assets/fonts/0ffe4387-2f18-4fec-aaa5-45ebad8fccd5.woff2") format("woff2"),url("assets/fonts/77a45cf7-d5f0-4bc7-9dba-e4f16c830491.woff") format("woff"),url("assets/fonts/947c9c79-d1cf-4837-af3e-3144a4a7d571.ttf") format("truetype")}@font-face{font-family:KaTeX_Fraktur;font-style:normal;font-weight:700;src:url("assets/fonts/1cc14006-2f32-458d-bdbe-8faa929118ee.woff2") format("woff2"),url("assets/fonts/f529c820-f900-4af6-9edc-f3faa724c01b.woff") format("woff"),url("assets/fonts/07290f8c-30dc-4b44-997b-77bd9ab6794f.ttf") format("truetype")}@font-face{font-family:KaTeX_Fraktur;font-style:normal;font-weight:400;src:url("assets/fonts/228c3b2f-5c5f-4715-9b05-b751c4a25bc8.woff2") format("woff2"),url("assets/fonts/8a59179b-1961-4028-8c7c-c134a11a6f05.woff") format("woff"),url("assets/fonts/08d89390-981f-44a3-866f-fe7ec8a582de.ttf") format("truetype")}@font-face{font-family:KaTeX_Main;font-style:normal;font-weight:700;src:url("assets/fonts/84077ed8-cf48-485b-a73c-4a54038e66c4.woff2") format("woff2"),url("assets/fonts/86e8c060-7125-412d-90a8-934cead3e0b9.woff") format("woff"),url("assets/fonts/84bd1279-7ed0-44fd-9a0e-3dc5e9999bda.ttf") format("truetype")}@font-face{font-family:KaTeX_Main;font-style:italic;font-weight:700;src:url("assets/fonts/86c57253-21c9-4d10-9270-9ac0b4f3e225.woff2") format("woff2"),url("assets/fonts/7b0496fb-8e62-424f-9bb9-9dee50a83323.woff") format("woff"),url("assets/fonts/241c6201-67ed-47e3-8a85-a53d10661217.ttf") format("truetype")}@font-face{font-family:KaTeX_Main;font-style:italic;font-weight:400;src:url("assets/fonts/0c2e9b53-8b28-467b-8732-0d117415c5b1.woff2") format("woff2"),url("assets/fonts/0d1318cb-896f-421f-a4ba-e59681d2b6f2.woff") format("woff"),url("assets/fonts/0461b296-0470-477c-bcbc-53e28b67a2a2.ttf") format("truetype")}@font-face{font-family:KaTeX_Main;font-style:normal;font-weight:400;src:url("assets/fonts/ea51900e-0b45-4cb2-b487-4b997ca7dd61.woff2") format("woff2"),url("assets/fonts/efa83f95-be0e-4bd4-a43e-3c13aa89297f.woff") format("woff"),url("assets/fonts/116a771d-2492-41d5-925c-793eed61e355.ttf") format("truetype")}@font-face{font-family:KaTeX_Math;font-style:italic;font-weight:700;src:url("assets/fonts/59f10502-b19d-4383-bc12-2a4fad8d8d24.woff2") format("woff2"),url("assets/fonts/05a3e6e3-ff90-4dbc-9657-7073fa70d3d6.woff") format("woff"),url("assets/fonts/168064b7-fda7-45b8-ab4d-e7c4d06ccb50.ttf") format("truetype")}@font-face{font-family:KaTeX_Math;font-style:italic;font-weight:400;src:url("assets/fonts/c23114dd-3497-4be6-866a-6dd0c8bb0004.woff2") format("woff2"),url("assets/fonts/ffa35619-b39e-420c-a801-af6b67ae6ff7.woff") format("woff"),url("assets/fonts/9203c881-beef-4e78-864c-1e7be86996f5.ttf") format("truetype")}@font-face{font-family:"KaTeX_SansSerif";font-style:normal;font-weight:700;src:url("assets/fonts/9798f33a-90d5-4a5d-abde-a37455ccbd3d.woff2") format("woff2"),url("assets/fonts/ed4758d2-40bc-47d0-b0f1-cd42759fb732.woff") format("woff"),url("assets/fonts/5a02cc95-ae3e-41d1-8b70-01722a54298d.ttf") format("truetype")}@font-face{font-family:"KaTeX_SansSerif";font-style:italic;font-weight:400;src:url("assets/fonts/86f43c34-503f-4c1a-a025-a5581e23b0ef.woff2") format("woff2"),url("assets/fonts/c8dfe89a-2679-4667-90d9-661d60754daa.woff") format("woff"),url("assets/fonts/28c89a1c-63e7-457c-ad2e-b4926d87e2cf.ttf") format("truetype")}@font-face{font-family:"KaTeX_SansSerif";font-style:normal;font-weight:400;src:url("assets/fonts/3cc52618-e27e-4456-b60a-317f82c27eb3.woff2") format("woff2"),url("assets/fonts/1046a1fe-0a83-4a53-bf94-ea101b54049a.woff") format("woff"),url("assets/fonts/fa6ec3f4-697a-4a5a-9d1f-f154bbc78ad9.ttf") format("truetype")}@font-face{font-family:KaTeX_Script;font-style:normal;font-weight:400;src:url("assets/fonts/24e3cbc0-ebf9-4225-b943-8273e75b49d0.woff2") format("woff2"),url("assets/fonts/8d2d8946-7410-4ca1-8ce3-5ad11cd51c40.woff") format("woff"),url("assets/fonts/a519abac-5f14-41e8-997f-748556acee4d.ttf") format("truetype")}@font-face{font-family:KaTeX_Size1;font-style:normal;font-weight:400;src:url("assets/fonts/98eb9d27-7b70-4a87-a3a5-9658f0a3cf6c.woff2") format("woff2"),url("assets/fonts/49ebadc3-0dda-41dd-a352-9e26b4e200a0.woff") format("woff"),url("assets/fonts/4e5d7c03-3ed1-4ee2-8990-b6559eb60a7d.ttf") format("truetype")}@font-face{font-family:KaTeX_Size2;font-style:normal;font-weight:400;src:url("assets/fonts/cb14ad36-5a95-4320-ae27-718fafdab744.woff2") format("woff2"),url("assets/fonts/e86439c2-cb3d-4b39-88d7-c72edb9adbe7.woff") format("woff"),url("assets/fonts/571f1e74-1392-4883-a52e-a05fcf70ba21.ttf") format("truetype")}@font-face{font-family:KaTeX_Size3;font-style:normal;font-weight:400;src:url("assets/fonts/b0ee7094-7d43-4764-93a1-270c10218763.woff2") format("woff2"),url("assets/fonts/8b14d7dd-e2f5-4a46-bfdd-efb71954b058.woff") format("woff"),url("assets/fonts/70f27b5f-dc5e-4e4c-8433-b9b7c395c2a8.ttf") format("truetype")}@font-face{font-family:KaTeX_Size4;font-style:normal;font-weight:400;src:url("assets/fonts/23626410-ec61-40f0-b777-83e784d7ad1a.woff2") format("woff2"),url("assets/fonts/0047705a-9ff2-4660-b36c-2a4ca95abce8.woff") format("woff"),url("assets/fonts/bc70fdfd-e26a-46f9-a538-c6f13371f711.ttf") format("truetype")}@font-face{font-family:KaTeX_Typewriter;font-style:normal;font-weight:400;src:url("assets/fonts/c1d44dd4-a01e-40e3-a89a-6d1592c63e60.woff2") format("woff2"),url("assets/fonts/cbc7db31-86bd-43c5-b932-7bcf2e72ecef.woff") format("woff"),url("assets/fonts/bf8e40d5-a032-41f5-9517-7c38dc145808.ttf") format("truetype")}.katex{font:normal 1.21em KaTeX_Main,Times New Roman,serif;line-height:1.2;text-indent:0;text-rendering:auto}.katex *{-ms-high-contrast-adjust:none!important;border-color:currentColor}.katex .katex-version:after{content:"0.16.11"}.katex .katex-mathml{clip:rect(1px,1px,1px,1px);border:0;height:1px;overflow:hidden;padding:0;position:absolute;width:1px}.katex .katex-html>.newline{display:block}.katex .base{position:relative;white-space:nowrap;width:-webkit-min-content;width:-moz-min-content;width:min-content}.katex .base,.katex .strut{display:inline-block}.katex .textbf{font-weight:700}.katex .textit{font-style:italic}.katex .textrm{font-family:KaTeX_Main}.katex .textsf{font-family:KaTeX_SansSerif}.katex .texttt{font-family:KaTeX_Typewriter}.katex .mathnormal{font-family:KaTeX_Math;font-style:italic}.katex .mathit{font-family:KaTeX_Main;font-style:italic}.katex .mathrm{font-style:normal}.katex .mathbf{font-family:KaTeX_Main;font-weight:700}.katex .boldsymbol{font-family:KaTeX_Math;font-style:italic;font-weight:700}.katex .amsrm,.katex .mathbb,.katex .textbb{font-family:KaTeX_AMS}.katex .mathcal{font-family:KaTeX_Caligraphic}.katex .mathfrak,.katex .textfrak{font-family:KaTeX_Fraktur}.katex .mathboldfrak,.katex .textboldfrak{font-family:KaTeX_Fraktur;font-weight:700}.katex .mathtt{font-family:KaTeX_Typewriter}.katex .mathscr,.katex .textscr{font-family:KaTeX_Script}.katex .mathsf,.katex .textsf{font-family:KaTeX_SansSerif}.katex .mathboldsf,.katex .textboldsf{font-family:KaTeX_SansSerif;font-weight:700}.katex .mathitsf,.katex .textitsf{font-family:KaTeX_SansSerif;font-style:italic}.katex .mainrm{font-family:KaTeX_Main;font-style:normal}.katex .vlist-t{border-collapse:collapse;display:inline-table;table-layout:fixed}.katex .vlist-r{display:table-row}.katex .vlist{display:table-cell;position:relative;vertical-align:bottom}.katex .vlist>span{display:block;height:0;position:relative}.katex .vlist>span>span{display:inline-block}.katex .vlist>span>.pstrut{overflow:hidden;width:0}.katex .vlist-t2{margin-right:-2px}.katex .vlist-s{display:table-cell;font-size:1px;min-width:2px;vertical-align:bottom;width:2px}.katex .vbox{align-items:baseline;display:inline-flex;flex-direction:column}.katex .hbox{width:100%}.katex .hbox,.katex .thinbox{display:inline-flex;flex-direction:row}.katex .thinbox{max-width:0;width:0}.katex .msupsub{text-align:left}.katex .mfrac>span>span{text-align:center}.katex .mfrac .frac-line{border-bottom-style:solid;display:inline-block;width:100%}.katex .hdashline,.katex .hline,.katex .mfrac .frac-line,.katex .overline .overline-line,.katex .rule,.katex .underline .underline-line{min-height:1px}.katex .mspace{display:inline-block}.katex .clap,.katex .llap,.katex .rlap{position:relative;width:0}.katex .clap>.inner,.katex .llap>.inner,.katex .rlap>.inner{position:absolute}.katex .clap>.fix,.katex .llap>.fix,.katex .rlap>.fix{display:inline-block}.katex .llap>.inner{right:0}.katex .clap>.inner,.katex .rlap>.inner{left:0}.katex .clap>.inner>span{margin-left:-50%;margin-right:50%}.katex .rule{border:0 solid;display:inline-block;position:relative}.katex .hline,.katex .overline .overline-line,.katex .underline .underline-line{border-bottom-style:solid;display:inline-block;width:100%}.katex .hdashline{border-bottom-style:dashed;display:inline-block;width:100%}.katex .sqrt>.root{margin-left:.2777777778em;margin-right:-.5555555556em}.katex .fontsize-ensurer.reset-size1.size1,.katex .sizing.reset-size1.size1{font-size:1em}.katex .fontsize-ensurer.reset-size1.size2,.katex .sizing.reset-size1.size2{font-size:1.2em}.katex .fontsize-ensurer.reset-size1.size3,.katex .sizing.reset-size1.size3{font-size:1.4em}.katex .fontsize-ensurer.reset-size1.size4,.katex .sizing.reset-size1.size4{font-size:1.6em}.katex .fontsize-ensurer.reset-size1.size5,.katex .sizing.reset-size1.size5{font-size:1.8em}.katex .fontsize-ensurer.reset-size1.size6,.katex .sizing.reset-size1.size6{font-size:2em}.katex .fontsize-ensurer.reset-size1.size7,.katex .sizing.reset-size1.size7{font-size:2.4em}.katex .fontsize-ensurer.reset-size1.size8,.katex .sizing.reset-size1.size8{font-size:2.88em}.katex .fontsize-ensurer.reset-size1.size9,.katex .sizing.reset-size1.size9{font-size:3.456em}.katex .fontsize-ensurer.reset-size1.size10,.katex .sizing.reset-size1.size10{font-size:4.148em}.katex .fontsize-ensurer.reset-size1.size11,.katex .sizing.reset-size1.size11{font-size:4.976em}.katex .fontsize-ensurer.reset-size2.size1,.katex .sizing.reset-size2.size1{font-size:.8333333333em}.katex .fontsize-ensurer.reset-size2.size2,.katex .sizing.reset-size2.size2{font-size:1em}.katex .fontsize-ensurer.reset-size2.size3,.katex .sizing.reset-size2.size3{font-size:1.1666666667em}.katex .fontsize-ensurer.reset-size2.size4,.katex .sizing.reset-size2.size4{font-size:1.3333333333em}.katex .fontsize-ensurer.reset-size2.size5,.katex .sizing.reset-size2.size5{font-size:1.5em}.katex .fontsize-ensurer.reset-size2.size6,.katex .sizing.reset-size2.size6{font-size:1.6666666667em}.katex .fontsize-ensurer.reset-size2.size7,.katex .sizing.reset-size2.size7{font-size:2em}.katex .fontsize-ensurer.reset-size2.size8,.katex .sizing.reset-size2.size8{font-size:2.4em}.katex .fontsize-ensurer.reset-size2.size9,.katex .sizing.reset-size2.size9{font-size:2.88em}.katex .fontsize-ensurer.reset-size2.size10,.katex .sizing.reset-size2.size10{font-size:3.4566666667em}.katex .fontsize-ensurer.reset-size2.size11,.katex .sizing.reset-size2.size11{font-size:4.1466666667em}.katex .fontsize-ensurer.reset-size3.size1,.katex .sizing.reset-size3.size1{font-size:.7142857143em}.katex .fontsize-ensurer.reset-size3.size2,.katex .sizing.reset-size3.size2{font-size:.8571428571em}.katex .fontsize-ensurer.reset-size3.size3,.katex .sizing.reset-size3.size3{font-size:1em}.katex .fontsize-ensurer.reset-size3.size4,.katex .sizing.reset-size3.size4{font-size:1.1428571429em}.katex .fontsize-ensurer.reset-size3.size5,.katex .sizing.reset-size3.size5{font-size:1.2857142857em}.katex .fontsize-ensurer.reset-size3.size6,.katex .sizing.reset-size3.size6{font-size:1.4285714286em}.katex .fontsize-ensurer.reset-size3.size7,.katex .sizing.reset-size3.size7{font-size:1.7142857143em}.katex .fontsize-ensurer.reset-size3.size8,.katex .sizing.reset-size3.size8{font-size:2.0571428571em}.katex .fontsize-ensurer.reset-size3.size9,.katex .sizing.reset-size3.size9{font-size:2.4685714286em}.katex .fontsize-ensurer.reset-size3.size10,.katex .sizing.reset-size3.size10{font-size:2.9628571429em}.katex .fontsize-ensurer.reset-size3.size11,.katex .sizing.reset-size3.size11{font-size:3.5542857143em}.katex .fontsize-ensurer.reset-size4.size1,.katex .sizing.reset-size4.size1{font-size:.625em}.katex .fontsize-ensurer.reset-size4.size2,.katex .sizing.reset-size4.size2{font-size:.75em}.katex .fontsize-ensurer.reset-size4.size3,.katex .sizing.reset-size4.size3{font-size:.875em}.katex .fontsize-ensurer.reset-size4.size4,.katex .sizing.reset-size4.size4{font-size:1em}.katex .fontsize-ensurer.reset-size4.size5,.katex .sizing.reset-size4.size5{font-size:1.125em}.katex .fontsize-ensurer.reset-size4.size6,.katex .sizing.reset-size4.size6{font-size:1.25em}.katex .fontsize-ensurer.reset-size4.size7,.katex .sizing.reset-size4.size7{font-size:1.5em}.katex .fontsize-ensurer.reset-size4.size8,.katex .sizing.reset-size4.size8{font-size:1.8em}.katex .fontsize-ensurer.reset-size4.size9,.katex .sizing.reset-size4.size9{font-size:2.16em}.katex .fontsize-ensurer.reset-size4.size10,.katex .sizing.reset-size4.size10{font-size:2.5925em}.katex .fontsize-ensurer.reset-size4.size11,.katex .sizing.reset-size4.size11{font-size:3.11em}.katex .fontsize-ensurer.reset-size5.size1,.katex .sizing.reset-size5.size1{font-size:.5555555556em}.katex .fontsize-ensurer.reset-size5.size2,.katex .sizing.reset-size5.size2{font-size:.6666666667em}.katex .fontsize-ensurer.reset-size5.size3,.katex .sizing.reset-size5.size3{font-size:.7777777778em}.katex .fontsize-ensurer.reset-size5.size4,.katex .sizing.reset-size5.size4{font-size:.8888888889em}.katex .fontsize-ensurer.reset-size5.size5,.katex .sizing.reset-size5.size5{font-size:1em}.katex .fontsize-ensurer.reset-size5.size6,.katex .sizing.reset-size5.size6{font-size:1.1111111111em}.katex .fontsize-ensurer.reset-size5.size7,.katex .sizing.reset-size5.size7{font-size:1.3333333333em}.katex .fontsize-ensurer.reset-size5.size8,.katex .sizing.reset-size5.size8{font-size:1.6em}.katex .fontsize-ensurer.reset-size5.size9,.katex .sizing.reset-size5.size9{font-size:1.92em}.katex .fontsize-ensurer.reset-size5.size10,.katex .sizing.reset-size5.size10{font-size:2.3044444444em}.katex .fontsize-ensurer.reset-size5.size11,.katex .sizing.reset-size5.size11{font-size:2.7644444444em}.katex .fontsize-ensurer.reset-size6.size1,.katex .sizing.reset-size6.size1{font-size:.5em}.katex .fontsize-ensurer.reset-size6.size2,.katex .sizing.reset-size6.size2{font-size:.6em}.katex .fontsize-ensurer.reset-size6.size3,.katex .sizing.reset-size6.size3{font-size:.7em}.katex .fontsize-ensurer.reset-size6.size4,.katex .sizing.reset-size6.size4{font-size:.8em}.katex .fontsize-ensurer.reset-size6.size5,.katex .sizing.reset-size6.size5{font-size:.9em}.katex .fontsize-ensurer.reset-size6.size6,.katex .sizing.reset-size6.size6{font-size:1em}.katex .fontsize-ensurer.reset-size6.size7,.katex .sizing.reset-size6.size7{font-size:1.2em}.katex .fontsize-ensurer.reset-size6.size8,.katex .sizing.reset-size6.size8{font-size:1.44em}.katex .fontsize-ensurer.reset-size6.size9,.katex .sizing.reset-size6.size9{font-size:1.728em}.katex .fontsize-ensurer.reset-size6.size10,.katex .sizing.reset-size6.size10{font-size:2.074em}.katex .fontsize-ensurer.reset-size6.size11,.katex .sizing.reset-size6.size11{font-size:2.488em}.katex .fontsize-ensurer.reset-size7.size1,.katex .sizing.reset-size7.size1{font-size:.4166666667em}.katex .fontsize-ensurer.reset-size7.size2,.katex .sizing.reset-size7.size2{font-size:.5em}.katex .fontsize-ensurer.reset-size7.size3,.katex .sizing.reset-size7.size3{font-size:.5833333333em}.katex .fontsize-ensurer.reset-size7.size4,.katex .sizing.reset-size7.size4{font-size:.6666666667em}.katex .fontsize-ensurer.reset-size7.size5,.katex .sizing.reset-size7.size5{font-size:.75em}.katex .fontsize-ensurer.reset-size7.size6,.katex .sizing.reset-size7.size6{font-size:.8333333333em}.katex .fontsize-ensurer.reset-size7.size7,.katex .sizing.reset-size7.size7{font-size:1em}.katex .fontsize-ensurer.reset-size7.size8,.katex .sizing.reset-size7.size8{font-size:1.2em}.katex .fontsize-ensurer.reset-size7.size9,.katex .sizing.reset-size7.size9{font-size:1.44em}.katex .fontsize-ensurer.reset-size7.size10,.katex .sizing.reset-size7.size10{font-size:1.7283333333em}.katex .fontsize-ensurer.reset-size7.size11,.katex .sizing.reset-size7.size11{font-size:2.0733333333em}.katex .fontsize-ensurer.reset-size8.size1,.katex .sizing.reset-size8.size1{font-size:.3472222222em}.katex .fontsize-ensurer.reset-size8.size2,.katex .sizing.reset-size8.size2{font-size:.4166666667em}.katex .fontsize-ensurer.reset-size8.size3,.katex .sizing.reset-size8.size3{font-size:.4861111111em}.katex .fontsize-ensurer.reset-size8.size4,.katex .sizing.reset-size8.size4{font-size:.5555555556em}.katex .fontsize-ensurer.reset-size8.size5,.katex .sizing.reset-size8.size5{font-size:.625em}.katex .fontsize-ensurer.reset-size8.size6,.katex .sizing.reset-size8.size6{font-size:.6944444444em}.katex .fontsize-ensurer.reset-size8.size7,.katex .sizing.reset-size8.size7{font-size:.8333333333em}.katex .fontsize-ensurer.reset-size8.size8,.katex .sizing.reset-size8.size8{font-size:1em}.katex .fontsize-ensurer.reset-size8.size9,.katex .sizing.reset-size8.size9{font-size:1.2em}.katex .fontsize-ensurer.reset-size8.size10,.katex .sizing.reset-size8.size10{font-size:1.4402777778em}.katex .fontsize-ensurer.reset-size8.size11,.katex .sizing.reset-size8.size11{font-size:1.7277777778em}.katex .fontsize-ensurer.reset-size9.size1,.katex .sizing.reset-size9.size1{font-size:.2893518519em}.katex .fontsize-ensurer.reset-size9.size2,.katex .sizing.reset-size9.size2{font-size:.3472222222em}.katex .fontsize-ensurer.reset-size9.size3,.katex .sizing.reset-size9.size3{font-size:.4050925926em}.katex .fontsize-ensurer.reset-size9.size4,.katex .sizing.reset-size9.size4{font-size:.462962963em}.katex .fontsize-ensurer.reset-size9.size5,.katex .sizing.reset-size9.size5{font-size:.5208333333em}.katex .fontsize-ensurer.reset-size9.size6,.katex .sizing.reset-size9.size6{font-size:.5787037037em}.katex .fontsize-ensurer.reset-size9.size7,.katex .sizing.reset-size9.size7{font-size:.6944444444em}.katex .fontsize-ensurer.reset-size9.size8,.katex .sizing.reset-size9.size8{font-size:.8333333333em}.katex .fontsize-ensurer.reset-size9.size9,.katex .sizing.reset-size9.size9{font-size:1em}.katex .fontsize-ensurer.reset-size9.size10,.katex .sizing.reset-size9.size10{font-size:1.2002314815em}.katex .fontsize-ensurer.reset-size9.size11,.katex .sizing.reset-size9.size11{font-size:1.4398148148em}.katex .fontsize-ensurer.reset-size10.size1,.katex .sizing.reset-size10.size1{font-size:.2410800386em}.katex .fontsize-ensurer.reset-size10.size2,.katex .sizing.reset-size10.size2{font-size:.2892960463em}.katex .fontsize-ensurer.reset-size10.size3,.katex .sizing.reset-size10.size3{font-size:.337512054em}.katex .fontsize-ensurer.reset-size10.size4,.katex .sizing.reset-size10.size4{font-size:.3857280617em}.katex .fontsize-ensurer.reset-size10.size5,.katex .sizing.reset-size10.size5{font-size:.4339440694em}.katex .fontsize-ensurer.reset-size10.size6,.katex .sizing.reset-size10.size6{font-size:.4821600771em}.katex .fontsize-ensurer.reset-size10.size7,.katex .sizing.reset-size10.size7{font-size:.5785920926em}.katex .fontsize-ensurer.reset-size10.size8,.katex .sizing.reset-size10.size8{font-size:.6943105111em}.katex .fontsize-ensurer.reset-size10.size9,.katex .sizing.reset-size10.size9{font-size:.8331726133em}.katex .fontsize-ensurer.reset-size10.size10,.katex .sizing.reset-size10.size10{font-size:1em}.katex .fontsize-ensurer.reset-size10.size11,.katex .sizing.reset-size10.size11{font-size:1.1996142719em}.katex .fontsize-ensurer.reset-size11.size1,.katex .sizing.reset-size11.size1{font-size:.2009646302em}.katex .fontsize-ensurer.reset-size11.size2,.katex .sizing.reset-size11.size2{font-size:.2411575563em}.katex .fontsize-ensurer.reset-size11.size3,.katex .sizing.reset-size11.size3{font-size:.2813504823em}.katex .fontsize-ensurer.reset-size11.size4,.katex .sizing.reset-size11.size4{font-size:.3215434084em}.katex .fontsize-ensurer.reset-size11.size5,.katex .sizing.reset-size11.size5{font-size:.3617363344em}.katex .fontsize-ensurer.reset-size11.size6,.katex .sizing.reset-size11.size6{font-size:.4019292605em}.katex .fontsize-ensurer.reset-size11.size7,.katex .sizing.reset-size11.size7{font-size:.4823151125em}.katex .fontsize-ensurer.reset-size11.size8,.katex .sizing.reset-size11.size8{font-size:.578778135em}.katex .fontsize-ensurer.reset-size11.size9,.katex .sizing.reset-size11.size9{font-size:.6945337621em}.katex .fontsize-ensurer.reset-size11.size10,.katex .sizing.reset-size11.size10{font-size:.8336012862em}.katex .fontsize-ensurer.reset-size11.size11,.katex .sizing.reset-size11.size11{font-size:1em}.katex .delimsizing.size1{font-family:KaTeX_Size1}.katex .delimsizing.size2{font-family:KaTeX_Size2}.katex .delimsizing.size3{font-family:KaTeX_Size3}.katex .delimsizing.size4{font-family:KaTeX_Size4}.katex .delimsizing.mult .delim-size1>span{font-family:KaTeX_Size1}.katex .delimsizing.mult .delim-size4>span{font-family:KaTeX_Size4}.katex .nulldelimiter{display:inline-block;width:.12em}.katex .delimcenter,.katex .op-symbol{position:relative}.katex .op-symbol.small-op{font-family:KaTeX_Size1}.katex .op-symbol.large-op{font-family:KaTeX_Size2}.katex .accent>.vlist-t,.katex .op-limits>.vlist-t{text-align:center}.katex .accent .accent-body{position:relative}.katex .accent .accent-body:not(.accent-full){width:0}.katex .overlay{display:block}.katex .mtable .vertical-separator{display:inline-block;min-width:1px}.katex .mtable .arraycolsep{display:inline-block}.katex .mtable .col-align-c>.vlist-t{text-align:center}.katex .mtable .col-align-l>.vlist-t{text-align:left}.katex .mtable .col-align-r>.vlist-t{text-align:right}.katex .svg-align{text-align:left}.katex svg{fill:currentColor;stroke:currentColor;fill-rule:nonzero;fill-opacity:1;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;display:block;height:inherit;position:absolute;width:100%}.katex svg path{stroke:none}.katex img{border-style:none;max-height:none;max-width:none;min-height:0;min-width:0}.katex .stretchy{display:block;overflow:hidden;position:relative;width:100%}.katex .stretchy:after,.katex .stretchy:before{content:""}.katex .hide-tail{overflow:hidden;position:relative;width:100%}.katex .halfarrow-left{left:0;overflow:hidden;position:absolute;width:50.2%}.katex .halfarrow-right{overflow:hidden;position:absolute;right:0;width:50.2%}.katex .brace-left{left:0;overflow:hidden;position:absolute;width:25.1%}.katex .brace-center{left:25%;overflow:hidden;position:absolute;width:50%}.katex .brace-right{overflow:hidden;position:absolute;right:0;width:25.1%}.katex .x-arrow-pad{padding:0 .5em}.katex .cd-arrow-pad{padding:0 .55556em 0 .27778em}.katex .mover,.katex .munder,.katex .x-arrow{text-align:center}.katex .boxpad{padding:0 .3em}.katex .fbox,.katex .fcolorbox{border:.04em solid;box-sizing:border-box}.katex .cancel-pad{padding:0 .2em}.katex .cancel-lap{margin-left:-.2em;margin-right:-.2em}.katex .sout{border-bottom-style:solid;border-bottom-width:.08em}.katex .angl{border-right:.049em solid;border-top:.049em solid;box-sizing:border-box;margin-right:.03889em}.katex .anglpad{padding:0 .03889em}.katex .eqn-num:before{content:"(" counter(katexEqnNo) ")";counter-increment:katexEqnNo}.katex .mml-eqn-num:before{content:"(" counter(mmlEqnNo) ")";counter-increment:mmlEqnNo}.katex .mtr-glue{width:50%}.katex .cd-vert-arrow{display:inline-block;position:relative}.katex .cd-label-left{display:inline-block;position:absolute;right:calc(50% + .3em);text-align:left}.katex .cd-label-right{display:inline-block;left:calc(50% + .3em);position:absolute;text-align:right}.katex-display{display:block;margin:1em 0;text-align:center}.katex-display>.katex{display:block;text-align:center;white-space:nowrap}.katex-display>.katex>.katex-html{display:block;position:relative}.katex-display>.katex>.katex-html>.tag{position:absolute;right:0}.katex-display.leqno>.katex>.katex-html>.tag{left:0;right:auto}.katex-display.fleqn>.katex{padding-left:2em;text-align:left}body{counter-reset:katexEqnNo mmlEqnNo}
+</style>
+  <script src="assets/katex.min.js"></script>
+  <style>
+    body { margin: 0; background: var(--color-bg); }
+    a { color: var(--color-accent-700); }
+    a:hover { color: var(--color-accent-900); }
+    .katex { font-size: 1.05em; }
+  </style>
+</helmet>
+
+<sc-if value="{{isBooting}}" hint-placeholder-val="{{false}}">
+  <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 16px;gap:12px">
+    <div style="font-family:var(--font-heading);font-size:30px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase">Peer Prep Academy</div>
+    <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Restoring your session…</div>
+  </div>
+</sc-if>
+
+<sc-if value="{{isLogin}}" hint-placeholder-val="{{true}}">
+  <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 16px;gap:20px">
+    <div style="text-align:center">
+      <div style="font-family:var(--font-heading);font-size:30px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase">Peer Prep Academy</div>
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55;margin-top:4px">SAT &amp; Math Tutoring — Student Portal</div>
+    </div>
+    <div class="card blueprint" style="width:100%;max-width:400px;padding:24px;box-sizing:border-box">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <div class="seg" style="display:flex;width:100%;margin-bottom:20px;box-sizing:border-box">
+        <label class="seg-opt" style="flex:1;justify-content:center"><input type="radio" name="ltab" checked="{{isStudentTab}}" sc-camel-on-change="{{pickStudent}}">Student</label>
+        <label class="seg-opt" style="flex:1;justify-content:center"><input type="radio" name="ltab" checked="{{isTutorTab}}" sc-camel-on-change="{{pickTutor}}">Tutor</label>
+      </div>
+      <sc-if value="{{isStudentTab}}" hint-placeholder-val="{{true}}">
+        <sc-if value="{{notSent}}" hint-placeholder-val="{{true}}">
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div class="field"><label>Email</label><input class="input" type="email" placeholder="you@school.org" value="{{email}}" sc-camel-on-change="{{onEmail}}"></div>
+            <button type="button" class="btn btn-primary btn-block blueprint" sc-camel-on-click="{{sendLink}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Send magic link</button>
+          </div>
+        </sc-if>
+        <sc-if value="{{sent}}" hint-placeholder-val="{{false}}">
+          <div style="text-align:center;display:flex;flex-direction:column;gap:12px;padding:8px 0">
+            <div style="font-family:var(--font-heading);font-size:24px;font-weight:600">Check your email</div>
+            <p style="margin:0;font-size:14px;opacity:0.7;line-height:1.5">We sent a sign-in link to <b>{{sentEmail}}</b>.<br>It expires in 15 minutes.</p>
+            <a href="#" sc-camel-on-click="{{resend}}" style="font-size:13px">Use a different email</a>
+          </div>
+        </sc-if>
+      </sc-if>
+      <sc-if value="{{isTutorTab}}" hint-placeholder-val="{{false}}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="field"><label>Username</label><input class="input" placeholder="e.g. msmith" value="{{username}}" sc-camel-on-change="{{onUsername}}"></div>
+          <div class="field"><label>{{secretLabel}}</label><input class="input" type="password" sc-camel-input-mode="{{secretMode}}" value="{{secret}}" sc-camel-on-change="{{onSecret}}"></div>
+          <button type="button" class="btn btn-primary btn-block blueprint" sc-camel-on-click="{{doTutorLogin}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Log in</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{hasErr}}" hint-placeholder-val="{{false}}">
+        <p style="margin:14px 0 0;font-size:13px;line-height:1.5;border-left:2px solid var(--color-accent);padding-left:10px">{{loginErr}}</p>
+      </sc-if>
+    </div>
+    <p style="margin:0;font-size:12px;opacity:0.55;text-align:center;line-height:1.7;max-width:400px">Students sign in with the email on file. Tutors use their username and PIN; admins use their email and password.</p>
+  </div>
+</sc-if>
+
+<sc-if value="{{isApp}}" hint-placeholder-val="{{false}}">
+  <nav class="nav" style="position:sticky;top:0;z-index:10;flex-wrap:wrap;row-gap:6px">
+    <span class="nav-brand" style="cursor:pointer" sc-camel-on-click="{{goHome}}">Peer Prep Academy</span>
+    <sc-for list="{{navLinks}}" as="l" hint-placeholder-count="2">
+      <a href="#" aria-current="{{l.cur}}" sc-camel-on-click="{{l.go}}">{{l.label}}</a>
+    </sc-for>
+    <span style="margin-left:auto;display:flex;align-items:center;gap:12px">
+      <span style="font-size:12px;opacity:0.6">{{userName}} · {{roleLabel}}</span>
+      <button type="button" class="btn btn-ghost" sc-camel-on-click="{{logout}}">Log out</button>
+    </span>
+  </nav>
+  <div style="max-width:1060px;margin:0 auto;padding:28px 20px 80px;box-sizing:border-box">
+
+    <sc-if value="{{sDash}}" hint-placeholder-val="{{false}}">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Dashboard</div>
+      <h1 style="margin:4px 0 6px">Your modules</h1>
+      <p style="margin:0 0 24px;font-size:14px;opacity:0.65">Work through what your tutor assigned. Progress saves as you go.</p>
+      <sc-if value="{{noAssignments}}" hint-placeholder-val="{{false}}"><p style="font-size:14px;opacity:0.65">Nothing assigned yet — your tutor will add modules here.</p></sc-if>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px">
+        <sc-for list="{{dashCards}}" as="a" hint-placeholder-count="3">
+          <div class="card blueprint" style="display:flex;flex-direction:column;gap:10px;cursor:pointer" sc-camel-on-click="{{a.open}}">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <div class="card-kicker">{{a.subject}}</div>
+            <div class="card-title">{{a.title}}</div>
+            <div style="display:flex;justify-content:space-between;gap:8px;font-size:13px"><span>{{a.progressText}}</span><span style="opacity:0.6">{{a.pctText}}</span></div>
+            <div style="height:6px;border:1px solid var(--color-neutral-300)"><div style="height:100%;background:var(--color-accent);width:{{a.pctW}}"></div></div>
+            <div class="card-meta" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span>Due {{a.dueText}}</span>
+              <sc-if value="{{a.overdue}}" hint-placeholder-val="{{false}}"><span class="tag tag-outline">Overdue</span></sc-if>
+              <sc-if value="{{a.done}}" hint-placeholder-val="{{false}}"><span class="tag tag-accent">Complete</span></sc-if>
+            </div>
+            <div style="font-size:12px;opacity:0.6">Assigned by {{a.tutorName}}</div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sModule}}" hint-placeholder-val="{{false}}">
+      <a href="#" sc-camel-on-click="{{backDash}}" style="font-size:13px;text-decoration:none">← Dashboard</a>
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55;margin-top:16px">{{modSubject}}</div>
+      <h1 style="margin:4px 0 6px">{{modTitle}}</h1>
+      <p style="margin:0 0 16px;font-size:14px;opacity:0.65">{{modDue}} · {{modTutor}}</p>
+      <div style="max-width:420px;display:flex;flex-direction:column;gap:6px;margin-bottom:28px">
+        <div style="font-size:13px">{{modProgressText}}</div>
+        <div style="height:6px;border:1px solid var(--color-neutral-300)"><div style="height:100%;background:var(--color-accent);width:{{modPctW}}"></div></div>
+      </div>
+      <div style="border-top:1px solid var(--color-neutral-300)">
+        <sc-for list="{{modRows}}" as="r" hint-placeholder-count="4">
+          <div sc-camel-on-click="{{r.open}}" style="display:flex;align-items:center;gap:14px;padding:14px 6px;border-bottom:1px solid var(--color-neutral-300);cursor:pointer" style-hover="background:var(--color-accent-100)">
+            <span style="font-family:var(--font-heading);font-size:16px;width:28px;opacity:0.55">{{r.num}}</span>
+            <span style="flex:1;font-size:14px">{{r.label}}</span>
+            <span class="{{r.tagClass}}">{{r.statusLabel}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sProblem}}" hint-placeholder-val="{{false}}">
+      <a href="#" sc-camel-on-click="{{backModule}}" style="font-size:13px;text-decoration:none">← Problem list</a>
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55;margin:16px 0 12px">{{posKicker}}</div>
+      <div class="card blueprint" style="max-width:720px;padding:24px;box-sizing:border-box">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="font-size:17px;line-height:1.6">{{qEl}}</div>
+        <sc-if value="{{isMC}}" hint-placeholder-val="{{true}}">
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:20px">
+            <sc-for list="{{choices}}" as="c" hint-placeholder-count="4">
+              <label class="radio" style="border:1px solid {{c.border}};padding:10px 12px;display:flex;align-items:center;gap:10px;cursor:pointer">
+                <input type="radio" name="choice" checked="{{c.selected}}" sc-camel-on-change="{{c.pick}}" disabled="{{answered}}">
+                <span class="dot"></span>
+                <span style="font-family:var(--font-heading);font-size:15px;width:20px;opacity:0.7">{{c.letter}}</span>
+                <span style="flex:1;font-size:15px">{{c.el}}</span>
+                <sc-if value="{{c.isCorrectMark}}" hint-placeholder-val="{{false}}"><span class="tag tag-accent">Correct</span></sc-if>
+                <sc-if value="{{c.isWrongMark}}" hint-placeholder-val="{{false}}"><span class="tag tag-outline">Your answer</span></sc-if>
+              </label>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{isFree}}" hint-placeholder-val="{{false}}">
+          <div class="field" style="margin-top:20px;max-width:260px"><label>Your answer</label><input class="input" value="{{freeShown}}" sc-camel-on-change="{{onFree}}" disabled="{{answered}}"></div>
+        </sc-if>
+        <sc-if value="{{notAnswered}}" hint-placeholder-val="{{true}}">
+          <button type="button" class="btn btn-primary blueprint" style="margin-top:20px" disabled="{{cantSubmit}}" sc-camel-on-click="{{doSubmit}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Check answer</button>
+        </sc-if>
+        <sc-if value="{{answered}}" hint-placeholder-val="{{false}}">
+          <div style="margin-top:20px;border-top:1px solid var(--color-neutral-300);padding-top:16px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <sc-if value="{{wasCorrect}}" hint-placeholder-val="{{false}}"><span class="tag tag-accent">Correct</span></sc-if>
+              <sc-if value="{{wasWrong}}" hint-placeholder-val="{{false}}"><span class="tag tag-outline">Incorrect</span><span style="font-size:13px">Correct answer: {{correctAnswerEl}}</span></sc-if>
+            </div>
+            <div style="font-size:14px;line-height:1.6;opacity:0.85">{{explEl}}</div>
+          </div>
+        </sc-if>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:16px;max-width:720px">
+        <button type="button" class="btn btn-ghost" disabled="{{noPrev}}" sc-camel-on-click="{{goPrev}}">← Previous</button>
+        <button type="button" class="btn btn-ghost" disabled="{{noNext}}" sc-camel-on-click="{{goNext}}">Next →</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sStudents}}" hint-placeholder-val="{{false}}">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Tutor</div>
+      <h1 style="margin:4px 0 24px">My students</h1>
+      <sc-if value="{{noStudents}}" hint-placeholder-val="{{false}}"><p style="font-size:14px;opacity:0.65">No tutees linked to you yet — ask an admin.</p></sc-if>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px">
+        <sc-for list="{{students}}" as="s" hint-placeholder-count="3">
+          <div class="card blueprint" style="display:flex;flex-direction:column;gap:10px">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <div class="card-title">{{s.name}}</div>
+            <div style="font-size:12px;opacity:0.6">{{s.email}}</div>
+            <div style="display:flex;justify-content:space-between;gap:8px;font-size:13px"><span>{{s.progressText}}</span><span style="opacity:0.6">{{s.count}}</span></div>
+            <div style="height:6px;border:1px solid var(--color-neutral-300)"><div style="height:100%;background:var(--color-accent);width:{{s.pctW}}"></div></div>
+            <div style="font-size:13px">{{s.scoreText}}</div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sLibrary}}" hint-placeholder-val="{{false}}">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Tutor</div>
+      <h1 style="margin:4px 0 16px">Module library</h1>
+      <div class="seg" style="display:inline-flex;flex-wrap:wrap;margin-bottom:24px">
+        <sc-for list="{{subjectOpts}}" as="o" hint-placeholder-count="3">
+          <label class="seg-opt"><input type="radio" name="subj" checked="{{o.active}}" sc-camel-on-change="{{o.pick}}">{{o.label}}</label>
+        </sc-for>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px">
+        <sc-for list="{{libModules}}" as="m" hint-placeholder-count="4">
+          <div class="card blueprint" style="display:flex;flex-direction:column;gap:10px">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <div class="card-kicker">{{m.subject}}</div>
+            <div class="card-title">{{m.title}}</div>
+            <div style="font-size:13px;opacity:0.65">{{m.count}}</div>
+            <div style="display:flex;gap:8px;margin-top:auto">
+              <button type="button" class="btn btn-secondary" sc-camel-on-click="{{m.preview}}">Preview</button>
+              <button type="button" class="btn btn-ghost" sc-camel-on-click="{{m.assignIt}}">Assign</button>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sPreview}}" hint-placeholder-val="{{false}}">
+      <a href="#" sc-camel-on-click="{{backLibrary}}" style="font-size:13px;text-decoration:none">← Module library</a>
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:16px">
+        <div>
+          <h1 style="margin:0 0 4px">{{pvTitle}}</h1>
+          <p style="margin:0;font-size:14px;opacity:0.65">{{pvMeta}}</p>
+        </div>
+        <button type="button" class="btn btn-primary blueprint" sc-camel-on-click="{{pvAssign}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Assign this module</button>
+      </div>
+      <div style="border-top:1px solid var(--color-neutral-300);margin-top:20px">
+        <sc-for list="{{pvRows}}" as="p" hint-placeholder-count="4">
+          <div style="padding:16px 6px;border-bottom:1px solid var(--color-neutral-300);display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;gap:10px;align-items:center">
+              <span style="font-family:var(--font-heading);font-size:16px;opacity:0.55">{{p.num}}</span>
+              <span class="tag tag-neutral">{{p.typeLabel}}</span>
+            </div>
+            <div style="font-size:15px;line-height:1.6">{{p.qEl}}</div>
+            <div style="font-size:13px;opacity:0.7">Answer: {{p.answerEl}}</div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sAssign}}" hint-placeholder-val="{{false}}">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Tutor</div>
+      <h1 style="margin:4px 0 24px">Assign a module</h1>
+      <div class="card blueprint" style="max-width:520px;padding:24px;box-sizing:border-box;display:flex;flex-direction:column;gap:18px">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div class="field"><label>Module</label>
+          <sc-raw-select class="input" value="{{selModule}}" sc-camel-on-change="{{onSelModule}}">
+            <option value="">Choose a module…</option>
+            <sc-for list="{{moduleOptions}}" as="o" hint-placeholder-count="3"><option value="{{o.id}}">{{o.label}}</option></sc-for>
+          </sc-raw-select>
+        </div>
+        <div class="field"><label>Students</label>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <sc-for list="{{tutees}}" as="t" hint-placeholder-count="3">
+              <label class="radio" style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="checkbox" checked="{{t.checked}}" sc-camel-on-change="{{t.toggle}}"><span class="dot"></span><span>{{t.name}}</span><span style="font-size:12px;opacity:0.5">{{t.sub}}</span></label>
+            </sc-for>
+          </div>
+        </div>
+        <div class="field" style="max-width:220px"><label>Due date</label><input class="input" type="date" value="{{due}}" sc-camel-on-change="{{onDue}}"></div>
+        <button type="button" class="btn btn-primary btn-block blueprint" disabled="{{cantAssign}}" sc-camel-on-click="{{doAssign}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Assign module</button>
+        <sc-if value="{{hasAssignMsg}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;border-left:2px solid var(--color-accent);padding-left:10px">{{assignMsg}}</p></sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sResults}}" hint-placeholder-val="{{false}}">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Tutor</div>
+      <h1 style="margin:4px 0 6px">Results</h1>
+      <p style="margin:0 0 20px;font-size:14px;opacity:0.65">One row per assignment. Click a row for per-problem answers.</p>
+      <div style="overflow-x:auto">
+        <sc-raw-table class="table">
+          <sc-raw-thead><sc-raw-tr><sc-raw-th>Student</sc-raw-th><sc-raw-th>Module</sc-raw-th><sc-raw-th>Due</sc-raw-th><sc-raw-th>Answered</sc-raw-th><sc-raw-th>Score</sc-raw-th></sc-raw-tr></sc-raw-thead>
+          <sc-raw-tbody>
+            <sc-for list="{{resultRows}}" as="r" hint-placeholder-count="5">
+              <sc-raw-tr sc-camel-on-click="{{r.open}}" style="cursor:pointer">
+                <sc-raw-td>{{r.student}}</sc-raw-td><sc-raw-td>{{r.module}}</sc-raw-td><sc-raw-td class="text-muted">{{r.due}}</sc-raw-td><sc-raw-td>{{r.progress}}</sc-raw-td><sc-raw-td>{{r.score}}</sc-raw-td>
+              </sc-raw-tr>
+            </sc-for>
+          </sc-raw-tbody>
+        </sc-raw-table>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sResultDetail}}" hint-placeholder-val="{{false}}">
+      <a href="#" sc-camel-on-click="{{backResults}}" style="font-size:13px;text-decoration:none">← Results</a>
+      <h1 style="margin:16px 0 4px">{{rdTitle}}</h1>
+      <p style="margin:0 0 20px;font-size:14px;opacity:0.65">{{rdMeta}}</p>
+      <div style="overflow-x:auto">
+        <sc-raw-table class="table">
+          <sc-raw-thead><sc-raw-tr><sc-raw-th>#</sc-raw-th><sc-raw-th style="min-width:260px">Problem</sc-raw-th><sc-raw-th>Their answer</sc-raw-th><sc-raw-th>Correct answer</sc-raw-th><sc-raw-th>Result</sc-raw-th></sc-raw-tr></sc-raw-thead>
+          <sc-raw-tbody>
+            <sc-for list="{{rdRows}}" as="r" hint-placeholder-count="4">
+              <sc-raw-tr>
+                <sc-raw-td class="text-muted">{{r.num}}</sc-raw-td>
+                <sc-raw-td style="min-width:260px;line-height:1.5">{{r.qEl}}</sc-raw-td>
+                <sc-raw-td>{{r.given}}</sc-raw-td>
+                <sc-raw-td>{{r.correctAns}}</sc-raw-td>
+                <sc-raw-td><span class="{{r.tagClass}}">{{r.statusLabel}}</span></sc-raw-td>
+              </sc-raw-tr>
+            </sc-for>
+          </sc-raw-tbody>
+        </sc-raw-table>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sUsers}}" hint-placeholder-val="{{false}}">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Admin</div>
+      <h1 style="margin:4px 0 24px">Users</h1>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:32px">
+        <div class="card blueprint" style="display:flex;flex-direction:column;gap:14px">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <div class="card-kicker">New tutor</div>
+          <div class="field"><label>Name</label><input class="input" value="{{tName}}" sc-camel-on-change="{{onTName}}"></div>
+          <div class="field"><label>Username</label><input class="input" value="{{tUsername}}" sc-camel-on-change="{{onTUsername}}"></div>
+          <div class="field" style="max-width:160px"><label>PIN</label><input class="input" sc-camel-input-mode="numeric" value="{{tPin}}" sc-camel-on-change="{{onTPin}}"></div>
+          <button type="button" class="btn btn-primary blueprint" sc-camel-on-click="{{createTutor}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Create tutor</button>
+          <sc-if value="{{hasTMsg}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;border-left:2px solid var(--color-accent);padding-left:10px">{{tMsg}}</p></sc-if>
+        </div>
+        <div class="card blueprint" style="display:flex;flex-direction:column;gap:14px">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <div class="card-kicker">New tutee</div>
+          <div class="field"><label>Name</label><input class="input" value="{{sName}}" sc-camel-on-change="{{onSName}}"></div>
+          <div class="field"><label>Email</label><input class="input" type="email" value="{{sEmail}}" sc-camel-on-change="{{onSEmail}}"></div>
+          <button type="button" class="btn btn-primary blueprint" style="margin-top:auto" sc-camel-on-click="{{createStudent}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Create tutee</button>
+          <sc-if value="{{hasSMsg}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;border-left:2px solid var(--color-accent);padding-left:10px">{{sMsg}}</p></sc-if>
+        </div>
+      </div>
+      <h2 style="margin:0 0 12px">Tutees</h2>
+      <div style="overflow-x:auto;margin-bottom:32px">
+        <sc-raw-table class="table">
+          <sc-raw-thead><sc-raw-tr><sc-raw-th>Name</sc-raw-th><sc-raw-th>Email</sc-raw-th><sc-raw-th>Tutor</sc-raw-th></sc-raw-tr></sc-raw-thead>
+          <sc-raw-tbody>
+            <sc-for list="{{studentRows}}" as="r" hint-placeholder-count="4">
+              <sc-raw-tr>
+                <sc-raw-td>{{r.name}}</sc-raw-td><sc-raw-td class="text-muted">{{r.email}}</sc-raw-td>
+                <sc-raw-td><sc-raw-select class="input" style="max-width:180px;padding:4px 8px" value="{{r.tutorId}}" sc-camel-on-change="{{r.onLink}}">
+                  <sc-for list="{{r.options}}" as="o"><option value="{{o.id}}">{{o.label}}</option></sc-for>
+                </sc-raw-select></sc-raw-td>
+              </sc-raw-tr>
+            </sc-for>
+          </sc-raw-tbody>
+        </sc-raw-table>
+      </div>
+      <h2 style="margin:0 0 12px">Tutors</h2>
+      <div style="overflow-x:auto">
+        <sc-raw-table class="table">
+          <sc-raw-thead><sc-raw-tr><sc-raw-th>Name</sc-raw-th><sc-raw-th>Username</sc-raw-th><sc-raw-th>Tutees</sc-raw-th></sc-raw-tr></sc-raw-thead>
+          <sc-raw-tbody>
+            <sc-for list="{{tutorRows}}" as="t" hint-placeholder-count="2">
+              <sc-raw-tr><sc-raw-td>{{t.name}}</sc-raw-td><sc-raw-td>{{t.username}}</sc-raw-td><sc-raw-td>{{t.count}}</sc-raw-td></sc-raw-tr>
+            </sc-for>
+          </sc-raw-tbody>
+        </sc-raw-table>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sModules}}" hint-placeholder-val="{{false}}">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Admin</div>
+      <h1 style="margin:4px 0 24px">Modules</h1>
+      <div class="card blueprint" style="max-width:520px;display:flex;flex-direction:column;gap:14px;margin-bottom:32px">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div class="card-kicker">New module</div>
+        <div class="field"><label>Title</label><input class="input" value="{{mTitle}}" sc-camel-on-change="{{onMTitle}}"></div>
+        <div class="field" style="max-width:220px"><label>Subject</label><input class="input" placeholder="e.g. Algebra" value="{{mSubject}}" sc-camel-on-change="{{onMSubject}}"></div>
+        <button type="button" class="btn btn-primary blueprint" sc-camel-on-click="{{createMod}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Create &amp; open editor</button>
+      </div>
+      <div style="overflow-x:auto">
+        <sc-raw-table class="table">
+          <sc-raw-thead><sc-raw-tr><sc-raw-th>Title</sc-raw-th><sc-raw-th>Subject</sc-raw-th><sc-raw-th>Problems</sc-raw-th><sc-raw-th></sc-raw-th></sc-raw-tr></sc-raw-thead>
+          <sc-raw-tbody>
+            <sc-for list="{{adminModRows}}" as="m" hint-placeholder-count="4">
+              <sc-raw-tr><sc-raw-td>{{m.title}}</sc-raw-td><sc-raw-td class="text-muted">{{m.subject}}</sc-raw-td><sc-raw-td>{{m.count}}</sc-raw-td>
+                <sc-raw-td style="text-align:right"><button type="button" class="btn btn-ghost" sc-camel-on-click="{{m.edit}}">Edit</button></sc-raw-td></sc-raw-tr>
+            </sc-for>
+          </sc-raw-tbody>
+        </sc-raw-table>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{sEditor}}" hint-placeholder-val="{{false}}">
+      <a href="#" sc-camel-on-click="{{backModules}}" style="font-size:13px;text-decoration:none">← Modules</a>
+      <h1 style="margin:16px 0 20px">Edit module</h1>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:28px">
+        <div class="field" style="min-width:240px"><label>Title</label><input class="input" value="{{edTitle}}" sc-camel-on-change="{{onEdTitle}}"></div>
+        <div class="field" style="min-width:160px"><label>Subject</label><input class="input" value="{{edSubject}}" sc-camel-on-change="{{onEdSubject}}"></div>
+        <button type="button" class="btn btn-secondary" sc-camel-on-click="{{saveModuleMeta}}">Save details</button>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px">
+        <h2 style="margin:0">Problems <span style="font-size:14px;opacity:0.55;font-family:var(--font-body)">({{edCount}})</span></h2>
+        <button type="button" class="btn btn-primary blueprint" sc-camel-on-click="{{addProblem}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Add problem</button>
+      </div>
+      <div style="border-top:1px solid var(--color-neutral-300);margin-bottom:28px">
+        <sc-for list="{{edRows}}" as="r" hint-placeholder-count="4">
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 6px;border-bottom:1px solid var(--color-neutral-300)">
+            <span style="font-family:var(--font-heading);font-size:16px;width:28px;opacity:0.55">{{r.num}}</span>
+            <span style="flex:1;font-size:14px;min-width:160px">{{r.snippet}}</span>
+            <span class="tag tag-neutral">{{r.typeLabel}}</span>
+            <button type="button" class="btn btn-ghost" sc-camel-on-click="{{r.edit}}">Edit</button>
+            <button type="button" class="btn btn-ghost" sc-camel-on-click="{{r.del}}">Delete</button>
+          </div>
+        </sc-for>
+      </div>
+      <sc-if value="{{editing}}" hint-placeholder-val="{{false}}">
+        <div class="card blueprint elev-md" style="max-width:680px;padding:24px;box-sizing:border-box;display:flex;flex-direction:column;gap:16px">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <div class="card-kicker">{{pfTitle}}</div>
+          <div class="field"><label>Question — wrap math in $…$ (KaTeX)</label><textarea class="input" rows="3" value="{{pfText}}" sc-camel-on-change="{{onPfText}}"></textarea></div>
+          <sc-if value="{{hasPfPreview}}" hint-placeholder-val="{{false}}">
+            <div style="font-size:14px;line-height:1.6;border-left:2px solid var(--color-neutral-300);padding-left:10px"><span style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;opacity:0.55">Preview </span>{{pfPreviewEl}}</div>
+          </sc-if>
+          <div class="field"><label>Type</label>
+            <div class="seg" style="display:inline-flex">
+              <label class="seg-opt"><input type="radio" name="ptype" checked="{{pfIsMC}}" sc-camel-on-change="{{pfPickMC}}">Multiple choice</label>
+              <label class="seg-opt"><input type="radio" name="ptype" checked="{{pfIsFree}}" sc-camel-on-change="{{pfPickFree}}">Free response</label>
+            </div>
+          </div>
+          <sc-if value="{{pfIsMC}}" hint-placeholder-val="{{true}}">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+              <div class="field"><label>Choice A</label><input class="input" value="{{pfC0}}" sc-camel-on-change="{{onPfC0}}"></div>
+              <div class="field"><label>Choice B</label><input class="input" value="{{pfC1}}" sc-camel-on-change="{{onPfC1}}"></div>
+              <div class="field"><label>Choice C</label><input class="input" value="{{pfC2}}" sc-camel-on-change="{{onPfC2}}"></div>
+              <div class="field"><label>Choice D</label><input class="input" value="{{pfC3}}" sc-camel-on-change="{{onPfC3}}"></div>
+            </div>
+            <div class="field" style="max-width:160px"><label>Correct answer</label>
+              <sc-raw-select class="input" value="{{pfAnswer}}" sc-camel-on-change="{{onPfAnswer}}"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></sc-raw-select>
+            </div>
+          </sc-if>
+          <sc-if value="{{pfIsFree}}" hint-placeholder-val="{{false}}">
+            <div class="field" style="max-width:220px"><label>Correct answer</label><input class="input" value="{{pfAnswer}}" sc-camel-on-change="{{onPfAnswer}}"></div>
+          </sc-if>
+          <div class="field"><label>Explanation</label><textarea class="input" rows="2" value="{{pfExpl}}" sc-camel-on-change="{{onPfExpl}}"></textarea></div>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="btn btn-primary blueprint" sc-camel-on-click="{{pfSave}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Save problem</button>
+            <button type="button" class="btn btn-ghost" sc-camel-on-click="{{pfCancel}}">Cancel</button>
+          </div>
+        </div>
+      </sc-if>
+    </sc-if>
+
+  </div>
+</sc-if>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{}">
+class Component extends DCLogic {
+  state = {
+    route: { name: 'login' },
+    login: { tab: 'student', email: '', sent: false, err: '', busy: false, username: '', secret: '' },
+    problem: { choice: '', free: '' },
+    lib: { subject: 'All' },
+    assign: { moduleId: '', picked: {}, due: '', msg: '' },
+    admin: { tName: '', tUsername: '', tPin: '', tMsg: '', sName: '', sEmail: '', sMsg: '', mTitle: '', mSubject: '' },
+    editor: { title: '', subject: '', editing: null }
+  };
+
+  componentDidMount() {
+    if (!window.katex) {
+      this._kt = setInterval(() => { if (window.katex) { clearInterval(this._kt); this._kt = null; this.forceUpdate(); } }, 200);
+    }
+    // db owns the session (Supabase persists it, refreshes it, and picks the
+    // magic-link token out of the URL on return). We just follow its single
+    // auth listener: a user appearing routes us home, a user going drops us
+    // back to the login card.
+    const boot = () => {
+      if (!window.db) { setTimeout(boot, 50); return; }
+      this._off = window.db.onChange(() => {
+        const me = window.db.me();
+        const at = this.state.route.name;
+        if (me && at === 'login') this.setState({ route: this.homeRoute(me.role), login: this.blankLogin() });
+        else if (!me && at !== 'login') this.setState({ route: { name: 'login' }, login: this.blankLogin() });
+        else this.forceUpdate();
+      });
+      // Idempotent — db already kicked this off at load time.
+      window.db.init();
+    };
+    boot();
+  }
+  componentWillUnmount() {
+    if (this._kt) clearInterval(this._kt);
+    if (this._off) this._off();
+  }
+
+  // Admin is named explicitly so an unrecognised role can never fall through
+  // into the admin console.
+  homeRoute(role) { return { name: role === 'tutor' ? 'students' : role === 'admin' ? 'users' : 'dash' }; }
+  blankLogin() { return { tab: 'student', email: '', sent: false, err: '', busy: false, username: '', secret: '' }; }
+  setEd(patch) { const E = this.state.editor; this.setState({ editor: Object.assign({}, E, { editing: Object.assign({}, E.editing, patch) }) }); }
+
+  math(text) {
+    const R = React, t = String(text == null ? '' : text);
+    const parts = t.split('$');
+    const nodes = parts.map((part, i) => {
+      if (i % 2 === 1 && window.katex) return R.createElement('span', { key: i, dangerouslySetInnerHTML: { __html: window.katex.renderToString(part, { throwOnError: false }) } });
+      if (i % 2 === 1) return R.createElement('span', { key: i, style: { fontStyle: 'italic' } }, part);
+      return R.createElement('span', { key: i }, part);
+    });
+    return R.createElement('span', null, nodes);
+  }
+
+  renderVals() {
+    const st = this.state, db = window.db, route = st.route;
+    const me = db ? db.me() : null;
+    const go = (name, extra) => () => this.setState({ route: Object.assign({ name: name }, extra || {}), problem: { choice: '', free: '' } });
+    const goE = (name, extra) => (e) => { if (e && e.preventDefault) e.preventDefault(); go(name, extra)(); };
+    const F = (sec, key) => (e) => this.setState({ [sec]: Object.assign({}, this.state[sec], { [key]: e.target.value }) });
+    const math = this.math.bind(this);
+    const fmtDate = (iso) => { try { return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); } catch (e) { return iso; } };
+    const todayISO = new Date().toISOString().slice(0, 10);
+    // Three exclusive top-level screens. While the stored session is still
+    // being resolved we show the splash, never the login card — otherwise a
+    // signed-in reload flashes "log in" and then jumps.
+    const booting = db ? db.booting() : true;
+    const v = { isBooting: booting, isLogin: !booting && !me, isApp: !booting && !!me };
+
+    // ---- login ----
+    const L = st.login;
+    v.isStudentTab = L.tab === 'student'; v.isTutorTab = L.tab === 'tutor';
+    v.pickStudent = () => this.setState({ login: Object.assign({}, L, { tab: 'student', err: '' }) });
+    v.pickTutor = () => this.setState({ login: Object.assign({}, L, { tab: 'tutor', err: '' }) });
+    v.email = L.email; v.onEmail = F('login', 'email');
+    v.notSent = !L.sent; v.sent = L.sent; v.sentEmail = L.email;
+    const setLogin = (patch) => this.setState({ login: Object.assign({}, this.state.login, patch) });
+    // Every rejection has to reach the card; a thrown non-Error or a missing db
+    // must not leave the button stuck on "busy" with nothing on screen.
+    const errText = (err) => (err && (err.message || err.error_description || err.msg)) || '';
+    const noDb = () => {
+      if (db) return false;
+      setLogin({ busy: false, err: 'The app failed to start. Check the browser console.' });
+      return true;
+    };
+    v.sendLink = () => {
+      if (L.busy || noDb()) return;
+      if (!L.email.trim() || L.email.indexOf('@') < 0) { setLogin({ err: 'Enter a valid email address.' }); return; }
+      setLogin({ busy: true, err: '' });
+      db.auth.signInStudent(L.email).then(
+        () => setLogin({ busy: false, sent: true, err: '' }),
+        // shouldCreateUser is false, so an unknown address fails here rather
+        // than quietly enrolling someone who was never given a seat.
+        (err) => setLogin({ busy: false, err: /not found|signups not allowed|invalid/i.test(errText(err))
+          ? 'No student account uses that email. Ask your tutor to check it.'
+          : (errText(err) || 'Could not send the link.') })
+      );
+    };
+    v.resend = (e) => { e.preventDefault(); setLogin({ sent: false, err: '', busy: false }); };
+    v.username = L.username; v.onUsername = F('login', 'username');
+    // An "@" means an admin typing a real address; anything else is a tutor
+    // username that db expands to its synthetic tutor address.
+    const adminMode = L.username.indexOf('@') >= 0;
+    v.secretLabel = adminMode ? 'Password' : 'PIN';
+    v.secretMode = adminMode ? 'text' : 'numeric';
+    v.secret = L.secret; v.onSecret = F('login', 'secret');
+    v.doTutorLogin = () => {
+      if (L.busy || noDb()) return;
+      if (!L.username.trim() || !L.secret) { setLogin({ err: adminMode ? 'Enter your email and password.' : 'Enter your username and PIN.' }); return; }
+      setLogin({ busy: true, err: '' });
+      // On success db picks the session up and routes us; only failures land here.
+      db.auth.signInTutor(L.username, L.secret).catch((err) => setLogin({
+        busy: false,
+        err: /invalid login|invalid credentials/i.test(errText(err))
+          ? (adminMode ? 'Wrong email or password.' : 'Wrong username or PIN.')
+          : (errText(err) || 'Could not sign in.')
+      }));
+    };
+    v.loginErr = L.err; v.hasErr = !!L.err;
+    if (!me) return v;
+
+    // ---- app shell ----
+    v.userName = me.name;
+    v.roleLabel = me.role === 'student' ? 'Student' : me.role === 'tutor' ? 'Tutor' : 'Admin';
+    v.logout = () => { db.auth.signOut(); };
+    v.goHome = () => this.setState({ route: this.homeRoute(me.role) });
+    const linkDefs = me.role === 'student' ? [['Dashboard', 'dash']]
+      : me.role === 'tutor' ? [['My Students', 'students'], ['Module Library', 'library'], ['Assign', 'assign'], ['Results', 'results']]
+      : [['Users', 'users'], ['Modules', 'modules']];
+    const activeOf = { dash: 'dash', module: 'dash', problem: 'dash', students: 'students', library: 'library', preview: 'library', assign: 'assign', results: 'results', resultDetail: 'results', users: 'users', modules: 'modules', editor: 'modules' };
+    v.navLinks = linkDefs.map(([label, name]) => ({ label: label, cur: activeOf[route.name] === name ? 'page' : undefined, go: goE(name) }));
+
+    v.sDash = route.name === 'dash'; v.sModule = route.name === 'module'; v.sProblem = route.name === 'problem';
+    v.sStudents = route.name === 'students'; v.sLibrary = route.name === 'library'; v.sPreview = route.name === 'preview';
+    v.sAssign = route.name === 'assign'; v.sResults = route.name === 'results'; v.sResultDetail = route.name === 'resultDetail';
+    v.sUsers = route.name === 'users'; v.sModules = route.name === 'modules'; v.sEditor = route.name === 'editor';
+
+    const scorePct = (correct, answered) => answered ? Math.round(100 * correct / answered) + '%' : '\u2014';
+
+    if (v.sDash) {
+      // A module can vanish under an assignment (admin deletes it, or the row
+      // has not been cached yet), so drop cards we cannot render.
+      const as = db.getAssignments(me.id).filter((a) => db.getModule(a.moduleId));
+      v.noAssignments = as.length === 0;
+      v.dashCards = as.map((a) => {
+        const m = db.getModule(a.moduleId), pr = db.getProgress(a.id), t = db.getUser(a.tutorId);
+        return {
+          subject: m.subject, title: m.title,
+          progressText: pr.answered + '/' + pr.total + ' answered',
+          pctText: pr.answered ? scorePct(pr.correct, pr.answered) + ' correct' : '',
+          pctW: (pr.total ? Math.round(100 * pr.answered / pr.total) : 0) + '%',
+          dueText: fmtDate(a.due),
+          overdue: a.due < todayISO && pr.answered < pr.total,
+          done: pr.total > 0 && pr.answered === pr.total,
+          tutorName: t ? t.name : '\u2014',
+          open: go('module', { assignmentId: a.id })
+        };
+      });
+    }
+
+    if (v.sModule || v.sProblem) {
+      const a = db.getAssignment(route.assignmentId);
+      const m = a && db.getModule(a.moduleId);
+      const subs = a ? db.getSubmissions(a.id) : {};
+      if (!a || !m) { v.sModule = v.sProblem = false; }
+      else if (v.sModule) {
+        const pr = db.getProgress(a.id), t = db.getUser(a.tutorId);
+        v.modTitle = m.title; v.modSubject = m.subject;
+        v.modDue = 'Due ' + fmtDate(a.due); v.modTutor = 'Assigned by ' + (t ? t.name : '\u2014');
+        v.modProgressText = pr.answered + '/' + pr.total + ' answered';
+        v.modPctW = (pr.total ? Math.round(100 * pr.answered / pr.total) : 0) + '%';
+        v.backDash = goE('dash');
+        v.modRows = m.problems.map((p, i) => {
+          const s = subs[p.id];
+          return {
+            num: String(i + 1).padStart(2, '0'),
+            label: p.type === 'mc' ? 'Multiple choice' : 'Free response',
+            statusLabel: s ? (s.correct ? 'Correct' : 'Incorrect') : 'Not started',
+            tagClass: s ? (s.correct ? 'tag tag-accent' : 'tag tag-outline') : 'tag tag-neutral',
+            open: go('problem', { assignmentId: a.id, idx: i })
+          };
+        });
+      } else {
+        const i = route.idx, p = m.problems[i], P = st.problem, sub = subs[p.id];
+        const letters = 'ABCD';
+        v.posKicker = m.title + ' \u00b7 Problem ' + (i + 1) + ' of ' + m.problems.length;
+        v.backModule = goE('module', { assignmentId: a.id });
+        v.qEl = math(p.text);
+        v.isMC = p.type === 'mc'; v.isFree = p.type === 'free';
+        const answered = !!sub;
+        v.answered = answered; v.notAnswered = !answered;
+        if (v.isMC) v.choices = p.choices.map((c, ci) => {
+          const letter = letters[ci];
+          return {
+            letter: letter + '.', el: math(c),
+            selected: answered ? sub.answer === letter : P.choice === letter,
+            pick: () => this.setState({ problem: Object.assign({}, P, { choice: letter }) }),
+            isCorrectMark: answered && p.answer === letter,
+            isWrongMark: answered && sub.answer === letter && !sub.correct,
+            border: (answered && p.answer === letter) ? 'var(--color-accent)' : 'var(--color-neutral-300)'
+          };
+        });
+        v.freeShown = answered ? sub.answer : P.free; v.onFree = F('problem', 'free');
+        v.cantSubmit = (v.isMC ? !P.choice : !P.free.trim()) || !!this._submitting;
+        v.doSubmit = () => {
+          const ans = v.isMC ? this.state.problem.choice : this.state.problem.free.trim();
+          if (!ans || this._submitting) return;
+          this._submitting = true;
+          this.forceUpdate();
+          // Grading runs in Postgres, so this is a round trip: db re-renders us
+          // once the verdict — and the answer key it unlocks — comes back.
+          db.submitAnswer(a.id, p.id, ans)
+            .catch(() => {})
+            .then(() => { this._submitting = false; this.forceUpdate(); });
+        };
+        v.wasCorrect = answered && sub.correct; v.wasWrong = answered && !sub.correct;
+        v.correctAnswerEl = answered ? (v.isMC ? math(p.answer + '. ' + p.choices[letters.indexOf(p.answer)]) : math(p.answer)) : null;
+        v.explEl = answered ? math(p.explanation) : null;
+        v.noPrev = i === 0; v.noNext = i === m.problems.length - 1;
+        v.goPrev = go('problem', { assignmentId: a.id, idx: Math.max(0, i - 1) });
+        v.goNext = go('problem', { assignmentId: a.id, idx: Math.min(m.problems.length - 1, i + 1) });
+      }
+    }
+
+    if (v.sStudents) {
+      v.students = db.getStudentsOf(me.id).map((s) => {
+        const as = db.getAssignments(s.id);
+        let answered = 0, total = 0, correct = 0;
+        as.forEach((a) => { const pr = db.getProgress(a.id); answered += pr.answered; total += pr.total; correct += pr.correct; });
+        return {
+          name: s.name, email: s.email,
+          count: as.length + (as.length === 1 ? ' module' : ' modules'),
+          progressText: answered + '/' + total + ' answered',
+          pctW: (total ? Math.round(100 * answered / total) : 0) + '%',
+          scoreText: answered ? scorePct(correct, answered) + ' correct so far' : 'No answers yet'
+        };
+      });
+      v.noStudents = v.students.length === 0;
+    }
+
+    if (v.sLibrary) {
+      const subj = st.lib.subject, mods = db.getModules();
+      const subjects = ['All'].concat(Array.from(new Set(mods.map((m) => m.subject))));
+      v.subjectOpts = subjects.map((s) => ({ label: s, active: s === subj, pick: () => this.setState({ lib: { subject: s } }) }));
+      v.libModules = mods.filter((m) => subj === 'All' || m.subject === subj).map((m) => ({
+        subject: m.subject, title: m.title, count: m.problems.length + ' problems',
+        preview: go('preview', { moduleId: m.id }),
+        assignIt: () => this.setState({ route: { name: 'assign' }, assign: Object.assign({}, this.state.assign, { moduleId: m.id, msg: '' }) })
+      }));
+    }
+
+    if (v.sPreview) {
+      const m = db.getModule(route.moduleId);
+      if (m) {
+        v.pvTitle = m.title; v.pvMeta = m.subject + ' \u00b7 ' + m.problems.length + ' problems';
+        v.backLibrary = goE('library');
+        v.pvAssign = () => this.setState({ route: { name: 'assign' }, assign: Object.assign({}, this.state.assign, { moduleId: m.id, msg: '' }) });
+        v.pvRows = m.problems.map((p, i) => ({
+          num: String(i + 1).padStart(2, '0'),
+          typeLabel: p.type === 'mc' ? 'Multiple choice' : 'Free response',
+          qEl: math(p.text),
+          answerEl: p.type === 'mc' ? math(p.answer + '. ' + p.choices['ABCD'.indexOf(p.answer)]) : math(p.answer)
+        }));
+      }
+    }
+
+    if (v.sAssign) {
+      const A = st.assign;
+      v.selModule = A.moduleId; v.onSelModule = F('assign', 'moduleId');
+      v.moduleOptions = db.getModules().map((m) => ({ id: m.id, label: m.title + ' (' + m.subject + ', ' + m.problems.length + ' problems)' }));
+      v.tutees = db.getStudentsOf(me.id).map((s) => ({
+        name: s.name, sub: s.email, checked: !!A.picked[s.id],
+        toggle: () => { const A2 = this.state.assign; this.setState({ assign: Object.assign({}, A2, { picked: Object.assign({}, A2.picked, { [s.id]: !A2.picked[s.id] }) }) }); }
+      }));
+      v.due = A.due; v.onDue = F('assign', 'due');
+      const ids = Object.keys(A.picked).filter((k) => A.picked[k]);
+      v.cantAssign = !(A.moduleId && ids.length && A.due);
+      v.doAssign = () => {
+        const m = db.getModule(A.moduleId);
+        if (!m) return;
+        db.assignModule({ moduleId: A.moduleId, studentIds: ids, tutorId: me.id, due: A.due }).then(
+          (made) => {
+            const skipped = ids.length - made.length;
+            const msg = 'Assigned \u201c' + m.title + '\u201d to ' + made.length + (made.length === 1 ? ' student' : ' students') + (skipped ? ' (' + skipped + ' already had it)' : '') + '.';
+            this.setState({ assign: { moduleId: '', picked: {}, due: '', msg: msg } });
+          },
+          (err) => this.setState({ assign: Object.assign({}, this.state.assign, { msg: err.message || 'Could not assign that module.' }) })
+        );
+      };
+      v.assignMsg = A.msg; v.hasAssignMsg = !!A.msg;
+    }
+
+    if (v.sResults) {
+      v.resultRows = db.getTutorAssignments(me.id).filter((a) => db.getModule(a.moduleId)).map((a) => {
+        const s = db.getUser(a.studentId), m = db.getModule(a.moduleId), pr = db.getProgress(a.id);
+        return {
+          student: s ? s.name : '\u2014', module: m.title, due: fmtDate(a.due),
+          progress: pr.answered + '/' + pr.total,
+          score: scorePct(pr.correct, pr.answered),
+          open: go('resultDetail', { assignmentId: a.id })
+        };
+      });
+    }
+
+    if (v.sResultDetail) {
+      const a = db.getAssignment(route.assignmentId);
+      if (a) {
+        const m = db.getModule(a.moduleId), s = db.getUser(a.studentId), subs = db.getSubmissions(a.id), pr = db.getProgress(a.id);
+        v.rdTitle = (s ? s.name : '\u2014') + ' \u2014 ' + m.title;
+        v.rdMeta = 'Due ' + fmtDate(a.due) + ' \u00b7 ' + pr.answered + '/' + pr.total + ' answered \u00b7 ' + pr.correct + ' correct';
+        v.backResults = goE('results');
+        v.rdRows = m.problems.map((p, i) => {
+          const sub = subs[p.id];
+          return {
+            num: String(i + 1).padStart(2, '0'), qEl: math(p.text),
+            given: sub ? sub.answer : '\u2014', correctAns: p.answer,
+            tagClass: sub ? (sub.correct ? 'tag tag-accent' : 'tag tag-outline') : 'tag tag-neutral',
+            statusLabel: sub ? (sub.correct ? 'Correct' : 'Incorrect') : 'Not started'
+          };
+        });
+      }
+    }
+
+    if (v.sUsers) {
+      const AD = st.admin;
+      v.tName = AD.tName; v.onTName = F('admin', 'tName');
+      v.tUsername = AD.tUsername; v.onTUsername = F('admin', 'tUsername');
+      v.tPin = AD.tPin; v.onTPin = F('admin', 'tPin');
+      const setAdmin = (patch) => this.setState({ admin: Object.assign({}, this.state.admin, patch) });
+      v.createTutor = () => {
+        const A2 = this.state.admin;
+        if (!(A2.tName.trim() && A2.tUsername.trim() && A2.tPin.trim())) { setAdmin({ tMsg: 'Name, username and PIN are all required.' }); return; }
+        const uname = A2.tUsername.trim(), pin = A2.tPin.trim();
+        setAdmin({ tMsg: 'Creating \u201c' + uname + '\u201d\u2026' });
+        db.createUser({ role: 'tutor', name: A2.tName.trim(), username: uname, pin: pin }).then(
+          // Supabase only stores the hash, so this is the last time the PIN
+          // can be shown — the roster below cannot read it back.
+          () => setAdmin({ tName: '', tUsername: '', tPin: '', tMsg: 'Tutor \u201c' + uname + '\u201d created. PIN is ' + pin + ' \u2014 note it now, it cannot be shown again.' }),
+          (err) => setAdmin({ tMsg: err.message || 'Could not create that tutor.' })
+        );
+      };
+      v.tMsg = AD.tMsg; v.hasTMsg = !!AD.tMsg;
+      v.sName = AD.sName; v.onSName = F('admin', 'sName');
+      v.sEmail = AD.sEmail; v.onSEmail = F('admin', 'sEmail');
+      v.createStudent = () => {
+        const A2 = this.state.admin;
+        if (!(A2.sName.trim() && A2.sEmail.indexOf('@') > 0)) { setAdmin({ sMsg: 'A name and a valid email are required.' }); return; }
+        const nm = A2.sName.trim();
+        setAdmin({ sMsg: 'Creating \u201c' + nm + '\u201d\u2026' });
+        db.createUser({ role: 'student', name: nm, email: A2.sEmail.trim() }).then(
+          () => setAdmin({ sName: '', sEmail: '', sMsg: 'Tutee \u201c' + nm + '\u201d created \u2014 link them to a tutor below.' }),
+          (err) => setAdmin({ sMsg: err.message || 'Could not create that tutee.' })
+        );
+      };
+      v.sMsg = AD.sMsg; v.hasSMsg = !!AD.sMsg;
+      const tutors = db.getUsers().filter((u) => u.role === 'tutor');
+      // username is nullable in profiles (admins created by hand have none),
+      // so render a dash rather than an empty cell.
+      v.tutorRows = tutors.map((t) => ({ name: t.name || '\u2014', username: t.username || '\u2014', count: db.getStudentsOf(t.id).length }));
+      const opts = [{ id: '', label: 'Unassigned' }].concat(tutors.map((t) => ({ id: t.id, label: t.name })));
+      v.studentRows = db.getUsers().filter((u) => u.role === 'student').map((s) => {
+        const cur = db.tutorOf(s.id);
+        return {
+          name: s.name, email: s.email, tutorId: cur ? cur.id : '', options: opts,
+          onLink: (e) => { db.linkStudent(s.id, e.target.value).catch(() => {}); }
+        };
+      });
+    }
+
+    if (v.sModules) {
+      const AD = st.admin;
+      v.mTitle = AD.mTitle; v.onMTitle = F('admin', 'mTitle');
+      v.mSubject = AD.mSubject; v.onMSubject = F('admin', 'mSubject');
+      v.createMod = () => {
+        const A2 = this.state.admin;
+        if (!A2.mTitle.trim()) return;
+        db.createModule({ title: A2.mTitle.trim(), subject: A2.mSubject.trim() || 'General' }).then((m) => {
+          this.setState({ admin: Object.assign({}, this.state.admin, { mTitle: '', mSubject: '' }), route: { name: 'editor', moduleId: m.id }, editor: { title: m.title, subject: m.subject, editing: null } });
+        }, () => {});
+      };
+      v.adminModRows = db.getModules().map((m) => ({
+        title: m.title, subject: m.subject, count: m.problems.length,
+        edit: () => this.setState({ route: { name: 'editor', moduleId: m.id }, editor: { title: m.title, subject: m.subject, editing: null } })
+      }));
+    }
+
+    if (v.sEditor) {
+      const m = db.getModule(route.moduleId), E = st.editor;
+      if (m) {
+        v.backModules = goE('modules');
+        v.edTitle = E.title; v.onEdTitle = F('editor', 'title');
+        v.edSubject = E.subject; v.onEdSubject = F('editor', 'subject');
+        v.saveModuleMeta = () => { const E2 = this.state.editor; db.updateModule(m.id, { title: E2.title.trim() || m.title, subject: E2.subject.trim() || m.subject }).catch(() => {}); };
+        v.edCount = m.problems.length;
+        const strip = (t) => String(t).replace(/\$/g, '');
+        v.edRows = m.problems.map((p, i) => ({
+          num: String(i + 1).padStart(2, '0'),
+          snippet: strip(p.text).slice(0, 90) + (p.text.length > 90 ? '\u2026' : ''),
+          typeLabel: p.type === 'mc' ? 'MC' : 'Free',
+          edit: () => this.setState({ editor: Object.assign({}, this.state.editor, { editing: { id: p.id, text: p.text, type: p.type, c0: (p.choices || [])[0] || '', c1: (p.choices || [])[1] || '', c2: (p.choices || [])[2] || '', c3: (p.choices || [])[3] || '', answer: p.answer, explanation: p.explanation || '' } }) }),
+          del: () => { db.deleteProblem(m.id, p.id).catch(() => {}); }
+        }));
+        v.addProblem = () => this.setState({ editor: Object.assign({}, this.state.editor, { editing: { id: null, text: '', type: 'mc', c0: '', c1: '', c2: '', c3: '', answer: 'A', explanation: '' } }) });
+        const ed = E.editing;
+        v.editing = !!ed;
+        if (ed) {
+          v.pfTitle = ed.id ? 'Edit problem' : 'New problem';
+          v.pfText = ed.text; v.onPfText = (e) => this.setEd({ text: e.target.value });
+          v.hasPfPreview = !!ed.text.trim() && ed.text.indexOf('$') >= 0;
+          v.pfPreviewEl = v.hasPfPreview ? math(ed.text) : null;
+          v.pfIsMC = ed.type === 'mc'; v.pfIsFree = ed.type === 'free';
+          v.pfPickMC = () => this.setEd({ type: 'mc', answer: 'A' });
+          v.pfPickFree = () => this.setEd({ type: 'free', answer: '' });
+          v.pfC0 = ed.c0; v.onPfC0 = (e) => this.setEd({ c0: e.target.value });
+          v.pfC1 = ed.c1; v.onPfC1 = (e) => this.setEd({ c1: e.target.value });
+          v.pfC2 = ed.c2; v.onPfC2 = (e) => this.setEd({ c2: e.target.value });
+          v.pfC3 = ed.c3; v.onPfC3 = (e) => this.setEd({ c3: e.target.value });
+          v.pfAnswer = ed.answer; v.onPfAnswer = (e) => this.setEd({ answer: e.target.value });
+          v.pfExpl = ed.explanation; v.onPfExpl = (e) => this.setEd({ explanation: e.target.value });
+          v.pfCancel = () => this.setState({ editor: Object.assign({}, this.state.editor, { editing: null }) });
+          v.pfSave = () => {
+            const e2 = this.state.editor.editing;
+            if (!e2.text.trim()) return;
+            const problem = e2.type === 'mc'
+              ? { id: e2.id || undefined, type: 'mc', text: e2.text, choices: [e2.c0, e2.c1, e2.c2, e2.c3], answer: e2.answer || 'A', explanation: e2.explanation }
+              : { id: e2.id || undefined, type: 'free', text: e2.text, answer: e2.answer, explanation: e2.explanation };
+            db.saveProblem(m.id, problem).catch(() => {});
+            this.setState({ editor: Object.assign({}, this.state.editor, { editing: null }) });
+          };
+        }
+      }
+    }
+
+    return v;
+  }
+}
+
+</script>
+
+
+</body></html>
