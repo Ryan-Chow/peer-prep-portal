@@ -21,6 +21,7 @@
       "answer": "C",
       "explanation": "In $y = mx + b$ the coefficient $m$ is the slope, and here $m = 4$.",
       "tags": ["algebra", "linear", "slope"],
+      "difficulty": "easy",
       "source_id": "ppa-alg-002"
     },
     {

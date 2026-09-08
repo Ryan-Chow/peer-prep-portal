@@ -121,6 +121,9 @@
         choices: Array.isArray(row.choices) ? row.choices : [],
         answer: row.answer == null ? '' : row.answer,
         explanation: row.explanation == null ? '' : row.explanation,
+        // Both the table and the view expose these: they describe the
+        // problem, not its answer, and the assign screen filters on them.
+        tags: Array.isArray(row.tags) ? row.tags : [],
         sortOrder: row.sort_order
       }));
     });
@@ -143,7 +146,15 @@
       moduleId: row.module_id,
       studentId: row.tutee_id,
       tutorId: row.assigned_by,
-      due: row.due_date || ''
+      due: row.due_date || '',
+      // The filter, resolved when the assignment was made. null problemIds is
+      // an assignment over the whole module — which is what every row created
+      // before filtering existed looks like.
+      difficulty: row.difficulty || '',
+      tagFilter: Array.isArray(row.tag_filter) ? row.tag_filter : [],
+      limit: row.problem_limit || 0,
+      problemIds: Array.isArray(row.problem_ids) ? row.problem_ids : null,
+      label: row.label || ''
     });
   }
 
@@ -417,6 +428,9 @@
       choices: problem.type === 'mc' ? (problem.choices || []) : [],
       answer: problem.answer == null ? '' : problem.answer,
       explanation: problem.explanation || '',
+      // The editor has no tag control, and the upsert below names no tag
+      // column, so an edit leaves whatever the import put there.
+      tags: idx >= 0 ? m.problems[idx].tags : [],
       sortOrder: sortOrder
     };
     if (idx >= 0) m.problems[idx] = next; else m.problems.push(next);
@@ -487,21 +501,143 @@
     };
   }
 
+  // ---- assignment filters -------------------------------------------------
+
+  // Difficulty is a tag, not a column: 'easy' | 'medium' | 'hard' sitting in
+  // problems.tags among the topic labels. The importer stores it lower case,
+  // but a tag typed by hand may not be, so every comparison here folds case.
+  const DIFFICULTIES = ['easy', 'medium', 'hard'];
+  const lower = (t) => String(t == null ? '' : t).trim().toLowerCase();
+  const isDifficulty = (t) => DIFFICULTIES.indexOf(lower(t)) >= 0;
+
+  // The topic tags a tutor can filter a module by, difficulty excluded — it
+  // has its own control.
+  function moduleTags(moduleId) {
+    const m = S.modules.get(moduleId);
+    const seen = new Map();
+    if (m) {
+      m.problems.forEach((p) => {
+        (p.tags || []).forEach((t) => {
+          if (!isDifficulty(t) && t && !seen.has(lower(t))) seen.set(lower(t), t);
+        });
+      });
+    }
+    return Array.from(seen.values()).sort((a, b) => String(a).localeCompare(String(b)));
+  }
+
+  // Everything in the module the filter reaches, in module order. Tags are
+  // "any of", not "all of": picking two topics widens the pool.
+  function matchProblems(moduleId, filter) {
+    const m = S.modules.get(moduleId);
+    if (!m) return [];
+    const want = ((filter && filter.tags) || []).map(lower).filter(Boolean);
+    const level = lower(filter && filter.difficulty);
+    return m.problems.filter((p) => {
+      const tags = (p.tags || []).map(lower);
+      if (level && tags.indexOf(level) < 0) return false;
+      if (want.length && !want.some((t) => tags.indexOf(t) >= 0)) return false;
+      return true;
+    });
+  }
+
+  // Fisher-Yates over mulberry32. Seeded rather than Math.random so the draw
+  // is a property of the assignment id and can be re-derived from the stored
+  // row; the ids are written down anyway, this just makes them explicable.
+  function pickSome(list, n, seedText) {
+    let h = 2166136261;
+    String(seedText).split('').forEach((c) => {
+      h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+    });
+    let s = h >>> 0;
+    const out = list.slice();
+    for (let i = out.length - 1; i > 0; i--) {
+      s = (s + 0x6d2b79f5) >>> 0;
+      let t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      const j = ((t ^ (t >>> 14)) >>> 0) % (i + 1);
+      const tmp = out[i]; out[i] = out[j]; out[j] = tmp;
+    }
+    // Back into module order: the selection is random, the numbering the tutee
+    // sees should not be.
+    return out.slice(0, n).sort((a, b) => list.indexOf(a) - list.indexOf(b));
+  }
+
+  // What the assignment is called once it is no longer just the module —
+  // "Information and Ideas — Hard (10 random)". Written here rather than in
+  // the UI so the stored label and the tutor's preview cannot drift apart.
+  function describeFilter(moduleId, filter, take) {
+    const m = S.modules.get(moduleId);
+    const parts = [];
+    const level = lower(filter && filter.difficulty);
+    if (level) parts.push(level.charAt(0).toUpperCase() + level.slice(1));
+    const tags = ((filter && filter.tags) || []).filter(Boolean);
+    if (tags.length) parts.push(tags.join(', '));
+    return (m ? m.title : 'Module') +
+      (parts.length ? ' \u2014 ' + parts.join(' \u2014 ') : '') +
+      (take ? ' (' + take + ' random)' : '');
+  }
+
+  // The problems this assignment actually covers. A null problemIds is an
+  // assignment over the whole module, which is what everything created before
+  // filtering existed looks like.
+  function assignmentProblems(a) {
+    const m = a && S.modules.get(a.moduleId);
+    if (!m) return [];
+    if (!a.problemIds) return m.problems;
+    const want = new Set(a.problemIds);
+    return m.problems.filter((p) => want.has(p.id));
+  }
+
+  // Assign a slice of a module rather than all of it. The filter is resolved
+  // here, once, and only the resulting ids are stored: a module reworded or
+  // retagged next month cannot change what a tutee was asked to do, and cannot
+  // quietly add problems to an assignment they have half finished.
+  //
+  // spec: { moduleId, studentIds, tutorId, due, difficulty, tags, limit }
   async function assignModule(spec) {
+    const m = S.modules.get(spec.moduleId);
+    if (!m) return [];
+    const filter = {
+      difficulty: spec.difficulty || '',
+      tags: (spec.tags || []).slice(),
+      limit: Number(spec.limit) || 0
+    };
+    const pool = matchProblems(spec.moduleId, filter);
+    if (!pool.length) {
+      throw fail('assignModule', { message: 'Nothing in \u201c' + m.title + '\u201d matches those options.' });
+    }
+    // Asking for more than there are is not an error; it just means everything
+    // matched, and the label should not claim a random draw that never happened.
+    const take = filter.limit && filter.limit < pool.length ? filter.limit : 0;
+    const narrowed = !!(filter.difficulty || filter.tags.length || filter.limit);
+    const label = describeFilter(spec.moduleId, filter, take);
+
     const made = [];
     const payload = [];
     (spec.studentIds || []).forEach((sid) => {
-      const dup = Array.from(S.assignments.values())
-        .some((a) => a.moduleId === spec.moduleId && a.studentId === sid);
-      if (dup) return;
       const id = uuid();
-      made.push({ id: id, moduleId: spec.moduleId, studentId: sid, tutorId: spec.tutorId, due: spec.due || '' });
+      // Seeded on the assignment id, so the draw is reproducible from the row
+      // and two tutees given the same filter get different questions.
+      const chosen = take ? pickSome(pool, take, id) : pool;
+      const problemIds = narrowed ? chosen.map((p) => p.id) : null;
+      made.push({
+        id: id, moduleId: spec.moduleId, studentId: sid, tutorId: spec.tutorId,
+        due: spec.due || '',
+        difficulty: filter.difficulty, tagFilter: filter.tags, limit: filter.limit,
+        problemIds: problemIds, label: label
+      });
       payload.push({
         id: id,
         tutee_id: sid,
         module_id: spec.moduleId,
         assigned_by: spec.tutorId,
-        due_date: spec.due || null
+        due_date: spec.due || null,
+        difficulty: filter.difficulty || null,
+        tag_filter: filter.tags.length ? filter.tags : null,
+        problem_limit: filter.limit || null,
+        problem_ids: problemIds,
+        label: label
       });
     });
     if (!made.length) return made;
@@ -722,13 +858,25 @@
       Array.from(S.assignments.values()).filter((a) => a.tutorId === tutorId),
     assignModule: assignModule,
     unassign: unassign,
+    // For the assign screen: what a filter would select, and what it would be
+    // called, before anything is written.
+    getModuleTags: moduleTags,
+    matchProblems: matchProblems,
+    describeFilter: describeFilter,
+    getAssignmentProblems: (assignmentId) => assignmentProblems(S.assignments.get(assignmentId)),
+    // Assignments made before filtering existed have no label of their own.
+    assignmentLabel: (a) => {
+      if (!a) return '\u2014';
+      if (a.label) return a.label;
+      const m = S.modules.get(a.moduleId);
+      return m ? m.title : '\u2014';
+    },
 
     getSubmissions: (assignmentId) => {
       const a = S.assignments.get(assignmentId);
-      const m = a && S.modules.get(a.moduleId);
       const out = {};
-      if (!m) return out;
-      m.problems.forEach((p) => {
+      if (!a) return out;
+      assignmentProblems(a).forEach((p) => {
         const s = S.subs.get(subKey(a.studentId, p.id));
         if (s) out[p.id] = s;
       });
@@ -736,10 +884,13 @@
     },
     submitAnswer: submitAnswer,
 
+    // Per assignment, not per module: two filtered assignments of the same
+    // module each count out of their own set. A submission belongs to the
+    // tutee and the problem, so a problem in both of them is answered in both
+    // at once — they did answer it.
     getProgress: (assignmentId) => {
       const a = S.assignments.get(assignmentId);
-      const m = a && S.modules.get(a.moduleId);
-      const problems = m ? m.problems : [];
+      const problems = assignmentProblems(a);
       let answered = 0, correct = 0;
       problems.forEach((p) => {
         const s = a && S.subs.get(subKey(a.studentId, p.id));

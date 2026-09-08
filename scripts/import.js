@@ -99,6 +99,19 @@ async function main() {
       console.log('  • ' + label + '  [' + d.subject + ']  ' +
         plural(d.validCount, 'problem') +
         (d.invalidCount ? ', ' + d.invalidCount + ' skipped' : ''));
+      // Tutors assign by difficulty, so a module that turns out to be
+      // entirely untagged is worth seeing before it is written, not after
+      // "Hard — 10 random" comes back with nothing to choose from.
+      const byLevel = {};
+      d.problems.forEach((p) => {
+        if (p.errors.length) return;
+        const k = p.difficulty || '(none)';
+        byLevel[k] = (byLevel[k] || 0) + 1;
+      });
+      const levels = ppaImport.DIFFICULTIES.concat('(none)')
+        .filter((k) => byLevel[k])
+        .map((k) => byLevel[k] + ' ' + k);
+      if (levels.length) console.log('      difficulty: ' + levels.join(', '));
     }
     d.problems.forEach((p) => {
       if (p.errors.length) console.log('      row ' + p.row + ': ' + p.errors.join(' '));

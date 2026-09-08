@@ -715,8 +715,36 @@ textarea.input { min-height: 90px; resize: vertical; }
             </sc-for>
           </div>
         </div>
+        <div style="border-top:1px solid var(--color-neutral-300);padding-top:16px;display:flex;flex-direction:column;gap:14px">
+          <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Options</div>
+          <div class="field" style="max-width:200px"><label>Difficulty</label>
+            <sc-raw-select class="input" value="{{selDifficulty}}" sc-camel-on-change="{{onDifficulty}}">
+              <option value="">Any</option><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option>
+            </sc-raw-select>
+          </div>
+          <sc-if value="{{hasTagOpts}}" hint-placeholder-val="{{true}}">
+            <div class="field"><label>Tags (any of)</label>
+              <div style="display:flex;flex-wrap:wrap;gap:10px">
+                <sc-for list="{{tagOpts}}" as="t" hint-placeholder-count="3">
+                  <label class="radio" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px"><input type="checkbox" checked="{{t.checked}}" sc-camel-on-change="{{t.toggle}}"><span class="dot"></span><span>{{t.label}}</span></label>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <div class="field" style="max-width:160px"><label>How many</label>
+              <sc-raw-select class="input" value="{{selCount}}" sc-camel-on-change="{{onCount}}">
+                <option value="all">All</option><option value="10">10</option><option value="20">20</option><option value="30">30</option><option value="custom">Custom…</option>
+              </sc-raw-select>
+            </div>
+            <sc-if value="{{isCustomCount}}" hint-placeholder-val="{{false}}">
+              <div class="field" style="max-width:120px"><label>Number</label><input class="input" sc-camel-input-mode="numeric" value="{{customCount}}" sc-camel-on-change="{{onCustomCount}}"></div>
+            </sc-if>
+          </div>
+          <div style="font-size:13px;opacity:0.8">{{matchText}}</div>
+        </div>
         <div class="field" style="max-width:220px"><label>Due date</label><input class="input" type="date" value="{{due}}" sc-camel-on-change="{{onDue}}"></div>
-        <button type="button" class="btn btn-primary btn-block blueprint" disabled="{{cantAssign}}" sc-camel-on-click="{{doAssign}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Assign module</button>
+        <button type="button" class="btn btn-primary btn-block blueprint" disabled="{{cantAssign}}" sc-camel-on-click="{{doAssign}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>{{assignLabel}}</button>
         <sc-if value="{{hasAssignMsg}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;border-left:2px solid var(--color-accent);padding-left:10px">{{assignMsg}}</p></sc-if>
       </div>
     </sc-if>
@@ -727,7 +755,7 @@ textarea.input { min-height: 90px; resize: vertical; }
       <p style="margin:0 0 20px;font-size:14px;opacity:0.65">One row per assignment. Click a row for per-problem answers.</p>
       <div style="overflow-x:auto">
         <sc-raw-table class="table">
-          <sc-raw-thead><sc-raw-tr><sc-raw-th>Student</sc-raw-th><sc-raw-th>Module</sc-raw-th><sc-raw-th>Due</sc-raw-th><sc-raw-th>Answered</sc-raw-th><sc-raw-th>Score</sc-raw-th><sc-raw-th></sc-raw-th></sc-raw-tr></sc-raw-thead>
+          <sc-raw-thead><sc-raw-tr><sc-raw-th>Student</sc-raw-th><sc-raw-th>Assignment</sc-raw-th><sc-raw-th>Due</sc-raw-th><sc-raw-th>Answered</sc-raw-th><sc-raw-th>Score</sc-raw-th><sc-raw-th></sc-raw-th></sc-raw-tr></sc-raw-thead>
           <sc-raw-tbody>
             <sc-for list="{{resultRows}}" as="r" hint-placeholder-count="5">
               <sc-raw-tr sc-camel-on-click="{{r.open}}" style="cursor:pointer">
@@ -1087,7 +1115,7 @@ class Component extends DCLogic {
     login: { tab: 'student', email: '', sent: false, err: '', busy: false, username: '', secret: '' },
     problem: { choice: '', free: '' },
     lib: { subject: 'All' },
-    assign: { moduleId: '', picked: {}, due: '', msg: '' },
+    assign: this.blankAssign(),
     admin: { tName: '', tUsername: '', tPin: '', tMsg: '', sName: '', sEmail: '', sMsg: '', mTitle: '', mSubject: '' },
     editor: { title: '', subject: '', editing: null },
     imp: this.blankImport(),
@@ -1135,6 +1163,11 @@ class Component extends DCLogic {
   // docs     ppaImport.parse() output, or null before a preview exists
   // modes    slug -> 'add' | 'replace', only consulted for modules we already have
   blankImport() { return { text: '', source: '', docs: null, parseErr: '', modes: {}, dragging: false, running: false, progress: null, summary: null }; }
+  // picked      tutee id -> true
+  // difficulty  '' for any, else easy | medium | hard
+  // tags        tag -> true, "any of" rather than "all of"
+  // count       'all' | '10' | '20' | '30' | 'custom', with custom in `custom`
+  blankAssign() { return { moduleId: '', picked: {}, due: '', msg: '', difficulty: '', tags: {}, count: 'all', custom: '' }; }
   // The "add to error log" form under a problem's feedback, cleared whenever
   // the route moves so it never carries a note onto the next problem.
   blankErrAdd() { return { open: false, comment: '', busy: false }; }
@@ -1293,11 +1326,13 @@ class Component extends DCLogic {
 
     // Unassigning is offered from two places, and says the same thing in both.
     const confirmUnassign = (a) => {
-      const s = db.getUser(a.studentId), m = db.getModule(a.moduleId);
+      const s = db.getUser(a.studentId);
       openDialog({
-        kicker: 'Unassign module',
-        title: m ? m.title : 'Module',
-        body: 'Take this module off ' + (s ? s.name : 'this tutee') + '\u2019s list?',
+        kicker: 'Unassign',
+        // The label, not the module title: a tutee can hold two filtered
+        // assignments of one module, and only one of them is going.
+        title: db.assignmentLabel(a),
+        body: 'Take this off ' + (s ? s.name : 'this tutee') + '\u2019s list?',
         lines: ['Answers they already submitted are kept.', 'Their error log entries are kept.'],
         confirmLabel: 'Unassign',
         run: () => db.unassign(a.id)
@@ -1312,7 +1347,7 @@ class Component extends DCLogic {
       v.dashCards = as.map((a) => {
         const m = db.getModule(a.moduleId), pr = db.getProgress(a.id), t = db.getUser(a.tutorId);
         return {
-          subject: m.subject, title: m.title,
+          subject: m.subject, title: db.assignmentLabel(a),
           progressText: pr.answered + '/' + pr.total + ' answered',
           pctText: pr.answered ? scorePct(pr.correct, pr.answered) + ' correct' : '',
           pctW: (pr.total ? Math.round(100 * pr.answered / pr.total) : 0) + '%',
@@ -1328,16 +1363,21 @@ class Component extends DCLogic {
     if (v.sModule || v.sProblem) {
       const a = db.getAssignment(route.assignmentId);
       const m = a && db.getModule(a.moduleId);
+      // What this assignment covers, which is the whole module only when it
+      // was assigned unfiltered. Numbering below is within this list.
+      const probs = a ? db.getAssignmentProblems(a.id) : [];
       const subs = a ? db.getSubmissions(a.id) : {};
-      if (!a || !m) { v.sModule = v.sProblem = false; }
+      // An assignment whose problems have gone (module replaced under it) has
+      // nothing to show, and a stale problem index cannot be rendered either.
+      if (!a || !m || !probs.length || (v.sProblem && !probs[route.idx])) { v.sModule = v.sProblem = false; }
       else if (v.sModule) {
         const pr = db.getProgress(a.id), t = db.getUser(a.tutorId);
-        v.modTitle = m.title; v.modSubject = m.subject;
+        v.modTitle = db.assignmentLabel(a); v.modSubject = m.subject;
         v.modDue = 'Due ' + fmtDate(a.due); v.modTutor = 'Assigned by ' + (t ? t.name : '\u2014');
         v.modProgressText = pr.answered + '/' + pr.total + ' answered';
         v.modPctW = (pr.total ? Math.round(100 * pr.answered / pr.total) : 0) + '%';
         v.backDash = goE('dash');
-        v.modRows = m.problems.map((p, i) => {
+        v.modRows = probs.map((p, i) => {
           const s = subs[p.id];
           return {
             num: String(i + 1).padStart(2, '0'),
@@ -1348,9 +1388,9 @@ class Component extends DCLogic {
           };
         });
       } else {
-        const i = route.idx, p = m.problems[i], P = st.problem, sub = subs[p.id];
+        const i = route.idx, p = probs[i], P = st.problem, sub = subs[p.id];
         const letters = 'ABCD';
-        v.posKicker = m.title + ' \u00b7 Problem ' + (i + 1) + ' of ' + m.problems.length;
+        v.posKicker = db.assignmentLabel(a) + ' \u00b7 Problem ' + (i + 1) + ' of ' + probs.length;
         v.backModule = goE('module', { assignmentId: a.id });
         v.qEl = math(p.text);
         v.isMC = p.type === 'mc'; v.isFree = p.type === 'free';
@@ -1406,9 +1446,9 @@ class Component extends DCLogic {
           );
         };
 
-        v.noPrev = i === 0; v.noNext = i === m.problems.length - 1;
+        v.noPrev = i === 0; v.noNext = i === probs.length - 1;
         v.goPrev = go('problem', { assignmentId: a.id, idx: Math.max(0, i - 1) });
-        v.goNext = go('problem', { assignmentId: a.id, idx: Math.min(m.problems.length - 1, i + 1) });
+        v.goNext = go('problem', { assignmentId: a.id, idx: Math.min(probs.length - 1, i + 1) });
       }
     }
 
@@ -1421,7 +1461,7 @@ class Component extends DCLogic {
         const mods = as.filter((a) => db.getModule(a.moduleId));
         return {
           name: s.name, email: s.email,
-          count: as.length + (as.length === 1 ? ' module' : ' modules'),
+          count: plural(as.length, 'assignment'),
           progressText: answered + '/' + total + ' answered',
           pctW: (total ? Math.round(100 * answered / total) : 0) + '%',
           scoreText: answered ? scorePct(correct, answered) + ' correct so far' : 'No answers yet',
@@ -1435,7 +1475,7 @@ class Component extends DCLogic {
           modules: mods.map((a) => {
             const pr = db.getProgress(a.id);
             return {
-              title: db.getModule(a.moduleId).title,
+              title: db.assignmentLabel(a),
               progress: pr.answered + '/' + pr.total,
               unassign: () => confirmUnassign(a)
             };
@@ -1452,7 +1492,7 @@ class Component extends DCLogic {
       v.libModules = mods.filter((m) => subj === 'All' || m.subject === subj).map((m) => ({
         subject: m.subject, title: m.title, count: m.problems.length + ' problems',
         preview: go('preview', { moduleId: m.id }),
-        assignIt: () => this.setState({ route: { name: 'assign' }, assign: Object.assign({}, this.state.assign, { moduleId: m.id, msg: '' }) })
+        assignIt: () => this.setState({ route: { name: 'assign' }, assign: Object.assign({}, this.state.assign, { moduleId: m.id, msg: '', tags: {} }) })
       }));
     }
 
@@ -1461,7 +1501,7 @@ class Component extends DCLogic {
       if (m) {
         v.pvTitle = m.title; v.pvMeta = m.subject + ' \u00b7 ' + m.problems.length + ' problems';
         v.backLibrary = goE('library');
-        v.pvAssign = () => this.setState({ route: { name: 'assign' }, assign: Object.assign({}, this.state.assign, { moduleId: m.id, msg: '' }) });
+        v.pvAssign = () => this.setState({ route: { name: 'assign' }, assign: Object.assign({}, this.state.assign, { moduleId: m.id, msg: '', tags: {} }) });
         v.pvRows = m.problems.map((p, i) => ({
           num: String(i + 1).padStart(2, '0'),
           typeLabel: p.type === 'mc' ? 'Multiple choice' : 'Free response',
@@ -1473,25 +1513,62 @@ class Component extends DCLogic {
 
     if (v.sAssign) {
       const A = st.assign;
-      v.selModule = A.moduleId; v.onSelModule = F('assign', 'moduleId');
+      const setAssign = (patch) => this.setState({ assign: Object.assign({}, this.state.assign, patch) });
+      v.selModule = A.moduleId;
+      // The tag checkboxes come from the module, so changing module has to
+      // drop them: a tag from the old one would silently match nothing.
+      v.onSelModule = (e) => setAssign({ moduleId: e.target.value, tags: {} });
       v.moduleOptions = db.getModules().map((m) => ({ id: m.id, label: m.title + ' (' + m.subject + ', ' + m.problems.length + ' problems)' }));
       v.tutees = db.getStudentsOf(me.id).map((s) => ({
         name: s.name, sub: s.email, checked: !!A.picked[s.id],
-        toggle: () => { const A2 = this.state.assign; this.setState({ assign: Object.assign({}, A2, { picked: Object.assign({}, A2.picked, { [s.id]: !A2.picked[s.id] }) }) }); }
+        toggle: () => { const A2 = this.state.assign; setAssign({ picked: Object.assign({}, A2.picked, { [s.id]: !A2.picked[s.id] }) }); }
       }));
+
+      v.selDifficulty = A.difficulty;
+      v.onDifficulty = (e) => setAssign({ difficulty: e.target.value });
+      const tagNames = A.moduleId ? db.getModuleTags(A.moduleId) : [];
+      v.hasTagOpts = tagNames.length > 0;
+      v.tagOpts = tagNames.map((t) => ({
+        label: t, checked: !!A.tags[t],
+        toggle: () => { const A2 = this.state.assign; setAssign({ tags: Object.assign({}, A2.tags, { [t]: !A2.tags[t] }) }); }
+      }));
+      const tags = tagNames.filter((t) => A.tags[t]);
+
+      v.selCount = A.count;
+      v.onCount = (e) => setAssign({ count: e.target.value });
+      v.isCustomCount = A.count === 'custom';
+      v.customCount = A.custom;
+      v.onCustomCount = (e) => setAssign({ custom: e.target.value.replace(/[^0-9]/g, '') });
+      const limit = A.count === 'all' ? 0 : Math.max(0, parseInt(A.count === 'custom' ? A.custom : A.count, 10) || 0);
+
+      const filter = { difficulty: A.difficulty, tags: tags, limit: limit };
+      const pool = A.moduleId ? db.matchProblems(A.moduleId, filter) : [];
+      const take = limit && limit < pool.length ? limit : 0;
+      const matched = plural(pool.length, 'problem') + (pool.length === 1 ? ' matches' : ' match');
+      v.matchText = !A.moduleId ? 'Pick a module to see what matches.'
+        : !pool.length ? 'Nothing in this module matches those options.'
+        : matched + ' \u2192 assigning ' + (take ? take + ' random' : pool.length === 1 ? 'it' : 'all of them');
+      // Naming the draw on the button, so nobody presses it expecting the
+      // whole module.
+      v.assignLabel = A.moduleId && pool.length ? 'Assign ' + (take ? take + ' problems' : plural(pool.length, 'problem')) : 'Assign module';
+
       v.due = A.due; v.onDue = F('assign', 'due');
       const ids = Object.keys(A.picked).filter((k) => A.picked[k]);
-      v.cantAssign = !(A.moduleId && ids.length && A.due);
+      v.cantAssign = !(A.moduleId && ids.length && A.due && pool.length);
       v.doAssign = () => {
-        const m = db.getModule(A.moduleId);
-        if (!m) return;
-        db.assignModule({ moduleId: A.moduleId, studentIds: ids, tutorId: me.id, due: A.due }).then(
+        if (v.cantAssign) return;
+        db.assignModule({
+          moduleId: A.moduleId, studentIds: ids, tutorId: me.id, due: A.due,
+          difficulty: A.difficulty, tags: tags, limit: limit
+        }).then(
           (made) => {
-            const skipped = ids.length - made.length;
-            const msg = 'Assigned \u201c' + m.title + '\u201d to ' + made.length + (made.length === 1 ? ' student' : ' students') + (skipped ? ' (' + skipped + ' already had it)' : '') + '.';
-            this.setState({ assign: { moduleId: '', picked: {}, due: '', msg: msg } });
+            // db writes the label it stored on the rows; echoing that rather
+            // than rebuilding it keeps the confirmation honest.
+            const msg = 'Assigned \u201c' + (made[0] ? made[0].label : '') + '\u201d to ' +
+              plural(made.length, 'student') + '.';
+            this.setState({ assign: Object.assign(this.blankAssign(), { msg: msg }) });
           },
-          (err) => this.setState({ assign: Object.assign({}, this.state.assign, { msg: err.message || 'Could not assign that module.' }) })
+          (err) => setAssign({ msg: err.message || 'Could not assign that module.' })
         );
       };
       v.assignMsg = A.msg; v.hasAssignMsg = !!A.msg;
@@ -1499,9 +1576,9 @@ class Component extends DCLogic {
 
     if (v.sResults) {
       v.resultRows = db.getTutorAssignments(me.id).filter((a) => db.getModule(a.moduleId)).map((a) => {
-        const s = db.getUser(a.studentId), m = db.getModule(a.moduleId), pr = db.getProgress(a.id);
+        const s = db.getUser(a.studentId), pr = db.getProgress(a.id);
         return {
-          student: s ? s.name : '\u2014', module: m.title, due: fmtDate(a.due),
+          student: s ? s.name : '\u2014', module: db.assignmentLabel(a), due: fmtDate(a.due),
           progress: pr.answered + '/' + pr.total,
           score: scorePct(pr.correct, pr.answered),
           open: go('resultDetail', { assignmentId: a.id }),
@@ -1514,11 +1591,11 @@ class Component extends DCLogic {
     if (v.sResultDetail) {
       const a = db.getAssignment(route.assignmentId);
       if (a) {
-        const m = db.getModule(a.moduleId), s = db.getUser(a.studentId), subs = db.getSubmissions(a.id), pr = db.getProgress(a.id);
-        v.rdTitle = (s ? s.name : '\u2014') + ' \u2014 ' + m.title;
+        const s = db.getUser(a.studentId), subs = db.getSubmissions(a.id), pr = db.getProgress(a.id);
+        v.rdTitle = (s ? s.name : '\u2014') + ' \u2014 ' + db.assignmentLabel(a);
         v.rdMeta = 'Due ' + fmtDate(a.due) + ' \u00b7 ' + pr.answered + '/' + pr.total + ' answered \u00b7 ' + pr.correct + ' correct';
         v.backResults = goE('results');
-        v.rdRows = m.problems.map((p, i) => {
+        v.rdRows = db.getAssignmentProblems(a.id).map((p, i) => {
           const sub = subs[p.id];
           return {
             num: String(i + 1).padStart(2, '0'), qEl: math(p.text),

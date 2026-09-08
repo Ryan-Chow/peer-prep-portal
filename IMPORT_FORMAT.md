@@ -4,8 +4,9 @@ Bulk-load modules and problems from JSON, either through **Admin → Import** or
 from the terminal with `scripts/import.js`. Both read the same file and apply
 the same rules.
 
-> Run `migration.sql` in the Supabase SQL editor once before using either. It
-> adds the `slug`, `source_id` and `tags` columns the importer relies on.
+> Run `migrations/001_import.sql` in the Supabase SQL editor once before using
+> either. It adds the `slug`, `source_id` and `tags` columns the importer
+> relies on.
 
 ## The shape
 
@@ -51,7 +52,8 @@ An array. Each entry:
 | `choices` | for `multiple_choice` | Exactly four non-empty strings, in A–D order. |
 | `answer` | yes | For `multiple_choice`, a single letter `A`–`D`. For `free_response`, the exact string a tutee must type. |
 | `explanation` | no | Shown after the tutee answers. May contain LaTeX. |
-| `tags` | no | Array of strings. Stored for later filtering; not shown to tutees yet. |
+| `tags` | no | Array of strings. Tutors filter on these when assigning. Not shown to tutees. |
+| `difficulty` | no | `"easy"`, `"medium"` or `"hard"`. See [Difficulty](#difficulty). |
 | `source_id` | no | Your own identifier for this problem. See [Re-importing](#re-importing). |
 
 Four choices is a hard requirement, not a default: the rest of the portal —
@@ -60,6 +62,30 @@ built around A–D throughout.
 
 `free_response` answers are compared as text, so `"7"` and `"7.0"` are
 different answers. Write the form you expect a tutee to type.
+
+### Difficulty
+
+Difficulty is not a separate column: it is the tag `easy`, `medium` or `hard`.
+Two ways of writing it, both accepted, both ending up as the same tag:
+
+```json
+{ "tags": ["algebra", "linear", "hard"] }
+{ "tags": ["algebra", "linear"], "difficulty": "hard" }
+```
+
+Case does not matter — `"Hard"` is stored as `hard` — so a file exported from
+a spreadsheet needs no tidying first. A problem carrying two different
+difficulties is an error and is skipped, since it would otherwise turn up in
+whichever pool a tutor asked for.
+
+A problem with no difficulty is still importable. It simply never matches when
+a tutor filters by one, so a module you plan to assign that way wants the tag
+on every problem. `scripts/import.js` prints the breakdown per module before
+writing anything.
+
+Every other tag is a topic label. Tutors pick from the distinct tags found in
+the module — `"Information and Ideas"`, `"word-problem"` — and can combine one
+with a difficulty and a count: *Information and Ideas — Hard (10 random)*.
 
 ### LaTeX
 
@@ -144,6 +170,7 @@ From the CLI, `--replace` applies replace mode to every module in the run.
       "answer": "C",
       "explanation": "In $y = mx + b$ the coefficient $m$ is the slope, and here $m = 4$.",
       "tags": ["algebra", "linear", "slope"],
+      "difficulty": "easy",
       "source_id": "ppa-alg-002"
     },
     {

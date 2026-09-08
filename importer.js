@@ -17,6 +17,10 @@
 
   var LETTERS = 'ABCD';
   var BATCH_SIZE = 100;
+  // Difficulty is not a column. It is a tag, so that one gin index over
+  // problems.tags serves both "hard" and "Information and Ideas", and so a
+  // problem can carry it without every other filter growing a column too.
+  var DIFFICULTIES = ['easy', 'medium', 'hard'];
   // Page size for reads. Comfortably under PostgREST's default row cap, so a
   // short page always means "that was the last one".
   var PAGE = 500;
@@ -48,6 +52,14 @@
   function sanitizeText(value) {
     if (value == null) return '';
     return String(value).replace(TAG_RE, '').replace(CTRL_RE, '').trim();
+  }
+
+  // A tag is a difficulty tag when it reads as one in any casing; the stored
+  // form is always lower case, because that is what the assign filter and the
+  // RLS-side lookups compare against.
+  function difficultyOf(tag) {
+    var t = String(tag == null ? '' : tag).trim().toLowerCase();
+    return DIFFICULTIES.indexOf(t) >= 0 ? t : '';
   }
 
   function slugify(title) {
@@ -155,6 +167,7 @@
       answer: '',
       explanation: '',
       tags: [],
+      difficulty: '',
       sourceId: '',
       errors: []
     };
@@ -179,11 +192,34 @@
 
     if (value.tags != null) {
       if (Array.isArray(value.tags)) {
-        p.tags = value.tags.map(sanitizeText).filter(Boolean);
+        p.tags = value.tags.map(sanitizeText).filter(Boolean)
+          .map(function (t) { return difficultyOf(t) || t; });
       } else {
         p.errors.push('tags must be an array of strings.');
       }
     }
+
+    // Two ways of saying the same thing: a top-level "difficulty", or the word
+    // sitting in "tags" among the topic labels. Both end up as one lower-case
+    // tag, so a file written either way filters the same.
+    if (value.difficulty != null && value.difficulty !== '') {
+      p.difficulty = difficultyOf(value.difficulty);
+      if (!p.difficulty) {
+        p.errors.push('difficulty "' + sanitizeText(value.difficulty) +
+          '" must be easy, medium or hard.');
+      } else if (p.tags.indexOf(p.difficulty) < 0) {
+        p.tags.push(p.difficulty);
+      }
+    }
+
+    var levels = p.tags.filter(difficultyOf)
+      .filter(function (t, i, all) { return all.indexOf(t) === i; });
+    // Ambiguity is an error rather than first-one-wins: a problem tagged both
+    // easy and hard would turn up in whichever pool was asked for.
+    if (levels.length > 1) {
+      p.errors.push('this problem has more than one difficulty (' + levels.join(', ') + ').');
+    }
+    if (!p.difficulty) p.difficulty = levels[0] || '';
 
     if (value.source_id != null && value.source_id !== '') {
       p.sourceId = sanitizeText(value.source_id);
@@ -598,6 +634,8 @@
   return {
     BATCH_SIZE: BATCH_SIZE,
     LETTERS: LETTERS,
+    DIFFICULTIES: DIFFICULTIES,
+    difficultyOf: difficultyOf,
     parse: parse,
     run: run,
     slugify: slugify,
