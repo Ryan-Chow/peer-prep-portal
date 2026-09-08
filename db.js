@@ -195,36 +195,76 @@
     return (res && res.data) || [];
   };
   const NONE = Promise.resolve({ data: [], error: null });
+  const NO_ROWS = Promise.resolve([]);
+
+  // PostgREST caps a select at db-max-rows — 1,000 by default — and says
+  // nothing when it does: a truncated read looks like a full page of rows and
+  // no error. Anything that grows with the library, the roster or usage is read
+  // a page at a time instead, until a short page proves the end was reached.
+  //
+  // Returns rows, not a response: the error unwrapping already happened.
+  //
+  // opts.order  columns giving a total order, ending in a unique one. Paging
+  //             over a non-unique order lets rows shift between pages as the
+  //             window advances, which repeats some and drops others — the same
+  //             silent wrong answer, harder to see.
+  // opts.filter narrows every page the same way.
+  const PAGE = 1000;
+
+  // Modules and profiles are displayed in the order they come back — the Map
+  // each is read into keeps insertion order, and the library and the roster
+  // show it — so they keep ordering by created_at rather than reordering
+  // themselves by primary key. created_at is not unique, hence the tiebreak.
+  const CREATED_ORDER = ['created_at', 'id'];
+
+  async function allRows(table, opts) {
+    const order = (opts && opts.order) || ['id'];
+    const out = [];
+    for (let from = 0; ; from += PAGE) {
+      let q = sb.from(table).select('*');
+      order.forEach((col) => { q = q.order(col); });
+      if (opts && opts.filter) q = opts.filter(q);
+      const batch = rows(await q.range(from, from + PAGE - 1), table);
+      out.push.apply(out, batch);
+      if (batch.length < PAGE) return out;
+    }
+  }
 
   async function loadTutee(id) {
-    const [linkRes, asgRes] = await Promise.all([
+    // A tutee has at most one tutor — tutor_tutees has a unique index on
+    // tutee_id — so that read is one row by construction. The assignment list
+    // only grows, and everything below is scoped by it, so it is paged even
+    // though reaching a thousand would take years.
+    const [linkRes, asg] = await Promise.all([
       sb.from('tutor_tutees').select('*').eq('tutee_id', id),
-      sb.from('assignments').select('*').eq('tutee_id', id)
+      allRows('assignments', { filter: (q) => q.eq('tutee_id', id) })
     ]);
     S.links = rows(linkRes, 'tutor_tutees');
-    const asg = rows(asgRes, 'assignments');
     asg.forEach(putAssignment);
 
     const tutorIds = S.links.map((l) => l.tutor_id);
     const moduleIds = Array.from(new Set(asg.map((a) => a.module_id)));
 
-    const [profRes, modRes, probRes, keyRes, subRes, errRes] = await Promise.all([
+    // Both id lists are bounded by this tutee's own assignments, so those two
+    // reads cannot run long. The rest can: a handful of assigned modules is
+    // already more than a thousand problems.
+    const [profRes, modRes, probs, revealed, subs, errors] = await Promise.all([
       tutorIds.length ? sb.from('profiles').select('*').in('id', tutorIds) : NONE,
       moduleIds.length ? sb.from('modules').select('*').in('id', moduleIds) : NONE,
-      moduleIds.length ? sb.from('problems_public').select('*').in('module_id', moduleIds) : NONE,
-      sb.from('revealed_answers').select('*'),
-      sb.from('submissions').select('*').eq('tutee_id', id),
+      moduleIds.length ? allRows('problems_public', { filter: (q) => q.in('module_id', moduleIds) }) : NO_ROWS,
+      allRows('revealed_answers'),
+      allRows('submissions', { filter: (q) => q.eq('tutee_id', id) }),
       // Unfiltered on purpose: the view returns only this tutee's own rows,
       // and it keeps entries whose module has since been unassigned.
-      sb.from('error_log_view').select('*')
+      allRows('error_log_view')
     ]);
 
     rows(profRes, 'profiles').forEach(putUser);
     rows(modRes, 'modules').forEach(putModule);
-    putProblems(rows(probRes, 'problems_public'));
-    applyRevealed(rows(keyRes, 'revealed_answers'));
-    rows(subRes, 'submissions').forEach(putSubmission);
-    rows(errRes, 'error_log_view').forEach(putErrorEntry);
+    putProblems(probs);
+    applyRevealed(revealed);
+    subs.forEach(putSubmission);
+    errors.forEach(putErrorEntry);
   }
 
   async function loadTutor(id) {
@@ -232,42 +272,48 @@
     S.links = rows(linkRes, 'tutor_tutees');
     const tuteeIds = S.links.map((l) => l.tutee_id);
 
-    const [profRes, modRes, probRes, asgRes, subRes, errRes] = await Promise.all([
+    // A tutor reads the whole library — every module and every problem in it,
+    // not just what they have assigned — so this is the read that first outgrew
+    // one page.
+    const [profRes, mods, probs, asg, subs, errors] = await Promise.all([
       tuteeIds.length ? sb.from('profiles').select('*').in('id', tuteeIds) : NONE,
-      sb.from('modules').select('*').order('created_at'),
-      sb.from('problems').select('*'),
-      tuteeIds.length ? sb.from('assignments').select('*').in('tutee_id', tuteeIds) : NONE,
-      tuteeIds.length ? sb.from('submissions').select('*').in('tutee_id', tuteeIds) : NONE,
+      allRows('modules', { order: CREATED_ORDER }),
+      allRows('problems'),
+      tuteeIds.length ? allRows('assignments', { filter: (q) => q.in('tutee_id', tuteeIds) }) : NO_ROWS,
+      tuteeIds.length ? allRows('submissions', { filter: (q) => q.in('tutee_id', tuteeIds) }) : NO_ROWS,
       // The view already restricts a tutor to their own tutees.
-      sb.from('error_log_view').select('*')
+      allRows('error_log_view')
     ]);
 
     rows(profRes, 'profiles').forEach(putUser);
-    rows(modRes, 'modules').forEach(putModule);
-    putProblems(rows(probRes, 'problems'));
-    rows(asgRes, 'assignments').forEach(putAssignment);
-    rows(subRes, 'submissions').forEach(putSubmission);
-    rows(errRes, 'error_log_view').forEach(putErrorEntry);
+    mods.forEach(putModule);
+    putProblems(probs);
+    asg.forEach(putAssignment);
+    subs.forEach(putSubmission);
+    errors.forEach(putErrorEntry);
   }
 
   async function loadAdmin() {
-    const [profRes, linkRes, modRes, probRes, asgRes, subRes, errRes] = await Promise.all([
-      sb.from('profiles').select('*').order('created_at'),
-      sb.from('tutor_tutees').select('*'),
-      sb.from('modules').select('*').order('created_at'),
-      sb.from('problems').select('*'),
-      sb.from('assignments').select('*'),
-      sb.from('submissions').select('*'),
-      sb.from('error_log_view').select('*')
+    // Every one of these is the whole table, unfiltered.
+    const [profs, links, mods, probs, asg, subs, errors] = await Promise.all([
+      allRows('profiles', { order: CREATED_ORDER }),
+      // No id column on this one: the primary key is (tutor_id, tutee_id), and
+      // a tutee has at most one tutor, so tutee_id alone is a total order.
+      allRows('tutor_tutees', { order: ['tutee_id'] }),
+      allRows('modules', { order: CREATED_ORDER }),
+      allRows('problems'),
+      allRows('assignments'),
+      allRows('submissions'),
+      allRows('error_log_view')
     ]);
 
-    rows(profRes, 'profiles').forEach(putUser);
-    S.links = rows(linkRes, 'tutor_tutees');
-    rows(modRes, 'modules').forEach(putModule);
-    putProblems(rows(probRes, 'problems'));
-    rows(asgRes, 'assignments').forEach(putAssignment);
-    rows(subRes, 'submissions').forEach(putSubmission);
-    rows(errRes, 'error_log_view').forEach(putErrorEntry);
+    profs.forEach(putUser);
+    S.links = links;
+    mods.forEach(putModule);
+    putProblems(probs);
+    asg.forEach(putAssignment);
+    subs.forEach(putSubmission);
+    errors.forEach(putErrorEntry);
   }
 
   let loading = null;

@@ -413,8 +413,12 @@
     var sourceIds = valid.map(function (p) { return p.sourceId; }).filter(Boolean);
     var claimed = {};
     // Chunked because these go into the query string, and a few thousand ids
-    // would overrun the URL length PostgREST accepts.
-    var idBatches = chunk(sourceIds, batchSize);
+    // would overrun the URL length PostgREST accepts. Never more than a page
+    // per chunk whatever --batch says: source_id is unique, so a chunk of N ids
+    // matches at most N rows, and keeping N under the row cap is what stops the
+    // reply being truncated. A truncated reply here reads as "not claimed", and
+    // the insert that followed would hit the unique index and fail the import.
+    var idBatches = chunk(sourceIds, Math.min(batchSize, PAGE));
     for (var b = 0; b < idBatches.length; b++) {
       var rows = await gateway.findProblemsBySourceIds(idBatches[b]);
       rows.forEach(function (row) {
@@ -510,12 +514,14 @@
       },
       // Paged: PostgREST caps a response at max-rows, and a module that came
       // back truncated would look half-empty to the matcher, which would then
-      // re-insert everything it could not see.
+      // re-insert everything it could not see. id breaks ties because nothing
+      // stops two problems sharing a sort_order, and a tie spanning a page
+      // boundary would let a row repeat while another was skipped.
       async listProblems(moduleId) {
         var out = [];
         for (var from = 0; ; from += PAGE) {
           var res = await client.from('problems').select('id,source_id,question,sort_order')
-            .eq('module_id', moduleId).order('sort_order').range(from, from + PAGE - 1);
+            .eq('module_id', moduleId).order('sort_order').order('id').range(from, from + PAGE - 1);
           var page = unwrap(res, 'reading existing problems') || [];
           out = out.concat(page);
           if (page.length < PAGE) return out;
@@ -598,7 +604,7 @@
         var out = [];
         for (var from = 0; ; from += PAGE) {
           var page = (await call('problems?module_id=' + eq(moduleId) +
-            '&select=id,source_id,question,sort_order&order=sort_order' +
+            '&select=id,source_id,question,sort_order&order=sort_order,id' +
             '&offset=' + from + '&limit=' + PAGE, { method: 'GET' },
             'Reading existing problems')) || [];
           out = out.concat(page);
