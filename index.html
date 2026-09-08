@@ -13,6 +13,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
 <script src="supabaseClient.js"></script>
+<script src="importer.js"></script>
 <script src="db.js"></script>
 </head>
 <body>
@@ -864,6 +865,117 @@ textarea.input { min-height: 90px; resize: vertical; }
       </sc-if>
     </sc-if>
 
+    <sc-if value="{{sImport}}" hint-placeholder-val="{{false}}">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Admin</div>
+      <h1 style="margin:4px 0 6px">Import problems</h1>
+      <p style="margin:0 0 24px;font-size:14px;opacity:0.65">Load modules from JSON — one object, or an array of them. Nothing is written until you press Import. The exact shape is in <span style="font-family:var(--font-heading)">IMPORT_FORMAT.md</span>.</p>
+
+      <div sc-camel-on-drag-over="{{onDragOver}}" sc-camel-on-drag-leave="{{onDragLeave}}" sc-camel-on-drop="{{onDrop}}" style="border:2px dashed {{dropBorder}};background:{{dropBg}};padding:24px;text-align:center;margin-bottom:20px;box-sizing:border-box">
+        <div style="font-size:14px;margin-bottom:12px">{{dropLabel}}</div>
+        <input type="file" accept=".json,application/json" multiple="{{yes}}" sc-camel-on-change="{{onPickFile}}" style="font-size:13px">
+      </div>
+
+      <div class="field" style="margin-bottom:12px"><label>…or paste JSON</label><textarea class="input" rows="8" placeholder="{ &quot;module&quot;: { … }, &quot;problems&quot;: [ … ] }" value="{{impText}}" sc-camel-on-change="{{onImpText}}"></textarea></div>
+      <div style="display:flex;gap:8px;margin-bottom:24px">
+        <button type="button" class="btn btn-secondary" sc-camel-on-click="{{doPreview}}">Preview</button>
+        <button type="button" class="btn btn-ghost" sc-camel-on-click="{{clearImport}}">Clear</button>
+      </div>
+
+      <sc-if value="{{hasParseErr}}" hint-placeholder-val="{{false}}">
+        <div class="card" style="border-color:#8c1d18;background:#fdf2f1;margin-bottom:24px;font-size:14px">{{parseErr}}</div>
+      </sc-if>
+
+      <sc-if value="{{hasPreview}}" hint-placeholder-val="{{false}}">
+        <h2 style="margin:0 0 12px">Preview</h2>
+        <div style="overflow-x:auto;margin-bottom:20px">
+          <sc-raw-table class="table">
+            <sc-raw-thead><sc-raw-tr><sc-raw-th style="min-width:200px">Module</sc-raw-th><sc-raw-th>Subject</sc-raw-th><sc-raw-th>Status</sc-raw-th><sc-raw-th>Problems</sc-raw-th><sc-raw-th>Errors</sc-raw-th><sc-raw-th>Already exists</sc-raw-th></sc-raw-tr></sc-raw-thead>
+            <sc-raw-tbody>
+              <sc-for list="{{impModules}}" as="m" hint-placeholder-count="2">
+                <sc-raw-tr>
+                  <sc-raw-td>{{m.title}}</sc-raw-td>
+                  <sc-raw-td class="text-muted">{{m.subject}}</sc-raw-td>
+                  <sc-raw-td><span class="{{m.statusClass}}">{{m.status}}</span></sc-raw-td>
+                  <sc-raw-td>{{m.countText}}</sc-raw-td>
+                  <sc-raw-td>{{m.errorCountText}}</sc-raw-td>
+                  <sc-raw-td>
+                    <sc-if value="{{m.exists}}" hint-placeholder-val="{{true}}">
+                      <sc-raw-select class="input" value="{{m.mode}}" sc-camel-on-change="{{m.onMode}}"><option value="add">Add to existing</option><option value="replace">Replace all problems</option></sc-raw-select>
+                    </sc-if>
+                  </sc-raw-td>
+                </sc-raw-tr>
+              </sc-for>
+            </sc-raw-tbody>
+          </sc-raw-table>
+        </div>
+
+        <sc-if value="{{anyReplace}}" hint-placeholder-val="{{false}}">
+          <div class="card" style="border-color:#8c1d18;background:#fdf2f1;margin-bottom:20px;font-size:14px">Replacing deletes every problem currently in that module, and a deleted problem takes any answers tutees have already submitted for it with it. Choose “Add to existing” to keep their work.</div>
+        </sc-if>
+
+        <sc-for list="{{impModules}}" as="m" hint-placeholder-count="1">
+          <div style="margin-bottom:24px">
+            <h3 style="margin:0 0 4px">{{m.title}}</h3>
+            <div style="font-size:12px;opacity:0.6;margin-bottom:8px">{{m.subtitle}}</div>
+            <sc-if value="{{m.hasModuleErrors}}" hint-placeholder-val="{{false}}">
+              <div style="font-size:13px;color:#8c1d18;margin-bottom:8px">{{m.moduleErrorText}}</div>
+            </sc-if>
+            <div style="border-top:1px solid var(--color-neutral-300)">
+              <sc-for list="{{m.rows}}" as="r" hint-placeholder-count="3">
+                <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 6px;border-bottom:1px solid var(--color-neutral-300);background:{{r.bg}}">
+                  <span style="font-family:var(--font-heading);font-size:15px;width:28px;opacity:0.55">{{r.num}}</span>
+                  <span style="flex:1;font-size:14px;line-height:1.6;min-width:180px">{{r.questionEl}}
+                    <sc-if value="{{r.bad}}" hint-placeholder-val="{{false}}"><span style="display:block;font-size:12px;color:#8c1d18;margin-top:4px">{{r.errText}}</span></sc-if>
+                    <sc-if value="{{r.hasTags}}" hint-placeholder-val="{{false}}"><span style="display:block;font-size:12px;opacity:0.55;margin-top:4px">{{r.tagText}}</span></sc-if>
+                  </span>
+                  <span class="tag tag-neutral">{{r.typeLabel}}</span>
+                  <span style="font-size:13px;opacity:0.7;min-width:90px">{{r.answerEl}}</span>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{m.hasMore}}" hint-placeholder-val="{{false}}">
+              <div style="font-size:12px;opacity:0.6;padding:8px 6px">{{m.moreText}}</div>
+            </sc-if>
+          </div>
+        </sc-for>
+
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:24px">
+          <button type="button" class="btn btn-primary blueprint" disabled="{{cantImport}}" sc-camel-on-click="{{runImport}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>{{importLabel}}</button>
+          <span style="font-size:13px;opacity:0.65">{{importHint}}</span>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{importing}}" hint-placeholder-val="{{false}}">
+        <div style="max-width:420px;display:flex;flex-direction:column;gap:6px;margin-bottom:24px">
+          <div style="font-size:13px">{{progLabel}}</div>
+          <div style="height:6px;border:1px solid var(--color-neutral-300)"><div style="height:100%;background:var(--color-accent);width:{{progPct}}"></div></div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{hasSummary}}" hint-placeholder-val="{{false}}">
+        <div class="card blueprint" style="max-width:520px;margin-bottom:24px">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <div class="card-kicker">Import finished</div>
+          <sc-for list="{{summaryLines}}" as="s" hint-placeholder-count="4">
+            <div style="font-size:14px;padding:2px 0">{{s}}</div>
+          </sc-for>
+        </div>
+        <sc-if value="{{hasSummaryErrors}}" hint-placeholder-val="{{false}}">
+          <h3 style="margin:0 0 8px">Rows that were skipped</h3>
+          <div style="overflow-x:auto">
+            <sc-raw-table class="table">
+              <sc-raw-thead><sc-raw-tr><sc-raw-th>Module</sc-raw-th><sc-raw-th>Row</sc-raw-th><sc-raw-th style="min-width:280px">Reason</sc-raw-th></sc-raw-tr></sc-raw-thead>
+              <sc-raw-tbody>
+                <sc-for list="{{summaryErrors}}" as="e" hint-placeholder-count="3">
+                  <sc-raw-tr><sc-raw-td>{{e.module}}</sc-raw-td><sc-raw-td>{{e.row}}</sc-raw-td><sc-raw-td>{{e.message}}</sc-raw-td></sc-raw-tr>
+                </sc-for>
+              </sc-raw-tbody>
+            </sc-raw-table>
+          </div>
+        </sc-if>
+      </sc-if>
+    </sc-if>
+
   </div>
 </sc-if>
 
@@ -877,7 +989,8 @@ class Component extends DCLogic {
     lib: { subject: 'All' },
     assign: { moduleId: '', picked: {}, due: '', msg: '' },
     admin: { tName: '', tUsername: '', tPin: '', tMsg: '', sName: '', sEmail: '', sMsg: '', mTitle: '', mSubject: '' },
-    editor: { title: '', subject: '', editing: null }
+    editor: { title: '', subject: '', editing: null },
+    imp: this.blankImport()
   };
 
   componentDidMount() {
@@ -911,6 +1024,34 @@ class Component extends DCLogic {
   // into the admin console.
   homeRoute(role) { return { name: role === 'tutor' ? 'students' : role === 'admin' ? 'users' : 'dash' }; }
   blankLogin() { return { tab: 'student', email: '', sent: false, err: '', busy: false, username: '', secret: '' }; }
+  // text     what is in the textarea
+  // docs     ppaImport.parse() output, or null before a preview exists
+  // modes    slug -> 'add' | 'replace', only consulted for modules we already have
+  blankImport() { return { text: '', source: '', docs: null, parseErr: '', modes: {}, dragging: false, running: false, progress: null, summary: null }; }
+  setImp(patch) { this.setState({ imp: Object.assign({}, this.state.imp, patch) }); }
+
+  // Shared by the file picker and the drop target. Several files are read as
+  // one import so a folder of modules can go in at once.
+  readImportFiles(files) {
+    const list = Array.from(files || []).filter((f) => f);
+    if (!list.length) return;
+    Promise.all(list.map((f) => f.text().then((t) => ({ name: f.name, text: t }))))
+      .then((read) => {
+        const docs = [];
+        let err = '';
+        // Each file is parsed on its own so one bad file names itself rather
+        // than making the whole drop look like malformed JSON.
+        for (const f of read) {
+          const out = window.ppaImport.parse(f.text);
+          if (out.error) { err = f.name + ': ' + out.error; break; }
+          out.docs.forEach((d) => docs.push(d));
+        }
+        const label = read.length === 1 ? read[0].name : read.length + ' files';
+        if (err) this.setImp({ docs: null, parseErr: err, source: label, summary: null, dragging: false });
+        else this.setImp({ docs: docs, parseErr: '', source: label, modes: {}, summary: null, dragging: false });
+      })
+      .catch((e) => this.setImp({ parseErr: 'Could not read that file: ' + e.message, dragging: false }));
+  }
   setEd(patch) { const E = this.state.editor; this.setState({ editor: Object.assign({}, E, { editing: Object.assign({}, E.editing, patch) }) }); }
 
   math(text) {
@@ -998,14 +1139,15 @@ class Component extends DCLogic {
     v.goHome = () => this.setState({ route: this.homeRoute(me.role) });
     const linkDefs = me.role === 'student' ? [['Dashboard', 'dash']]
       : me.role === 'tutor' ? [['My Students', 'students'], ['Module Library', 'library'], ['Assign', 'assign'], ['Results', 'results']]
-      : [['Users', 'users'], ['Modules', 'modules']];
-    const activeOf = { dash: 'dash', module: 'dash', problem: 'dash', students: 'students', library: 'library', preview: 'library', assign: 'assign', results: 'results', resultDetail: 'results', users: 'users', modules: 'modules', editor: 'modules' };
+      : [['Users', 'users'], ['Modules', 'modules'], ['Import', 'import']];
+    const activeOf = { dash: 'dash', module: 'dash', problem: 'dash', students: 'students', library: 'library', preview: 'library', assign: 'assign', results: 'results', resultDetail: 'results', users: 'users', modules: 'modules', editor: 'modules', import: 'import' };
     v.navLinks = linkDefs.map(([label, name]) => ({ label: label, cur: activeOf[route.name] === name ? 'page' : undefined, go: goE(name) }));
 
     v.sDash = route.name === 'dash'; v.sModule = route.name === 'module'; v.sProblem = route.name === 'problem';
     v.sStudents = route.name === 'students'; v.sLibrary = route.name === 'library'; v.sPreview = route.name === 'preview';
     v.sAssign = route.name === 'assign'; v.sResults = route.name === 'results'; v.sResultDetail = route.name === 'resultDetail';
     v.sUsers = route.name === 'users'; v.sModules = route.name === 'modules'; v.sEditor = route.name === 'editor';
+    v.sImport = route.name === 'import';
 
     const scorePct = (correct, answered) => answered ? Math.round(100 * correct / answered) + '%' : '\u2014';
 
@@ -1301,6 +1443,156 @@ class Component extends DCLogic {
           };
         }
       }
+    }
+
+    if (v.sImport) {
+      const IM = st.imp;
+      const PREVIEW_ROWS = 25;
+
+      v.yes = true;
+      v.impText = IM.text;
+      v.onImpText = F('imp', 'text');
+      v.doPreview = () => {
+        const out = window.ppaImport.parse(this.state.imp.text);
+        this.setImp({
+          docs: out.error ? null : out.docs,
+          parseErr: out.error,
+          source: out.error ? '' : 'pasted JSON',
+          modes: {},
+          summary: null
+        });
+      };
+      v.clearImport = () => this.setState({ imp: this.blankImport() });
+      v.onPickFile = (e) => {
+        this.readImportFiles(e.target.files);
+        // Let the same file be chosen twice in a row; without this the input
+        // holds the old selection and fires no change event.
+        e.target.value = '';
+      };
+      // preventDefault on dragover is what marks this a drop target at all —
+      // without it the browser navigates to the file instead.
+      v.onDragOver = (e) => { e.preventDefault(); if (!this.state.imp.dragging) this.setImp({ dragging: true }); };
+      v.onDragLeave = () => { if (this.state.imp.dragging) this.setImp({ dragging: false }); };
+      v.onDrop = (e) => {
+        e.preventDefault();
+        this.setImp({ dragging: false });
+        this.readImportFiles(e.dataTransfer && e.dataTransfer.files);
+      };
+      v.dropBorder = IM.dragging ? 'var(--color-accent)' : 'var(--color-neutral-300)';
+      v.dropBg = IM.dragging ? 'var(--color-accent-100)' : 'transparent';
+      v.dropLabel = IM.dragging ? 'Drop to load'
+        : IM.source ? 'Loaded from ' + IM.source
+        : 'Drop .json files here';
+
+      v.hasParseErr = !!IM.parseErr;
+      v.parseErr = IM.parseErr;
+
+      const docs = IM.docs || [];
+      v.hasPreview = docs.length > 0;
+
+      // Modules already in the library, by the slug the importer will derive.
+      // Falls back to slugifying the title for any row that predates the
+      // migration's backfill.
+      const bySlug = {};
+      db.getModules().forEach((m) => { bySlug[m.slug || window.ppaImport.slugify(m.title)] = m; });
+
+      let totalValid = 0, anyReplace = false;
+      v.impModules = docs.map((d) => {
+        const existing = d.slug ? bySlug[d.slug] : null;
+        const mode = IM.modes[d.slug] || 'add';
+        if (existing && mode === 'replace' && d.importable) anyReplace = true;
+        if (d.importable) totalValid += d.validCount;
+
+        const shown = d.problems.slice(0, PREVIEW_ROWS);
+        const status = !d.importable ? 'Cannot import' : existing ? 'Updates existing' : 'New module';
+        return {
+          title: d.title || '(untitled module ' + (d.index + 1) + ')',
+          subject: d.subject,
+          status: status,
+          statusClass: !d.importable ? 'tag tag-outline' : existing ? 'tag tag-neutral' : 'tag tag-accent',
+          countText: d.validCount + ' of ' + d.problems.length,
+          errorCountText: d.invalidCount ? String(d.invalidCount) : '\u2014',
+          exists: !!existing && d.importable,
+          mode: mode,
+          onMode: (e) => this.setImp({ modes: Object.assign({}, this.state.imp.modes, { [d.slug]: e.target.value }) }),
+          subtitle: existing
+            ? (mode === 'replace'
+              ? 'Replaces all ' + existing.problems.length + ' problem(s) already in this module'
+              : 'Adds to the ' + existing.problems.length + ' problem(s) already in this module')
+            : 'Will be created',
+          hasModuleErrors: d.errors.length > 0,
+          moduleErrorText: d.errors.join(' '),
+          hasMore: d.problems.length > shown.length,
+          moreText: '\u2026and ' + (d.problems.length - shown.length) + ' more',
+          rows: shown.map((p) => ({
+            num: String(p.row).padStart(2, '0'),
+            questionEl: math(p.question || '(no question text)'),
+            typeLabel: p.type === 'mc' ? 'MC' : p.type === 'free' ? 'Free' : '?',
+            answerEl: p.errors.length ? null : math(p.type === 'mc'
+              ? p.answer + '. ' + (p.choices[window.ppaImport.LETTERS.indexOf(p.answer)] || '')
+              : p.answer),
+            bad: p.errors.length > 0,
+            errText: p.errors.join(' '),
+            hasTags: p.tags.length > 0,
+            tagText: p.tags.join(' \u00b7 '),
+            bg: p.errors.length ? '#fdf2f1' : 'transparent'
+          }))
+        };
+      });
+
+      v.anyReplace = anyReplace;
+      const moduleCount = docs.filter((d) => d.importable).length;
+      v.importLabel = IM.running ? 'Importing\u2026'
+        : 'Import ' + moduleCount + ' module' + (moduleCount === 1 ? '' : 's') +
+          ' \u00b7 ' + totalValid + ' problem' + (totalValid === 1 ? '' : 's');
+      const skipCount = docs.reduce((n, d) => n + (d.importable ? d.invalidCount : d.problems.length), 0);
+      v.importHint = skipCount ? skipCount + ' row(s) will be skipped.' : '';
+      v.cantImport = IM.running || moduleCount === 0;
+
+      v.runImport = () => {
+        const S2 = this.state.imp;
+        if (S2.running || !S2.docs) return;
+        this.setImp({ running: true, summary: null, progress: { done: 0, total: 1, label: 'Starting\u2026' } });
+        window.ppaImport.run(S2.docs, window.ppaImport.supabaseGateway(db.client), {
+          modes: S2.modes,
+          onProgress: (p) => this.setImp({ progress: p })
+        }).then(
+          (summary) => {
+            // The cache still holds the pre-import library, and this screen
+            // reads it to decide "new" versus "existing".
+            db.reload();
+            this.setImp({ running: false, summary: summary, progress: null, docs: null });
+          },
+          (err) => this.setImp({
+            running: false,
+            progress: null,
+            parseErr: 'Import stopped: ' + (err.message || 'something went wrong.') +
+              ' Anything already written stays; re-running the file finishes the rest.'
+          })
+        );
+      };
+
+      v.importing = IM.running && !!IM.progress;
+      const pr = IM.progress || { done: 0, total: 1, label: '' };
+      v.progPct = (pr.total ? Math.round(100 * pr.done / pr.total) : 0) + '%';
+      v.progLabel = (pr.label || 'Working\u2026') + ' (' + pr.done + '/' + pr.total + ')';
+
+      const sm = IM.summary;
+      v.hasSummary = !!sm;
+      v.summaryLines = sm ? [
+        sm.modulesCreated + ' module(s) created',
+        sm.modulesUpdated + ' module(s) already existed',
+        sm.problemsInserted + ' problem(s) inserted',
+        sm.problemsUpdated + ' problem(s) updated',
+        sm.problemsDeleted + ' problem(s) deleted',
+        sm.problemsSkipped + ' problem(s) skipped'
+      ] : [];
+      v.hasSummaryErrors = !!(sm && sm.errors.length);
+      v.summaryErrors = sm ? sm.errors.map((e) => ({
+        module: e.module,
+        row: e.row == null ? '\u2014' : String(e.row),
+        message: e.message
+      })) : [];
     }
 
     return v;

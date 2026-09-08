@@ -92,6 +92,10 @@
       title: row.title,
       subject: row.subject || 'General',
       description: row.description || '',
+      // Filled by a trigger, so it is present on every row. The import preview
+      // uses it to tell "this file updates a module you have" from "this file
+      // creates one".
+      slug: row.slug || '',
       problems: prev ? prev.problems : []
     });
   }
@@ -329,14 +333,25 @@
       title: patch.title,
       subject: patch.subject || 'General',
       description: '',
+      slug: '',
       problems: []
     };
     S.modules.set(m.id, m);
     notify();
+    // slug is left to the trigger, which derives it from the title.
     const { error } = await sb.from('modules').insert({
       id: m.id, title: m.title, subject: m.subject
     });
-    if (error) { S.modules.delete(m.id); notify(); throw fail('createModule', error); }
+    if (error) {
+      S.modules.delete(m.id);
+      notify();
+      // The slug is unique, so two modules cannot share a title. Say that
+      // rather than passing the constraint name through to a toast.
+      if (error.code === '23505') {
+        throw fail('createModule', { message: 'A module called \u201c' + m.title + '\u201d already exists.' });
+      }
+      throw fail('createModule', error);
+    }
     return m;
   }
 
@@ -508,6 +523,10 @@
     client: sb,
     ready: () => S.loaded,
     booting: () => S.booting,
+    // Refetch everything. The importer writes straight to Supabase in bulk
+    // rather than through the mutations above, so the cache has to be told
+    // that the library it is holding is stale.
+    reload: () => load().then((me) => { notify(); return me; }),
     onChange: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     me: () => (S.meId ? S.users.get(S.meId) || null : null),
 

@@ -1,0 +1,35 @@
+{
+  "module": {
+    "title": "Algebra: Linear Equations",
+    "subject": "SAT Math",
+    "description": "One-variable linear equations: solving, rearranging, and reading them out of a word problem."
+  },
+  "problems": [
+    {
+      "question": "If $3x + 5 = 20$, what is the value of $x$?",
+      "type": "multiple_choice",
+      "choices": ["3", "5", "15", "25"],
+      "answer": "B",
+      "explanation": "Subtract 5 from both sides to get $3x = 15$, then divide by 3, so $x = 5$.",
+      "tags": ["algebra", "linear", "easy"],
+      "source_id": "ppa-alg-001"
+    },
+    {
+      "question": "The equation $y = 4x - 7$ is written in slope-intercept form. What is the slope of the line?",
+      "type": "multiple_choice",
+      "choices": ["$-7$", "$-4$", "$4$", "$7$"],
+      "answer": "C",
+      "explanation": "In $y = mx + b$ the coefficient $m$ is the slope, and here $m = 4$.",
+      "tags": ["algebra", "linear", "slope"],
+      "source_id": "ppa-alg-002"
+    },
+    {
+      "question": "A taxi charges a $\\$3$ flat fee plus $\\$2$ per mile. If a ride cost $\\$17$, how many miles was it?",
+      "type": "free_response",
+      "answer": "7",
+      "explanation": "The cost is $3 + 2m = 17$. Subtracting 3 gives $2m = 14$, so $m = 7$ miles.",
+      "tags": ["algebra", "word-problem", "medium"],
+      "source_id": "ppa-alg-003"
+    }
+  ]
+}
