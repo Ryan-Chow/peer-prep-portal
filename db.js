@@ -52,6 +52,7 @@
     assignments: new Map(), // id -> UI assignment
     links: [],              // { tutor_id, tutee_id }
     subs: new Map(),        // "tuteeId:problemId" -> { answer, correct }
+    errors: new Map(),      // id -> UI error log entry
     loaded: false,
     // True until the first getSession() (and any profile load it triggers)
     // settles. The UI shows a neutral splash rather than flashing the login
@@ -71,6 +72,7 @@
   function clear() {
     S.meId = null;
     S.users.clear(); S.modules.clear(); S.assignments.clear(); S.subs.clear();
+    S.errors.clear();
     S.links = [];
     S.loaded = false;
   }
@@ -152,6 +154,29 @@
     });
   }
 
+  // Rows come from error_log_view, which carries the problem and module the
+  // entry points at. The view decides who may see what, so whatever arrives
+  // here is already scoped to the caller.
+  function putErrorEntry(row) {
+    S.errors.set(row.id, {
+      id: row.id,
+      tuteeId: row.tutee_id,
+      problemId: row.problem_id,
+      moduleId: row.module_id,
+      moduleTitle: row.module_title || '\u2014',
+      moduleSubject: row.module_subject || '',
+      question: row.question || '',
+      type: row.type,
+      choices: Array.isArray(row.choices) ? row.choices : [],
+      correctAnswer: row.correct_answer == null ? '' : row.correct_answer,
+      explanation: row.explanation == null ? '' : row.explanation,
+      givenAnswer: row.given_answer == null ? '' : row.given_answer,
+      comment: row.comment == null ? '' : row.comment,
+      resolved: !!row.resolved,
+      createdAt: row.created_at
+    });
+  }
+
   // ---- loading ------------------------------------------------------------
 
   const rows = (res, where) => {
@@ -172,12 +197,15 @@
     const tutorIds = S.links.map((l) => l.tutor_id);
     const moduleIds = Array.from(new Set(asg.map((a) => a.module_id)));
 
-    const [profRes, modRes, probRes, keyRes, subRes] = await Promise.all([
+    const [profRes, modRes, probRes, keyRes, subRes, errRes] = await Promise.all([
       tutorIds.length ? sb.from('profiles').select('*').in('id', tutorIds) : NONE,
       moduleIds.length ? sb.from('modules').select('*').in('id', moduleIds) : NONE,
       moduleIds.length ? sb.from('problems_public').select('*').in('module_id', moduleIds) : NONE,
       sb.from('revealed_answers').select('*'),
-      sb.from('submissions').select('*').eq('tutee_id', id)
+      sb.from('submissions').select('*').eq('tutee_id', id),
+      // Unfiltered on purpose: the view returns only this tutee's own rows,
+      // and it keeps entries whose module has since been unassigned.
+      sb.from('error_log_view').select('*')
     ]);
 
     rows(profRes, 'profiles').forEach(putUser);
@@ -185,6 +213,7 @@
     putProblems(rows(probRes, 'problems_public'));
     applyRevealed(rows(keyRes, 'revealed_answers'));
     rows(subRes, 'submissions').forEach(putSubmission);
+    rows(errRes, 'error_log_view').forEach(putErrorEntry);
   }
 
   async function loadTutor(id) {
@@ -192,12 +221,14 @@
     S.links = rows(linkRes, 'tutor_tutees');
     const tuteeIds = S.links.map((l) => l.tutee_id);
 
-    const [profRes, modRes, probRes, asgRes, subRes] = await Promise.all([
+    const [profRes, modRes, probRes, asgRes, subRes, errRes] = await Promise.all([
       tuteeIds.length ? sb.from('profiles').select('*').in('id', tuteeIds) : NONE,
       sb.from('modules').select('*').order('created_at'),
       sb.from('problems').select('*'),
       tuteeIds.length ? sb.from('assignments').select('*').in('tutee_id', tuteeIds) : NONE,
-      tuteeIds.length ? sb.from('submissions').select('*').in('tutee_id', tuteeIds) : NONE
+      tuteeIds.length ? sb.from('submissions').select('*').in('tutee_id', tuteeIds) : NONE,
+      // The view already restricts a tutor to their own tutees.
+      sb.from('error_log_view').select('*')
     ]);
 
     rows(profRes, 'profiles').forEach(putUser);
@@ -205,16 +236,18 @@
     putProblems(rows(probRes, 'problems'));
     rows(asgRes, 'assignments').forEach(putAssignment);
     rows(subRes, 'submissions').forEach(putSubmission);
+    rows(errRes, 'error_log_view').forEach(putErrorEntry);
   }
 
   async function loadAdmin() {
-    const [profRes, linkRes, modRes, probRes, asgRes, subRes] = await Promise.all([
+    const [profRes, linkRes, modRes, probRes, asgRes, subRes, errRes] = await Promise.all([
       sb.from('profiles').select('*').order('created_at'),
       sb.from('tutor_tutees').select('*'),
       sb.from('modules').select('*').order('created_at'),
       sb.from('problems').select('*'),
       sb.from('assignments').select('*'),
-      sb.from('submissions').select('*')
+      sb.from('submissions').select('*'),
+      sb.from('error_log_view').select('*')
     ]);
 
     rows(profRes, 'profiles').forEach(putUser);
@@ -223,6 +256,7 @@
     putProblems(rows(probRes, 'problems'));
     rows(asgRes, 'assignments').forEach(putAssignment);
     rows(subRes, 'submissions').forEach(putSubmission);
+    rows(errRes, 'error_log_view').forEach(putErrorEntry);
   }
 
   let loading = null;
@@ -412,6 +446,47 @@
     if (error) { m.problems = before; notify(); throw fail('deleteProblem', error); }
   }
 
+  // Admin only, and the cascade is wide: problems, assignments, submissions and
+  // error log entries all go with it. The counts shown in the confirmation come
+  // from moduleDeleteCounts() rather than from this cache.
+  async function deleteModule(id) {
+    const m = S.modules.get(id);
+    if (!m) return;
+    const problemIds = new Set(m.problems.map((p) => p.id));
+    const asg = Array.from(S.assignments.values()).filter((a) => a.moduleId === id);
+    const errs = Array.from(S.errors.values()).filter((e) => e.moduleId === id);
+    const subs = [];
+    S.subs.forEach((v, k) => { if (problemIds.has(k.slice(k.indexOf(':') + 1))) subs.push([k, v]); });
+
+    S.modules.delete(id);
+    asg.forEach((a) => S.assignments.delete(a.id));
+    errs.forEach((e) => S.errors.delete(e.id));
+    subs.forEach(([k]) => S.subs.delete(k));
+    notify();
+
+    const { error } = await sb.from('modules').delete().eq('id', id);
+    if (error) {
+      S.modules.set(id, m);
+      asg.forEach((a) => S.assignments.set(a.id, a));
+      errs.forEach((e) => S.errors.set(e.id, e));
+      subs.forEach(([k, v]) => S.subs.set(k, v));
+      notify();
+      throw fail('deleteModule', error);
+    }
+  }
+
+  async function moduleDeleteCounts(id) {
+    const { data, error } = await sb.rpc('module_delete_counts', { p_module: id });
+    if (error) throw fail('moduleDeleteCounts', error);
+    const row = Array.isArray(data) ? data[0] : data;
+    return {
+      problems: (row && Number(row.problems)) || 0,
+      assignments: (row && Number(row.assignments)) || 0,
+      submissions: (row && Number(row.submissions)) || 0,
+      errors: (row && Number(row.error_log_entries)) || 0
+    };
+  }
+
   async function assignModule(spec) {
     const made = [];
     const payload = [];
@@ -440,6 +515,18 @@
       throw fail('assignModule', error);
     }
     return made;
+  }
+
+  // Takes the module off a tutee's list. Submissions are deliberately left
+  // alone: the work they did still happened, and their error log entries point
+  // at problems, not at the assignment.
+  async function unassign(assignmentId) {
+    const a = S.assignments.get(assignmentId);
+    if (!a) return;
+    S.assignments.delete(assignmentId);
+    notify();
+    const { error } = await sb.from('assignments').delete().eq('id', assignmentId);
+    if (error) { S.assignments.set(assignmentId, a); notify(); throw fail('unassign', error); }
   }
 
   // Grading happens in Postgres: the tutee's client never sees the answer key
@@ -515,6 +602,92 @@
     }
   }
 
+  // ---- error log ----------------------------------------------------------
+
+  function findProblem(problemId) {
+    let found = null;
+    S.modules.forEach((m) => {
+      if (found) return;
+      const p = m.problems.find((x) => x.id === problemId);
+      if (p) found = { module: m, problem: p };
+    });
+    return found;
+  }
+
+  // The RPC returns the raw table row, not the joined view, so the display
+  // fields are filled from the cache the tutee is already looking at. By the
+  // time this can be called they have submitted the problem, which means the
+  // answer key is in that cache too.
+  async function addErrorEntry(problemId, comment) {
+    const { data, error } = await sb.rpc('add_error_log_entry', {
+      p_problem_id: problemId,
+      p_comment: comment || null
+    });
+    if (error) throw fail('addErrorEntry', error);
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) return null;
+
+    const hit = findProblem(problemId);
+    const sub = S.subs.get(subKey(row.tutee_id, problemId));
+    putErrorEntry({
+      id: row.id,
+      tutee_id: row.tutee_id,
+      problem_id: problemId,
+      submission_id: row.submission_id,
+      comment: row.comment,
+      resolved: row.resolved,
+      created_at: row.created_at,
+      module_id: hit ? hit.module.id : null,
+      module_title: hit ? hit.module.title : null,
+      module_subject: hit ? hit.module.subject : null,
+      question: hit ? hit.problem.text : '',
+      type: hit ? hit.problem.type : 'mc',
+      choices: hit ? hit.problem.choices : [],
+      correct_answer: hit ? hit.problem.answer : '',
+      explanation: hit ? hit.problem.explanation : '',
+      given_answer: sub ? sub.answer : '',
+      is_correct: sub ? sub.correct : false
+    });
+    notify();
+    return S.errors.get(row.id) || null;
+  }
+
+  async function saveErrorComment(id, comment) {
+    const e = S.errors.get(id);
+    if (!e) return;
+    const before = e.comment;
+    const next = String(comment == null ? '' : comment).trim();
+    e.comment = next;
+    notify();
+    const { error } = await sb.from('error_log_entries')
+      .update({ comment: next || null }).eq('id', id);
+    if (error) { e.comment = before; notify(); throw fail('saveErrorComment', error); }
+  }
+
+  // Tutors have no UPDATE policy on the table — this RPC is the only column
+  // they may move, and the tutee and admin use it too so there is one path.
+  async function setErrorResolved(id, resolved) {
+    const e = S.errors.get(id);
+    if (!e) return;
+    const before = e.resolved;
+    e.resolved = !!resolved;
+    notify();
+    const { error } = await sb.rpc('set_error_log_resolved', {
+      p_entry_id: id,
+      p_resolved: !!resolved
+    });
+    if (error) { e.resolved = before; notify(); throw fail('setErrorResolved', error); }
+  }
+
+  async function deleteErrorEntry(id) {
+    const e = S.errors.get(id);
+    if (!e) return;
+    S.errors.delete(id);
+    notify();
+    const { error } = await sb.from('error_log_entries').delete().eq('id', id);
+    if (error) { S.errors.set(id, e); notify(); throw fail('deleteErrorEntry', error); }
+  }
+
   // ---- public API (synchronous reads, same shapes as the old mock) --------
 
   window.db = {
@@ -539,6 +712,8 @@
     updateModule: updateModule,
     saveProblem: saveProblem,
     deleteProblem: deleteProblem,
+    deleteModule: deleteModule,
+    moduleDeleteCounts: moduleDeleteCounts,
 
     getAssignments: (studentId) =>
       Array.from(S.assignments.values()).filter((a) => a.studentId === studentId),
@@ -546,6 +721,7 @@
     getTutorAssignments: (tutorId) =>
       Array.from(S.assignments.values()).filter((a) => a.tutorId === tutorId),
     assignModule: assignModule,
+    unassign: unassign,
 
     getSubmissions: (assignmentId) => {
       const a = S.assignments.get(assignmentId);
@@ -583,7 +759,22 @@
       return (link && S.users.get(link.tutor_id)) || null;
     },
     createUser: createUser,
-    linkStudent: linkStudent
+    linkStudent: linkStudent,
+
+    // Newest first, which is the order both the tutee's tab and the tutor's
+    // read-only view show.
+    getErrorLog: (tuteeId) => Array.from(S.errors.values())
+      .filter((e) => e.tuteeId === tuteeId)
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))),
+    getErrorEntry: (tuteeId, problemId) =>
+      Array.from(S.errors.values())
+        .find((e) => e.tuteeId === tuteeId && e.problemId === problemId) || null,
+    unresolvedCount: (tuteeId) => Array.from(S.errors.values())
+      .filter((e) => e.tuteeId === tuteeId && !e.resolved).length,
+    addErrorEntry: addErrorEntry,
+    saveErrorComment: saveErrorComment,
+    setErrorResolved: setErrorResolved,
+    deleteErrorEntry: deleteErrorEntry
   };
 
   // Start resolving the session now rather than waiting for the component to

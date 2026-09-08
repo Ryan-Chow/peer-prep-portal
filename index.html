@@ -510,7 +510,7 @@ textarea.input { min-height: 90px; resize: vertical; }
       <a href="#" aria-current="{{l.cur}}" sc-camel-on-click="{{l.go}}">{{l.label}}</a>
     </sc-for>
     <span style="margin-left:auto;display:flex;align-items:center;gap:12px">
-      <span style="font-size:12px;opacity:0.6">{{userName}} · {{roleLabel}}</span>
+      <span style="font-size:12px;opacity:0.6">Hello, {{userName}} · {{roleLabel}}</span>
       <button type="button" class="btn btn-ghost" sc-camel-on-click="{{logout}}">Log out</button>
     </span>
   </nav>
@@ -593,6 +593,21 @@ textarea.input { min-height: 90px; resize: vertical; }
               <sc-if value="{{wasWrong}}" hint-placeholder-val="{{false}}"><span class="tag tag-outline">Incorrect</span><span style="font-size:13px">Correct answer: {{correctAnswerEl}}</span></sc-if>
             </div>
             <div style="font-size:14px;line-height:1.6;opacity:0.85">{{explEl}}</div>
+            <sc-if value="{{elCanAdd}}" hint-placeholder-val="{{false}}">
+              <button type="button" class="btn blueprint" style="align-self:flex-start;background:#1f6f43;border-color:#1f6f43;color:#fff" sc-camel-on-click="{{elOpen}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Add to error log</button>
+            </sc-if>
+            <sc-if value="{{elFormOpen}}" hint-placeholder-val="{{false}}">
+              <div style="display:flex;flex-direction:column;gap:10px;max-width:520px">
+                <div class="field"><label>Why did you get this wrong? (optional, but recommended)</label><textarea class="input" rows="3" value="{{elComment}}" sc-camel-on-change="{{onElComment}}"></textarea></div>
+                <div style="display:flex;gap:8px">
+                  <button type="button" class="btn btn-primary" disabled="{{elBusy}}" sc-camel-on-click="{{elSave}}">Save</button>
+                  <button type="button" class="btn btn-ghost" sc-camel-on-click="{{elCancel}}">Cancel</button>
+                </div>
+              </div>
+            </sc-if>
+            <sc-if value="{{elInLog}}" hint-placeholder-val="{{false}}">
+              <button type="button" class="btn btn-ghost" style="align-self:flex-start;color:#1f6f43;border-color:#1f6f43" disabled="{{elInLog}}">In error log ✓</button>
+            </sc-if>
           </div>
         </sc-if>
       </div>
@@ -615,6 +630,21 @@ textarea.input { min-height: 90px; resize: vertical; }
             <div style="display:flex;justify-content:space-between;gap:8px;font-size:13px"><span>{{s.progressText}}</span><span style="opacity:0.6">{{s.count}}</span></div>
             <div style="height:6px;border:1px solid var(--color-neutral-300)"><div style="height:100%;background:var(--color-accent);width:{{s.pctW}}"></div></div>
             <div style="font-size:13px">{{s.scoreText}}</div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span class="{{s.errorTagClass}}">{{s.errorText}}</span>
+              <a href="#" style="font-size:12px;text-decoration:none" sc-camel-on-click="{{s.openLog}}">View error log</a>
+            </div>
+            <sc-if value="{{s.hasModules}}" hint-placeholder-val="{{true}}">
+              <div style="border-top:1px solid var(--color-neutral-300);padding-top:8px;display:flex;flex-direction:column;gap:6px">
+                <sc-for list="{{s.modules}}" as="am" hint-placeholder-count="2">
+                  <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+                    <span style="flex:1">{{am.title}}</span>
+                    <span style="opacity:0.6">{{am.progress}}</span>
+                    <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{am.unassign}}">Unassign</button>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
           </div>
         </sc-for>
       </div>
@@ -697,11 +727,12 @@ textarea.input { min-height: 90px; resize: vertical; }
       <p style="margin:0 0 20px;font-size:14px;opacity:0.65">One row per assignment. Click a row for per-problem answers.</p>
       <div style="overflow-x:auto">
         <sc-raw-table class="table">
-          <sc-raw-thead><sc-raw-tr><sc-raw-th>Student</sc-raw-th><sc-raw-th>Module</sc-raw-th><sc-raw-th>Due</sc-raw-th><sc-raw-th>Answered</sc-raw-th><sc-raw-th>Score</sc-raw-th></sc-raw-tr></sc-raw-thead>
+          <sc-raw-thead><sc-raw-tr><sc-raw-th>Student</sc-raw-th><sc-raw-th>Module</sc-raw-th><sc-raw-th>Due</sc-raw-th><sc-raw-th>Answered</sc-raw-th><sc-raw-th>Score</sc-raw-th><sc-raw-th></sc-raw-th></sc-raw-tr></sc-raw-thead>
           <sc-raw-tbody>
             <sc-for list="{{resultRows}}" as="r" hint-placeholder-count="5">
               <sc-raw-tr sc-camel-on-click="{{r.open}}" style="cursor:pointer">
                 <sc-raw-td>{{r.student}}</sc-raw-td><sc-raw-td>{{r.module}}</sc-raw-td><sc-raw-td class="text-muted">{{r.due}}</sc-raw-td><sc-raw-td>{{r.progress}}</sc-raw-td><sc-raw-td>{{r.score}}</sc-raw-td>
+                <sc-raw-td style="text-align:right"><button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{r.unassign}}">Unassign</button></sc-raw-td>
               </sc-raw-tr>
             </sc-for>
           </sc-raw-tbody>
@@ -798,7 +829,7 @@ textarea.input { min-height: 90px; resize: vertical; }
           <sc-raw-tbody>
             <sc-for list="{{adminModRows}}" as="m" hint-placeholder-count="4">
               <sc-raw-tr><sc-raw-td>{{m.title}}</sc-raw-td><sc-raw-td class="text-muted">{{m.subject}}</sc-raw-td><sc-raw-td>{{m.count}}</sc-raw-td>
-                <sc-raw-td style="text-align:right"><button type="button" class="btn btn-ghost" sc-camel-on-click="{{m.edit}}">Edit</button></sc-raw-td></sc-raw-tr>
+                <sc-raw-td style="text-align:right;white-space:nowrap"><button type="button" class="btn btn-ghost" sc-camel-on-click="{{m.edit}}">Edit</button> <button type="button" class="btn btn-ghost" style="color:#8c1d18" sc-camel-on-click="{{m.del}}">Delete</button></sc-raw-td></sc-raw-tr>
             </sc-for>
           </sc-raw-tbody>
         </sc-raw-table>
@@ -976,7 +1007,76 @@ textarea.input { min-height: 90px; resize: vertical; }
       </sc-if>
     </sc-if>
 
+    <sc-if value="{{sErrorLog}}" hint-placeholder-val="{{false}}">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">{{elKicker}}</div>
+      <h1 style="margin:4px 0 6px">{{elHeading}}</h1>
+      <p style="margin:0 0 20px;font-size:14px;opacity:0.65">{{elIntro}}</p>
+      <sc-if value="{{elShowPicker}}" hint-placeholder-val="{{false}}">
+        <div class="field" style="max-width:280px;margin-bottom:24px"><label>Tutee</label>
+          <sc-raw-select class="input" value="{{elPicked}}" sc-camel-on-change="{{onElPicked}}">
+            <sc-for list="{{elTuteeOpts}}" as="o"><option value="{{o.id}}">{{o.label}}</option></sc-for>
+          </sc-raw-select>
+        </div>
+      </sc-if>
+      <sc-if value="{{elEmpty}}" hint-placeholder-val="{{false}}"><p style="font-size:14px;opacity:0.65">{{elEmptyText}}</p></sc-if>
+      <div style="display:flex;flex-direction:column;gap:16px;max-width:760px">
+        <sc-for list="{{elEntries}}" as="e" hint-placeholder-count="2">
+          <div class="card blueprint" style="display:flex;flex-direction:column;gap:10px">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span class="card-kicker">{{e.moduleTitle}}</span>
+              <span class="{{e.tagClass}}">{{e.statusLabel}}</span>
+              <span style="margin-left:auto;font-size:12px;opacity:0.6">{{e.date}}</span>
+            </div>
+            <div style="font-size:16px;line-height:1.6">{{e.qEl}}</div>
+            <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px">
+              <span>{{e.givenLabel}} {{e.givenEl}}</span>
+              <span>Correct answer: {{e.correctEl}}</span>
+            </div>
+            <sc-if value="{{e.hasExpl}}" hint-placeholder-val="{{true}}">
+              <div style="font-size:14px;line-height:1.6;opacity:0.85;border-left:2px solid var(--color-accent);padding-left:10px">{{e.explEl}}</div>
+            </sc-if>
+            <sc-if value="{{e.canEdit}}" hint-placeholder-val="{{true}}">
+              <div class="field"><label>Why did you get this wrong? (optional, but recommended)</label><textarea class="input" rows="2" value="{{e.draft}}" sc-camel-on-change="{{e.onDraft}}"></textarea></div>
+            </sc-if>
+            <sc-if value="{{e.readOnly}}" hint-placeholder-val="{{false}}">
+              <div style="font-size:14px;line-height:1.6">{{e.commentText}}</div>
+            </sc-if>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <sc-if value="{{e.canEdit}}" hint-placeholder-val="{{true}}">
+                <button type="button" class="btn btn-secondary" disabled="{{e.cantSave}}" sc-camel-on-click="{{e.saveNote}}">Save note</button>
+              </sc-if>
+              <button type="button" class="btn btn-ghost" sc-camel-on-click="{{e.toggleResolved}}">{{e.toggleLabel}}</button>
+              <sc-if value="{{e.canEdit}}" hint-placeholder-val="{{true}}">
+                <button type="button" class="btn btn-ghost" style="margin-left:auto;color:#8c1d18" sc-camel-on-click="{{e.remove}}">Remove</button>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
   </div>
+
+  <sc-if value="{{hasDialog}}" hint-placeholder-val="{{false}}">
+    <div style="position:fixed;inset:0;background:rgba(24,26,30,0.5);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50" sc-camel-on-click="{{dlgCancel}}">
+      <div class="card blueprint" style="max-width:460px;width:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;background:var(--color-neutral-100)" sc-camel-on-click="{{dlgStop}}">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div class="card-kicker">{{dlgKicker}}</div>
+        <div class="card-title">{{dlgTitle}}</div>
+        <p style="margin:0;font-size:14px;line-height:1.6">{{dlgBody}}</p>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <sc-for list="{{dlgLines}}" as="l" hint-placeholder-count="3">
+            <div style="font-size:13px;opacity:0.75">{{l}}</div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost" sc-camel-on-click="{{dlgCancel}}">Cancel</button>
+          <button type="button" class="btn btn-primary blueprint" disabled="{{dlgBusy}}" sc-camel-on-click="{{dlgConfirm}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>{{dlgConfirmLabel}}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
 </sc-if>
 
 </x-dc>
@@ -990,7 +1090,14 @@ class Component extends DCLogic {
     assign: { moduleId: '', picked: {}, due: '', msg: '' },
     admin: { tName: '', tUsername: '', tPin: '', tMsg: '', sName: '', sEmail: '', sMsg: '', mTitle: '', mSubject: '' },
     editor: { title: '', subject: '', editing: null },
-    imp: this.blankImport()
+    imp: this.blankImport(),
+    // One confirmation dialog serves every destructive action; the object in
+    // here says which one and carries the work to run on confirm.
+    dialog: null,
+    errAdd: this.blankErrAdd(),
+    // picked  which tutee a tutor or admin is looking at
+    // drafts  entry id -> unsaved comment text
+    errlog: { picked: '', drafts: {} }
   };
 
   componentDidMount() {
@@ -1028,6 +1135,9 @@ class Component extends DCLogic {
   // docs     ppaImport.parse() output, or null before a preview exists
   // modes    slug -> 'add' | 'replace', only consulted for modules we already have
   blankImport() { return { text: '', source: '', docs: null, parseErr: '', modes: {}, dragging: false, running: false, progress: null, summary: null }; }
+  // The "add to error log" form under a problem's feedback, cleared whenever
+  // the route moves so it never carries a note onto the next problem.
+  blankErrAdd() { return { open: false, comment: '', busy: false }; }
   setImp(patch) { this.setState({ imp: Object.assign({}, this.state.imp, patch) }); }
 
   // Shared by the file picker and the drop target. Several files are read as
@@ -1068,7 +1178,7 @@ class Component extends DCLogic {
   renderVals() {
     const st = this.state, db = window.db, route = st.route;
     const me = db ? db.me() : null;
-    const go = (name, extra) => () => this.setState({ route: Object.assign({ name: name }, extra || {}), problem: { choice: '', free: '' } });
+    const go = (name, extra) => () => this.setState({ route: Object.assign({ name: name }, extra || {}), problem: { choice: '', free: '' }, errAdd: this.blankErrAdd() });
     const goE = (name, extra) => (e) => { if (e && e.preventDefault) e.preventDefault(); go(name, extra)(); };
     const F = (sec, key) => (e) => this.setState({ [sec]: Object.assign({}, this.state[sec], { [key]: e.target.value }) });
     const math = this.math.bind(this);
@@ -1137,10 +1247,10 @@ class Component extends DCLogic {
     v.roleLabel = me.role === 'student' ? 'Student' : me.role === 'tutor' ? 'Tutor' : 'Admin';
     v.logout = () => { db.auth.signOut(); };
     v.goHome = () => this.setState({ route: this.homeRoute(me.role) });
-    const linkDefs = me.role === 'student' ? [['Dashboard', 'dash']]
-      : me.role === 'tutor' ? [['My Students', 'students'], ['Module Library', 'library'], ['Assign', 'assign'], ['Results', 'results']]
-      : [['Users', 'users'], ['Modules', 'modules'], ['Import', 'import']];
-    const activeOf = { dash: 'dash', module: 'dash', problem: 'dash', students: 'students', library: 'library', preview: 'library', assign: 'assign', results: 'results', resultDetail: 'results', users: 'users', modules: 'modules', editor: 'modules', import: 'import' };
+    const linkDefs = me.role === 'student' ? [['Dashboard', 'dash'], ['Error Log', 'errorLog']]
+      : me.role === 'tutor' ? [['My Students', 'students'], ['Module Library', 'library'], ['Assign', 'assign'], ['Results', 'results'], ['Error Logs', 'errorLogs']]
+      : [['Users', 'users'], ['Modules', 'modules'], ['Import', 'import'], ['Error Logs', 'errorLogs']];
+    const activeOf = { dash: 'dash', module: 'dash', problem: 'dash', students: 'students', library: 'library', preview: 'library', assign: 'assign', results: 'results', resultDetail: 'results', users: 'users', modules: 'modules', editor: 'modules', import: 'import', errorLog: 'errorLog', errorLogs: 'errorLogs' };
     v.navLinks = linkDefs.map(([label, name]) => ({ label: label, cur: activeOf[route.name] === name ? 'page' : undefined, go: goE(name) }));
 
     v.sDash = route.name === 'dash'; v.sModule = route.name === 'module'; v.sProblem = route.name === 'problem';
@@ -1148,8 +1258,51 @@ class Component extends DCLogic {
     v.sAssign = route.name === 'assign'; v.sResults = route.name === 'results'; v.sResultDetail = route.name === 'resultDetail';
     v.sUsers = route.name === 'users'; v.sModules = route.name === 'modules'; v.sEditor = route.name === 'editor';
     v.sImport = route.name === 'import';
+    // A tutee reads their own log, a tutor or admin reads someone else's; one
+    // screen, told apart by the role rather than by the route.
+    v.sErrorLog = route.name === 'errorLog' || route.name === 'errorLogs';
 
     const scorePct = (correct, answered) => answered ? Math.round(100 * correct / answered) + '%' : '\u2014';
+    const plural = (n, one, many) => n + ' ' + (n === 1 ? one : (many || one + 's'));
+
+    // ---- confirmation dialog ----
+    const D = st.dialog;
+    const openDialog = (spec) => this.setState({ dialog: Object.assign({ lines: [], busy: false }, spec) });
+    v.hasDialog = !!D;
+    v.dlgKicker = D ? D.kicker : '';
+    v.dlgTitle = D ? D.title : '';
+    v.dlgBody = D ? D.body : '';
+    v.dlgLines = D ? (D.lines || []) : [];
+    v.dlgConfirmLabel = D ? D.confirmLabel : '';
+    v.dlgBusy = !!(D && D.busy);
+    v.dlgCancel = () => { if (!(D && D.busy)) this.setState({ dialog: null }); };
+    // The backdrop closes the dialog, so a click on the card itself must not
+    // reach it.
+    v.dlgStop = (e) => { if (e && e.stopPropagation) e.stopPropagation(); };
+    v.dlgConfirm = () => {
+      const cur = this.state.dialog;
+      if (!cur || cur.busy) return;
+      this.setState({ dialog: Object.assign({}, cur, { busy: true }) });
+      Promise.resolve().then(() => cur.run()).then(
+        () => this.setState({ dialog: null }),
+        // db already toasted the reason; leave the dialog open so the button
+        // can be tried again.
+        () => { const now = this.state.dialog; if (now) this.setState({ dialog: Object.assign({}, now, { busy: false }) }); }
+      );
+    };
+
+    // Unassigning is offered from two places, and says the same thing in both.
+    const confirmUnassign = (a) => {
+      const s = db.getUser(a.studentId), m = db.getModule(a.moduleId);
+      openDialog({
+        kicker: 'Unassign module',
+        title: m ? m.title : 'Module',
+        body: 'Take this module off ' + (s ? s.name : 'this tutee') + '\u2019s list?',
+        lines: ['Answers they already submitted are kept.', 'Their error log entries are kept.'],
+        confirmLabel: 'Unassign',
+        run: () => db.unassign(a.id)
+      });
+    };
 
     if (v.sDash) {
       // A module can vanish under an assignment (admin deletes it, or the row
@@ -1230,6 +1383,29 @@ class Component extends DCLogic {
         v.wasCorrect = answered && sub.correct; v.wasWrong = answered && !sub.correct;
         v.correctAnswerEl = answered ? (v.isMC ? math(p.answer + '. ' + p.choices[letters.indexOf(p.answer)]) : math(p.answer)) : null;
         v.explEl = answered ? math(p.explanation) : null;
+
+        // The error log offer only appears on a wrong answer, and only once —
+        // an entry already there turns it into a badge. Postgres enforces the
+        // same rule: no submission, no entry.
+        const logged = db.getErrorEntry(me.id, p.id);
+        const EA = st.errAdd;
+        v.elInLog = answered && !!logged;
+        v.elCanAdd = answered && !sub.correct && !logged && !EA.open;
+        v.elFormOpen = answered && !sub.correct && !logged && EA.open;
+        v.elComment = EA.comment; v.elBusy = EA.busy;
+        v.onElComment = (e) => this.setState({ errAdd: Object.assign({}, this.state.errAdd, { comment: e.target.value }) });
+        v.elOpen = () => this.setState({ errAdd: { open: true, comment: '', busy: false } });
+        v.elCancel = () => this.setState({ errAdd: this.blankErrAdd() });
+        v.elSave = () => {
+          const cur = this.state.errAdd;
+          if (cur.busy) return;
+          this.setState({ errAdd: Object.assign({}, cur, { busy: true }) });
+          db.addErrorEntry(p.id, cur.comment).then(
+            () => this.setState({ errAdd: this.blankErrAdd() }),
+            () => this.setState({ errAdd: Object.assign({}, this.state.errAdd, { busy: false }) })
+          );
+        };
+
         v.noPrev = i === 0; v.noNext = i === m.problems.length - 1;
         v.goPrev = go('problem', { assignmentId: a.id, idx: Math.max(0, i - 1) });
         v.goNext = go('problem', { assignmentId: a.id, idx: Math.min(m.problems.length - 1, i + 1) });
@@ -1241,12 +1417,29 @@ class Component extends DCLogic {
         const as = db.getAssignments(s.id);
         let answered = 0, total = 0, correct = 0;
         as.forEach((a) => { const pr = db.getProgress(a.id); answered += pr.answered; total += pr.total; correct += pr.correct; });
+        const unresolved = db.unresolvedCount(s.id);
+        const mods = as.filter((a) => db.getModule(a.moduleId));
         return {
           name: s.name, email: s.email,
           count: as.length + (as.length === 1 ? ' module' : ' modules'),
           progressText: answered + '/' + total + ' answered',
           pctW: (total ? Math.round(100 * answered / total) : 0) + '%',
-          scoreText: answered ? scorePct(correct, answered) + ' correct so far' : 'No answers yet'
+          scoreText: answered ? scorePct(correct, answered) + ' correct so far' : 'No answers yet',
+          errorText: unresolved ? plural(unresolved, 'unresolved error') : 'Error log clear',
+          errorTagClass: unresolved ? 'tag tag-outline' : 'tag tag-neutral',
+          openLog: (e) => {
+            if (e && e.preventDefault) e.preventDefault();
+            this.setState({ route: { name: 'errorLogs' }, errlog: Object.assign({}, this.state.errlog, { picked: s.id }) });
+          },
+          hasModules: mods.length > 0,
+          modules: mods.map((a) => {
+            const pr = db.getProgress(a.id);
+            return {
+              title: db.getModule(a.moduleId).title,
+              progress: pr.answered + '/' + pr.total,
+              unassign: () => confirmUnassign(a)
+            };
+          })
         };
       });
       v.noStudents = v.students.length === 0;
@@ -1311,7 +1504,9 @@ class Component extends DCLogic {
           student: s ? s.name : '\u2014', module: m.title, due: fmtDate(a.due),
           progress: pr.answered + '/' + pr.total,
           score: scorePct(pr.correct, pr.answered),
-          open: go('resultDetail', { assignmentId: a.id })
+          open: go('resultDetail', { assignmentId: a.id }),
+          // The row itself opens the detail view, so this must not travel up.
+          unassign: (e) => { if (e && e.stopPropagation) e.stopPropagation(); confirmUnassign(a); }
         };
       });
     }
@@ -1394,7 +1589,30 @@ class Component extends DCLogic {
       };
       v.adminModRows = db.getModules().map((m) => ({
         title: m.title, subject: m.subject, count: m.problems.length,
-        edit: () => this.setState({ route: { name: 'editor', moduleId: m.id }, editor: { title: m.title, subject: m.subject, editing: null } })
+        edit: () => this.setState({ route: { name: 'editor', moduleId: m.id }, editor: { title: m.title, subject: m.subject, editing: null } }),
+        del: () => {
+          openDialog({
+            moduleId: m.id,
+            kicker: 'Delete module',
+            title: m.title,
+            body: 'This removes the module for everyone it was assigned to, and cannot be undone.',
+            lines: ['Counting what goes with it\u2026'],
+            confirmLabel: 'Delete module',
+            run: () => db.deleteModule(m.id)
+          });
+          // Counted in Postgres rather than from this cache, which only holds
+          // what the last load happened to fetch.
+          db.moduleDeleteCounts(m.id).then((c) => {
+            const cur = this.state.dialog;
+            if (!cur || cur.moduleId !== m.id) return;
+            this.setState({ dialog: Object.assign({}, cur, { lines: [
+              'Also deletes ' + plural(c.problems, 'problem') + '.',
+              'Removes ' + plural(c.assignments, 'assignment') + '.',
+              'Discards ' + plural(c.submissions, 'submitted answer') + '.',
+              'Clears ' + plural(c.errors, 'error log entry', 'error log entries') + '.'
+            ] }) });
+          }, () => {});
+        }
       }));
     }
 
@@ -1593,6 +1811,80 @@ class Component extends DCLogic {
         row: e.row == null ? '\u2014' : String(e.row),
         message: e.message
       })) : [];
+    }
+
+    if (v.sErrorLog) {
+      const EL = st.errlog, mine = me.role === 'student';
+      v.elShowPicker = !mine;
+      let tuteeId = me.id;
+      if (!mine) {
+        // A tutor picks from their own tutees; an admin from everyone. Either
+        // way the list is only a convenience — the view behind db.getErrorLog
+        // returns nothing for a tutee they are not linked to.
+        const tutees = (me.role === 'tutor' ? db.getStudentsOf(me.id) : db.getUsers().filter((u) => u.role === 'student'))
+          .slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
+        v.elTuteeOpts = [{ id: '', label: tutees.length ? 'Choose a tutee\u2026' : 'No tutees yet' }]
+          .concat(tutees.map((s) => {
+            const n = db.unresolvedCount(s.id);
+            return { id: s.id, label: s.name + (n ? ' (' + n + ' unresolved)' : '') };
+          }));
+        // A tutee who has since been unlinked must not stay selected.
+        tuteeId = tutees.some((s) => s.id === EL.picked) ? EL.picked : '';
+        v.elPicked = tuteeId;
+        v.onElPicked = (e) => this.setState({ errlog: Object.assign({}, this.state.errlog, { picked: e.target.value }) });
+      }
+
+      const who = tuteeId ? db.getUser(tuteeId) : null;
+      v.elKicker = mine ? 'Student' : (me.role === 'tutor' ? 'Tutor' : 'Admin');
+      v.elHeading = mine ? 'Error log' : 'Error logs';
+      v.elIntro = mine
+        ? 'Problems you got wrong and chose to keep. Write down what went wrong, then mark it resolved once it makes sense.'
+        : 'What your tutees got wrong, newest first. Read-only apart from marking an entry resolved.';
+
+      const entries = tuteeId ? db.getErrorLog(tuteeId) : [];
+      v.elEmpty = entries.length === 0;
+      v.elEmptyText = mine
+        ? 'Nothing here yet. When you get a problem wrong, use \u201cAdd to error log\u201d under the feedback.'
+        : (tuteeId ? (who ? who.name : 'That tutee') + ' has not logged anything yet.' : 'Pick a tutee to read their error log.');
+
+      v.elEntries = entries.map((en) => {
+        const isMC = en.type === 'mc';
+        const spell = (ans) => (isMC && ans ? ans + '. ' + (en.choices['ABCD'.indexOf(ans)] || '') : ans);
+        // An unsaved edit lives in state; anything untouched shows what the
+        // server holds.
+        const draft = Object.prototype.hasOwnProperty.call(EL.drafts, en.id) ? EL.drafts[en.id] : en.comment;
+        return {
+          moduleTitle: en.moduleTitle,
+          date: en.createdAt ? new Date(en.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '\u2014',
+          statusLabel: en.resolved ? 'Resolved' : 'Unresolved',
+          tagClass: en.resolved ? 'tag tag-accent' : 'tag tag-outline',
+          qEl: math(en.question),
+          givenLabel: mine ? 'Your answer:' : 'Their answer:',
+          givenEl: math(en.givenAnswer ? spell(en.givenAnswer) : '\u2014'),
+          correctEl: math(spell(en.correctAnswer)),
+          hasExpl: !!en.explanation,
+          explEl: en.explanation ? math(en.explanation) : null,
+          canEdit: mine, readOnly: !mine,
+          draft: draft,
+          commentText: en.comment || 'No note written.',
+          onDraft: (e) => {
+            const val = e.target.value, cur = this.state.errlog;
+            this.setState({ errlog: Object.assign({}, cur, { drafts: Object.assign({}, cur.drafts, { [en.id]: val }) }) });
+          },
+          cantSave: String(draft).trim() === String(en.comment).trim(),
+          saveNote: () => { db.saveErrorComment(en.id, draft).catch(() => {}); },
+          toggleLabel: en.resolved ? 'Mark unresolved' : 'Mark resolved',
+          toggleResolved: () => { db.setErrorResolved(en.id, !en.resolved).catch(() => {}); },
+          remove: () => openDialog({
+            kicker: 'Remove entry',
+            title: en.moduleTitle,
+            body: 'Take this problem out of your error log?',
+            lines: ['Your note goes with it.', 'The answer you submitted is kept.'],
+            confirmLabel: 'Remove',
+            run: () => db.deleteErrorEntry(en.id)
+          })
+        };
+      });
     }
 
     return v;
