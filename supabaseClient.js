@@ -23,7 +23,8 @@
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      // Picks the magic-link token out of the URL fragment on return.
+      // Nobody signs in by link any more, but password recovery mails still
+      // come back as a token in the URL fragment, and that needs picking up.
       detectSessionInUrl: true,
       storageKey: 'ppa-auth'
     }

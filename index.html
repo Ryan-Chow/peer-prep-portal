@@ -17,10 +17,10 @@
      ten-minute cache: without this a returning tab can run a new index.html
      against an old db.js and call a function that does not exist yet. They
      move as one version because they are one layer. -->
-<script src="config.js?v=2"></script>
-<script src="supabaseClient.js?v=2"></script>
-<script src="importer.js?v=2"></script>
-<script src="db.js?v=2"></script>
+<script src="config.js?v=3"></script>
+<script src="supabaseClient.js?v=3"></script>
+<script src="importer.js?v=3"></script>
+<script src="db.js?v=3"></script>
 </head>
 <body>
 <x-dc>
@@ -480,19 +480,11 @@ textarea.input { min-height: 90px; resize: vertical; }
         <label class="seg-opt" style="flex:1;justify-content:center"><input type="radio" name="ltab" checked="{{isTutorTab}}" sc-camel-on-change="{{pickTutor}}">Tutor</label>
       </div>
       <sc-if value="{{isStudentTab}}" hint-placeholder-val="{{true}}">
-        <sc-if value="{{notSent}}" hint-placeholder-val="{{true}}">
-          <div style="display:flex;flex-direction:column;gap:16px">
-            <div class="field"><label>Email</label><input class="input" type="email" placeholder="you@school.org" value="{{email}}" sc-camel-on-change="{{onEmail}}"></div>
-            <button type="button" class="btn btn-primary btn-block blueprint" sc-camel-on-click="{{sendLink}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Send magic link</button>
-          </div>
-        </sc-if>
-        <sc-if value="{{sent}}" hint-placeholder-val="{{false}}">
-          <div style="text-align:center;display:flex;flex-direction:column;gap:12px;padding:8px 0">
-            <div style="font-family:var(--font-heading);font-size:24px;font-weight:600">Check your email</div>
-            <p style="margin:0;font-size:14px;opacity:0.7;line-height:1.5">We sent a sign-in link to <b>{{sentEmail}}</b>.<br>It expires in 15 minutes.</p>
-            <a href="#" sc-camel-on-click="{{resend}}" style="font-size:13px">Use a different email</a>
-          </div>
-        </sc-if>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="field"><label>Email</label><input class="input" type="email" placeholder="you@school.org" value="{{email}}" sc-camel-on-change="{{onEmail}}"></div>
+          <div class="field"><label>PIN</label><input class="input" type="password" sc-camel-input-mode="numeric" value="{{studentPin}}" sc-camel-on-change="{{onStudentPin}}"></div>
+          <button type="button" class="btn btn-primary btn-block blueprint" sc-camel-on-click="{{doStudentLogin}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Log in</button>
+        </div>
       </sc-if>
       <sc-if value="{{isTutorTab}}" hint-placeholder-val="{{false}}">
         <div style="display:flex;flex-direction:column;gap:16px">
@@ -505,7 +497,7 @@ textarea.input { min-height: 90px; resize: vertical; }
         <p style="margin:14px 0 0;font-size:13px;line-height:1.5;border-left:2px solid var(--color-accent);padding-left:10px">{{loginErr}}</p>
       </sc-if>
     </div>
-    <p style="margin:0;font-size:12px;opacity:0.55;text-align:center;line-height:1.7;max-width:400px">Students sign in with the email on file. Tutors use their username and PIN; admins use their email and password.</p>
+    <p style="margin:0;font-size:12px;opacity:0.55;text-align:center;line-height:1.7;max-width:400px">Students sign in with the email on file and the PIN their tutor gave them. Tutors use their username and PIN; admins use their email and password.</p>
   </div>
 </sc-if>
 
@@ -1037,6 +1029,7 @@ textarea.input { min-height: 90px; resize: vertical; }
           <div class="card-kicker">New tutee</div>
           <div class="field"><label>Name</label><input class="input" value="{{sName}}" sc-camel-on-change="{{onSName}}"></div>
           <div class="field"><label>Email</label><input class="input" type="email" value="{{sEmail}}" sc-camel-on-change="{{onSEmail}}"></div>
+          <div class="field" style="max-width:160px"><label>PIN</label><input class="input" sc-camel-input-mode="numeric" value="{{sPin}}" sc-camel-on-change="{{onSPin}}"></div>
           <button type="button" class="btn btn-primary blueprint" style="margin-top:auto" sc-camel-on-click="{{createStudent}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Create tutee</button>
           <sc-if value="{{hasSMsg}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;border-left:2px solid var(--color-accent);padding-left:10px">{{sMsg}}</p></sc-if>
         </div>
@@ -1044,7 +1037,7 @@ textarea.input { min-height: 90px; resize: vertical; }
       <h2 style="margin:0 0 12px">Tutees</h2>
       <div style="overflow-x:auto;margin-bottom:32px">
         <sc-raw-table class="table">
-          <sc-raw-thead><sc-raw-tr><sc-raw-th>Name</sc-raw-th><sc-raw-th>Email</sc-raw-th><sc-raw-th>Tutor</sc-raw-th></sc-raw-tr></sc-raw-thead>
+          <sc-raw-thead><sc-raw-tr><sc-raw-th>Name</sc-raw-th><sc-raw-th>Email</sc-raw-th><sc-raw-th>Tutor</sc-raw-th><sc-raw-th>PIN</sc-raw-th></sc-raw-tr></sc-raw-thead>
           <sc-raw-tbody>
             <sc-for list="{{studentRows}}" as="r" hint-placeholder-count="4">
               <sc-raw-tr>
@@ -1052,6 +1045,7 @@ textarea.input { min-height: 90px; resize: vertical; }
                 <sc-raw-td><sc-raw-select class="input" style="max-width:180px;padding:4px 8px" value="{{r.tutorId}}" sc-camel-on-change="{{r.onLink}}">
                   <sc-for list="{{r.options}}" as="o"><option value="{{o.id}}">{{o.label}}</option></sc-for>
                 </sc-raw-select></sc-raw-td>
+                <sc-raw-td><button type="button" class="btn btn-ghost" sc-camel-on-click="{{r.onSetPin}}">Set PIN</button></sc-raw-td>
               </sc-raw-tr>
             </sc-for>
           </sc-raw-tbody>
@@ -1341,11 +1335,11 @@ textarea.input { min-height: 90px; resize: vertical; }
 class Component extends DCLogic {
   state = {
     route: { name: 'login' },
-    login: { tab: 'student', email: '', sent: false, err: '', busy: false, username: '', secret: '' },
+    login: { tab: 'student', email: '', pin: '', err: '', busy: false, username: '', secret: '' },
     problem: { choice: '', free: '' },
     lib: { subject: 'All' },
     assign: this.blankAssign(),
-    admin: { tName: '', tUsername: '', tPin: '', tMsg: '', sName: '', sEmail: '', sMsg: '', mTitle: '', mSubject: '' },
+    admin: { tName: '', tUsername: '', tPin: '', tMsg: '', sName: '', sEmail: '', sPin: '', sMsg: '', mTitle: '', mSubject: '' },
     editor: { title: '', subject: '', editing: null },
     imp: this.blankImport(),
     // One confirmation dialog serves every destructive action; the object in
@@ -1370,10 +1364,9 @@ class Component extends DCLogic {
     if (!window.katex) {
       this._kt = setInterval(() => { if (window.katex) { clearInterval(this._kt); this._kt = null; this.forceUpdate(); } }, 200);
     }
-    // db owns the session (Supabase persists it, refreshes it, and picks the
-    // magic-link token out of the URL on return). We just follow its single
-    // auth listener: a user appearing routes us home, a user going drops us
-    // back to the login card.
+    // db owns the session (Supabase persists it and refreshes it). We just
+    // follow its single auth listener: a user appearing routes us home, a user
+    // going drops us back to the login card.
     const boot = () => {
       if (!window.db) { setTimeout(boot, 50); return; }
       this._off = window.db.onChange(() => {
@@ -1396,7 +1389,7 @@ class Component extends DCLogic {
   // Admin is named explicitly so an unrecognised role can never fall through
   // into the admin console.
   homeRoute(role) { return { name: role === 'tutor' ? 'students' : role === 'admin' ? 'users' : 'dash' }; }
-  blankLogin() { return { tab: 'student', email: '', sent: false, err: '', busy: false, username: '', secret: '' }; }
+  blankLogin() { return { tab: 'student', email: '', pin: '', err: '', busy: false, username: '', secret: '' }; }
   // text     what is in the textarea
   // docs     ppaImport.parse() output, or null before a preview exists
   // modes    slug -> 'add' | 'replace', only consulted for modules we already have
@@ -1563,7 +1556,7 @@ class Component extends DCLogic {
     v.pickStudent = () => this.setState({ login: Object.assign({}, L, { tab: 'student', err: '' }) });
     v.pickTutor = () => this.setState({ login: Object.assign({}, L, { tab: 'tutor', err: '' }) });
     v.email = L.email; v.onEmail = F('login', 'email');
-    v.notSent = !L.sent; v.sent = L.sent; v.sentEmail = L.email;
+    v.studentPin = L.pin; v.onStudentPin = F('login', 'pin');
     const setLogin = (patch) => this.setState({ login: Object.assign({}, this.state.login, patch) });
     // Every rejection has to reach the card; a thrown non-Error or a missing db
     // must not leave the button stuck on "busy" with nothing on screen.
@@ -1573,20 +1566,22 @@ class Component extends DCLogic {
       setLogin({ busy: false, err: 'The app failed to start. Check the browser console.' });
       return true;
     };
-    v.sendLink = () => {
+    v.doStudentLogin = () => {
       if (L.busy || noDb()) return;
       if (!L.email.trim() || L.email.indexOf('@') < 0) { setLogin({ err: 'Enter a valid email address.' }); return; }
+      if (!L.pin) { setLogin({ err: 'Enter your PIN.' }); return; }
       setLogin({ busy: true, err: '' });
-      db.auth.signInStudent(L.email).then(
-        () => setLogin({ busy: false, sent: true, err: '' }),
-        // shouldCreateUser is false, so an unknown address fails here rather
-        // than quietly enrolling someone who was never given a seat.
-        (err) => setLogin({ busy: false, err: /not found|signups not allowed|invalid/i.test(errText(err))
-          ? 'No student account uses that email. Ask your tutor to check it.'
-          : (errText(err) || 'Could not send the link.') })
-      );
+      // On success db picks the session up and routes us; only failures land here.
+      db.auth.signInStudent(L.email, L.pin).catch((err) => setLogin({
+        busy: false,
+        // Supabase gives the same answer for an unknown address and a wrong
+        // PIN, which is what stops this card being used to test who has an
+        // account. The message stays as vague as the check is.
+        err: /invalid login|invalid credentials/i.test(errText(err))
+          ? 'Wrong email or PIN. Ask your tutor if you are not sure.'
+          : (errText(err) || 'Could not sign in.')
+      }));
     };
-    v.resend = (e) => { e.preventDefault(); setLogin({ sent: false, err: '', busy: false }); };
     v.username = L.username; v.onUsername = F('login', 'username');
     // An "@" means an admin typing a real address; anything else is a tutor
     // username that db expands to its synthetic tutor address.
@@ -2238,13 +2233,17 @@ class Component extends DCLogic {
       v.tMsg = AD.tMsg; v.hasTMsg = !!AD.tMsg;
       v.sName = AD.sName; v.onSName = F('admin', 'sName');
       v.sEmail = AD.sEmail; v.onSEmail = F('admin', 'sEmail');
+      v.sPin = AD.sPin; v.onSPin = F('admin', 'sPin');
       v.createStudent = () => {
         const A2 = this.state.admin;
         if (!(A2.sName.trim() && A2.sEmail.indexOf('@') > 0)) { setAdmin({ sMsg: 'A name and a valid email are required.' }); return; }
-        const nm = A2.sName.trim();
+        if (A2.sPin.trim().length < 4) { setAdmin({ sMsg: 'A PIN of at least 4 characters is required.' }); return; }
+        const nm = A2.sName.trim(), pin = A2.sPin.trim();
         setAdmin({ sMsg: 'Creating \u201c' + nm + '\u201d\u2026' });
-        db.createUser({ role: 'student', name: nm, email: A2.sEmail.trim() }).then(
-          () => setAdmin({ sName: '', sEmail: '', sMsg: 'Tutee \u201c' + nm + '\u201d created \u2014 link them to a tutor below.' }),
+        db.createUser({ role: 'student', name: nm, email: A2.sEmail.trim(), pin: pin }).then(
+          // As with tutors, Supabase stores only the hash, so this is the one
+          // moment the PIN can be read back to the admin.
+          () => setAdmin({ sName: '', sEmail: '', sPin: '', sMsg: 'Tutee \u201c' + nm + '\u201d created. PIN is ' + pin + ' \u2014 note it now, it cannot be shown again. Link them to a tutor below.' }),
           (err) => setAdmin({ sMsg: err.message || 'Could not create that tutee.' })
         );
       };
@@ -2258,7 +2257,19 @@ class Component extends DCLogic {
         const cur = db.tutorOf(s.id);
         return {
           name: s.name, email: s.email, tutorId: cur ? cur.id : '', options: opts,
-          onLink: (e) => { db.linkStudent(s.id, e.target.value).catch(() => {}); }
+          onLink: (e) => { db.linkStudent(s.id, e.target.value).catch(() => {}); },
+          // Tutees created under the old magic-link flow have a random
+          // password nobody knows, so this is how they get a way in.
+          onSetPin: () => {
+            const pin = window.prompt('New PIN for ' + s.name + ' (at least 4 characters):', '');
+            if (pin === null) return;
+            if (pin.trim().length < 4) { setAdmin({ sMsg: 'A PIN of at least 4 characters is required.' }); return; }
+            setAdmin({ sMsg: 'Setting the PIN for \u201c' + s.name + '\u201d\u2026' });
+            db.setPin(s.id, pin.trim()).then(
+              () => setAdmin({ sMsg: 'PIN for \u201c' + s.name + '\u201d is now ' + pin.trim() + ' \u2014 note it now, it cannot be shown again.' }),
+              (err) => setAdmin({ sMsg: err.message || 'Could not set that PIN.' })
+            );
+          }
         };
       });
     }

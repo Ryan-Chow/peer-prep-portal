@@ -1,4 +1,4 @@
-// create-user — admin-only account creation.
+// create-user — admin-only account creation, and PIN resets.
 //
 // Creating an auth user needs the service_role key, which can never ship to a
 // static site. The browser calls this with the admin's own access token; we
@@ -28,12 +28,14 @@ function json(body: unknown, status = 200): Response {
 }
 
 interface Payload {
+  action?: 'set_pin';
   kind?: 'tutor' | 'tutee';
   username?: string;
   pin?: string;
   email?: string;
   display_name?: string;
   tutor_id?: string;
+  user_id?: string;
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -78,6 +80,32 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return json({ error: 'Expected a JSON body.' }, 400);
   }
 
+  // Resetting a PIN rides on this function rather than getting its own: the
+  // caller verification above is the whole point, and duplicating it would
+  // mean two places to get it wrong.
+  if (body.action === 'set_pin') {
+    const targetId = (body.user_id ?? '').trim();
+    const newPin = String(body.pin ?? '');
+    if (!targetId) return json({ error: 'A user is required.' }, 400);
+    if (newPin.length < 4) return json({ error: 'PIN must be at least 4 characters.' }, 400);
+
+    const { data: target, error: targetErr } = await admin
+      .from('profiles')
+      .select('role')
+      .eq('id', targetId)
+      .maybeSingle();
+    if (targetErr) return json({ error: 'Could not look that account up.' }, 500);
+    if (!target) return json({ error: 'No such account.' }, 404);
+    // An admin's password is not a PIN an admin hands out, and letting one
+    // admin overwrite another's would be a takeover of the whole project.
+    if (target.role === 'admin') return json({ error: 'Admin passwords are changed by password reset, not here.' }, 403);
+
+    const { error: pinErr } = await admin.auth.admin.updateUserById(targetId, { password: newPin });
+    if (pinErr) return json({ error: pinErr.message ?? 'Could not set the PIN.' }, 400);
+
+    return json({ id: targetId }, 200);
+  }
+
   const kind = body.kind;
   const displayName = (body.display_name ?? '').trim();
   if (kind !== 'tutor' && kind !== 'tutee') return json({ error: 'kind must be "tutor" or "tutee".' }, 400);
@@ -98,9 +126,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
   } else {
     email = (body.email ?? '').trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: 'A valid email is required.' }, 400);
-    // Tutees only ever sign in with a magic link, so the password is a
-    // throwaway that nobody — including the admin — is told.
-    password = crypto.randomUUID() + crypto.randomUUID();
+    password = String(body.pin ?? '');
+    if (password.length < 4) return json({ error: 'PIN must be at least 4 characters.' }, 400);
   }
 
   // email_confirm skips the verification mail: the admin vouched for them.

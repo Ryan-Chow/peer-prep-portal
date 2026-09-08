@@ -416,12 +416,13 @@
   // ---- auth ---------------------------------------------------------------
 
   const auth = {
-    // Tutees never get a password: they receive a one-time link, and only if
-    // an admin already created the account.
-    async signInStudent(email) {
-      const { error } = await sb.auth.signInWithOtp({
-        email: String(email || '').trim(),
-        options: { shouldCreateUser: false }
+    // Tutees sign in with the email on file plus a PIN an admin set for them.
+    // Lowercased because Supabase folds addresses on the way in, so a tutee
+    // typing their own address capitalised would otherwise miss their account.
+    async signInStudent(email, pin) {
+      const { error } = await sb.auth.signInWithPassword({
+        email: String(email || '').trim().toLowerCase(),
+        password: String(pin || '')
       });
       if (error) throw error;
     },
@@ -799,22 +800,14 @@
     return { correct: !!row.is_correct, explanation: row.explanation, correctAnswer: row.correct_answer };
   }
 
-  // Goes through the Edge Function: creating an auth user needs the service
-  // role key, which must never reach the browser.
-  async function createUser(u) {
+  // Anything that touches the auth schema goes through the Edge Function:
+  // creating a user and setting a password both need the service role key,
+  // which must never reach the browser. The admin's own access token is what
+  // the function checks the caller against.
+  async function callAdminFn(body, fallbackMsg) {
     const { data } = await sb.auth.getSession();
     const session = data && data.session;
     if (!session) throw new Error('Your session expired — sign in again.');
-
-    const kind = dbRole(u.role) === 'tutor' ? 'tutor' : 'tutee';
-    const body = { kind: kind, display_name: u.name };
-    if (kind === 'tutor') {
-      body.username = u.username;
-      body.pin = u.pin;
-    } else {
-      body.email = u.email;
-      if (u.tutorId) body.tutor_id = u.tutorId;
-    }
 
     const res = await fetch(cfg.SUPABASE_URL + '/functions/v1/create-user', {
       method: 'POST',
@@ -826,11 +819,30 @@
       body: JSON.stringify(body)
     });
     const out = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(out.error || ('Could not create the account (' + res.status + ').'));
+    if (!res.ok) throw new Error(out.error || (fallbackMsg + ' (' + res.status + ').'));
+    return out;
+  }
 
+  async function createUser(u) {
+    const kind = dbRole(u.role) === 'tutor' ? 'tutor' : 'tutee';
+    const body = { kind: kind, display_name: u.name, pin: u.pin };
+    if (kind === 'tutor') {
+      body.username = u.username;
+    } else {
+      body.email = u.email;
+      if (u.tutorId) body.tutor_id = u.tutorId;
+    }
+
+    const out = await callAdminFn(body, 'Could not create the account');
     await load();
     notify();
     return out.id;
+  }
+
+  // No cache reload afterwards: Supabase keeps only the hash, so there is
+  // nothing about the new PIN for the roster to display.
+  async function setPin(userId, pin) {
+    await callAdminFn({ action: 'set_pin', user_id: userId, pin: pin }, 'Could not set the PIN');
   }
 
   async function linkStudent(studentId, tutorId) {
@@ -1147,6 +1159,7 @@
       return (link && S.users.get(link.tutor_id)) || null;
     },
     createUser: createUser,
+    setPin: setPin,
     linkStudent: linkStudent,
 
     // Newest first, which is the order both the tutee's tab and the tutor's
