@@ -126,6 +126,11 @@
         // Both the table and the view expose these: they describe the
         // problem, not its answer, and the assign screen filters on them.
         tags: Array.isArray(row.tags) ? row.tags : [],
+        // problems_public carries neither, so a tutee reads false and ''.
+        // That is the right answer for them: flagging steers the assign
+        // screen, and an already-assigned problem still has to render.
+        flagged: !!row.flagged,
+        flagReason: row.flag_reason || '',
         sortOrder: row.sort_order
       }));
     });
@@ -570,6 +575,97 @@
     if (error) { m.problems = before; notify(); throw fail('deleteProblem', error); }
   }
 
+  // ---- flagged problems ---------------------------------------------------
+
+  // Every flagged problem in the library, module title carried along, because
+  // the screen that lists them is not inside any one module.
+  function flaggedProblems() {
+    const out = [];
+    S.modules.forEach((m) => {
+      m.problems.forEach((p) => {
+        if (p.flagged) out.push(Object.assign({ moduleId: m.id, moduleTitle: m.title }, p));
+      });
+    });
+    return out;
+  }
+
+  function flaggedCount() {
+    let n = 0;
+    S.modules.forEach((m) => m.problems.forEach((p) => { if (p.flagged) n++; }));
+    return n;
+  }
+
+  // Finds a problem by id alone. The flagged list spans modules, so the screen
+  // acting on it has an id and no module to look in.
+  function findProblem(problemId) {
+    let hit = null;
+    S.modules.forEach((m) => {
+      if (hit) return;
+      const p = m.problems.find((x) => x.id === problemId);
+      if (p) hit = { module: m, problem: p };
+    });
+    return hit;
+  }
+
+  // Unflagging keeps flag_reason. It is the record that this problem was
+  // looked at once and judged fine, and every sweep — 006, 007, and the rescan
+  // button — skips a row that has one, so nothing can flag it all over again.
+  async function setProblemsFlagged(problemIds, flagged) {
+    const ids = (problemIds || []).filter(Boolean);
+    if (!ids.length) return;
+    const hits = ids.map(findProblem).filter(Boolean);
+    const before = hits.map((h) => h.problem.flagged);
+    hits.forEach((h) => { h.problem.flagged = !!flagged; });
+    notify();
+
+    const { error } = await sb.from('problems').update({ flagged: !!flagged }).in('id', ids);
+    if (error) {
+      hits.forEach((h, i) => { h.problem.flagged = before[i]; });
+      notify();
+      throw fail('setProblemsFlagged', error);
+    }
+  }
+
+  // Re-runs the figure detector (007) over the whole library and returns how
+  // many rows it newly flagged. The importer does not run it, so this is what
+  // catches a batch that has just come in.
+  //
+  // A reload rather than a local patch: the sweep decides server-side which
+  // rows it touched and does not say which, so the cache has no way to apply
+  // the same change to itself.
+  async function rescanFigures() {
+    const { data, error } = await sb.rpc('flag_missing_figures');
+    if (error) throw fail('rescanFigures', error);
+    await load();
+    notify();
+    return Number(data) || 0;
+  }
+
+  // Deleting cascades to submissions and error log entries (004), and the ids
+  // stay behind in the problem_ids of any assignment that named them — where
+  // they are inert, because assignmentProblems() resolves ids against the
+  // module and a deleted problem is no longer in it.
+  async function deleteProblems(problemIds) {
+    const ids = (problemIds || []).filter(Boolean);
+    if (!ids.length) return;
+    const gone = new Set(ids);
+    const touched = [];
+    S.modules.forEach((m) => {
+      if (m.problems.some((p) => gone.has(p.id))) {
+        touched.push([m, m.problems.slice()]);
+        m.problems = m.problems.filter((p) => !gone.has(p.id));
+      }
+    });
+    notify();
+
+    const { error } = await sb.from('problems').delete().in('id', ids);
+    if (error) {
+      touched.forEach(([m, list]) => { m.problems = list; });
+      notify();
+      throw fail('deleteProblems', error);
+    }
+  }
+
   // Admin only, and the cascade is wide: problems, assignments, submissions and
   // error log entries all go with it. The counts shown in the confirmation come
   // from moduleDeleteCounts() rather than from this cache.
@@ -621,12 +717,15 @@
   const isDifficulty = (t) => DIFFICULTIES.indexOf(lower(t)) >= 0;
 
   // The topic tags a tutor can filter a module by, difficulty excluded — it
-  // has its own control.
+  // has its own control. Flagged problems are skipped here too, or a tag
+  // carried only by flagged problems would be offered as a filter that
+  // matches nothing.
   function moduleTags(moduleId) {
     const m = S.modules.get(moduleId);
     const seen = new Map();
     if (m) {
       m.problems.forEach((p) => {
+        if (p.flagged) return;
         (p.tags || []).forEach((t) => {
           if (!isDifficulty(t) && t && !seen.has(lower(t))) seen.set(lower(t), t);
         });
@@ -637,12 +736,18 @@
 
   // Everything in the module the filter reaches, in module order. Tags are
   // "any of", not "all of": picking two topics widens the pool.
+  //
+  // A flagged problem is one nobody can answer — the figure it asks about was
+  // never imported — so it is out of every pool this builds, and out of the
+  // random draw taken from that pool. Assignments already made are untouched:
+  // 003 froze their problem_ids, and assignmentProblems() reads those.
   function matchProblems(moduleId, filter) {
     const m = S.modules.get(moduleId);
     if (!m) return [];
     const want = ((filter && filter.tags) || []).map(lower).filter(Boolean);
     const level = lower(filter && filter.difficulty);
     return m.problems.filter((p) => {
+      if (p.flagged) return false;
       const tags = (p.tags || []).map(lower);
       if (level && tags.indexOf(level) < 0) return false;
       if (want.length && !want.some((t) => tags.indexOf(t) >= 0)) return false;
@@ -1097,6 +1202,11 @@
     updateModule: updateModule,
     saveProblem: saveProblem,
     deleteProblem: deleteProblem,
+    getFlaggedProblems: flaggedProblems,
+    getFlaggedCount: flaggedCount,
+    setProblemsFlagged: setProblemsFlagged,
+    rescanFigures: rescanFigures,
+    deleteProblems: deleteProblems,
     deleteModule: deleteModule,
     moduleDeleteCounts: moduleDeleteCounts,
 

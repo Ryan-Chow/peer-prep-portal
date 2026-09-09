@@ -49,9 +49,31 @@
   var TAG_RE = /<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^<>]*)?>/g;
   var CTRL_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
 
+  // \textdollar and \textpercent turn up all over the College Board exports
+  // and are undefined in KaTeX's maths mode. index.html carries macros for
+  // them, but these two are worth fixing in the stored text as well, because
+  // \$ and \% parse in maths and in prose alike. The other three the exports
+  // use — \textdegree, \textcent, \textbackslash — are left to the renderer:
+  // their maths-mode spellings are not legal in text mode, so a blind rewrite
+  // would break every one sitting outside a $…$.
+  //
+  // A control word swallows one following space, so "\textdollar 5" means
+  // "$5"; keeping the space would introduce one that was never there.
+  //
+  // migrations/006 does exactly this to the rows already stored, and the two
+  // have to stay identical: matchKey() falls back to the question text, so a
+  // file normalised one way and a table normalised another would stop
+  // matching, and a re-import would insert duplicates instead of updating.
+  var MACRO_RE = /\\text(dollar|percent)(?![a-zA-Z])[ ]?/g;
+  var MACRO_MAP = { dollar: '\\$', percent: '\\%' };
+
+  function normalizeMacros(text) {
+    return text.replace(MACRO_RE, function (m, word) { return MACRO_MAP[word]; });
+  }
+
   function sanitizeText(value) {
     if (value == null) return '';
-    return String(value).replace(TAG_RE, '').replace(CTRL_RE, '').trim();
+    return normalizeMacros(String(value).replace(TAG_RE, '').replace(CTRL_RE, '')).trim();
   }
 
   // A tag is a difficulty tag when it reads as one in any casing; the stored

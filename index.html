@@ -17,10 +17,10 @@
      ten-minute cache: without this a returning tab can run a new index.html
      against an old db.js and call a function that does not exist yet. They
      move as one version because they are one layer. -->
-<script src="config.js?v=3"></script>
-<script src="supabaseClient.js?v=3"></script>
-<script src="importer.js?v=3"></script>
-<script src="db.js?v=3"></script>
+<script src="config.js?v=5"></script>
+<script src="supabaseClient.js?v=5"></script>
+<script src="importer.js?v=5"></script>
+<script src="db.js?v=5"></script>
 </head>
 <body>
 <x-dc>
@@ -1087,6 +1087,48 @@ textarea.input { min-height: 90px; resize: vertical; }
       </div>
     </sc-if>
 
+    <sc-if value="{{sFlagged}}" hint-placeholder-val="{{false}}">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Admin</div>
+      <div style="display:flex;align-items:center;gap:12px;margin:4px 0 10px">
+        <h1 style="margin:0">Flagged problems</h1>
+        <span class="tag tag-outline">{{flagBadge}}</span>
+      </div>
+      <p style="max-width:620px;margin:0 0 16px;font-size:14px;line-height:1.6;opacity:0.75">These questions ask about a graph, table or figure that did not come across with the import, so there is nothing to read the answer off. Unflag any that stand on their own; delete the rest. A problem you unflag stays unflagged: no later scan will pick it up again.</p>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:0 0 20px">
+        <button type="button" class="btn btn-secondary" disabled="{{flagBusy}}" sc-camel-on-click="{{rescanFigures}}">{{rescanLabel}}</button>
+        <span class="text-muted" style="font-size:13px">Importing does not run this check. Press it after a new batch of problems goes in.</span>
+      </div>
+      <sc-if value="{{hasFlagMsg}}" hint-placeholder-val="{{false}}"><p style="margin:0 0 16px;font-size:13px;border-left:2px solid var(--color-accent);padding-left:10px">{{flagMsg}}</p></sc-if>
+      <sc-if value="{{flagEmpty}}" hint-placeholder-val="{{false}}">
+        <p class="text-muted" style="font-size:14px">Nothing is flagged.</p>
+      </sc-if>
+      <sc-if value="{{flagAny}}" hint-placeholder-val="{{true}}">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+          <label class="radio" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px"><input type="checkbox" checked="{{flagAllPicked}}" sc-camel-on-change="{{toggleAllFlagged}}"><span class="dot"></span><span>{{flagPickLabel}}</span></label>
+          <button type="button" class="btn btn-secondary" disabled="{{flagNonePicked}}" sc-camel-on-click="{{unflagPicked}}">Unflag</button>
+          <button type="button" class="btn btn-ghost" style="color:#8c1d18" disabled="{{flagNonePicked}}" sc-camel-on-click="{{deletePicked}}">Delete selected</button>
+        </div>
+        <div style="overflow-x:auto">
+          <sc-raw-table class="table">
+            <sc-raw-thead><sc-raw-tr><sc-raw-th></sc-raw-th><sc-raw-th>Module</sc-raw-th><sc-raw-th>Question</sc-raw-th><sc-raw-th>Why</sc-raw-th></sc-raw-tr></sc-raw-thead>
+            <sc-raw-tbody>
+              <sc-for list="{{flagRows}}" as="f" hint-placeholder-count="3">
+                <sc-raw-tr>
+                  <sc-raw-td style="vertical-align:top"><label class="radio" style="display:inline-flex;cursor:pointer"><input type="checkbox" checked="{{f.checked}}" sc-camel-on-change="{{f.toggle}}"><span class="dot"></span></label></sc-raw-td>
+                  <sc-raw-td style="vertical-align:top;white-space:nowrap">{{f.moduleTitle}}</sc-raw-td>
+                  <sc-raw-td style="vertical-align:top;min-width:320px;line-height:1.5">{{f.qEl}}</sc-raw-td>
+                  <sc-raw-td class="text-muted" style="vertical-align:top;font-size:13px">{{f.reason}}</sc-raw-td>
+                </sc-raw-tr>
+              </sc-for>
+            </sc-raw-tbody>
+          </sc-raw-table>
+        </div>
+        <sc-if value="{{flagMore}}" hint-placeholder-val="{{false}}">
+          <p class="text-muted" style="margin:16px 0 0;font-size:13px">{{flagMoreLabel}}</p>
+        </sc-if>
+      </sc-if>
+    </sc-if>
+
     <sc-if value="{{sEditor}}" hint-placeholder-val="{{false}}">
       <a href="#" sc-camel-on-click="{{backModules}}" style="font-size:13px;text-decoration:none">← Modules</a>
       <h1 style="margin:16px 0 20px">Edit module</h1>
@@ -1357,7 +1399,9 @@ class Component extends DCLogic {
     // log id -> true. One map for all three screens that expand a log; no two
     // of them are ever on screen together.
     openLogs: {},
-    alogs: { tutor: '', tutee: '', from: '', to: '' }
+    alogs: { tutor: '', tutee: '', from: '', to: '' },
+    // picked  problem id -> true, on the Flagged problems screen
+    flags: { picked: {}, busy: false, msg: '' }
   };
 
   componentDidMount() {
@@ -1524,15 +1568,134 @@ class Component extends DCLogic {
   }
   setEd(patch) { const E = this.state.editor; this.setState({ editor: Object.assign({}, E, { editing: Object.assign({}, E.editing, patch) }) }); }
 
-  math(text) {
-    const R = React, t = String(text == null ? '' : text);
-    const parts = t.split('$');
-    const nodes = parts.map((part, i) => {
-      if (i % 2 === 1 && window.katex) return R.createElement('span', { key: i, dangerouslySetInnerHTML: { __html: window.katex.renderToString(part, { throwOnError: false }) } });
-      if (i % 2 === 1) return R.createElement('span', { key: i, style: { fontStyle: 'italic' } }, part);
-      return R.createElement('span', { key: i }, part);
-    });
-    return R.createElement('span', null, nodes);
+  // KaTeX defines \textdollar, \textdegree and \textbackslash in text mode
+  // only, so "$\textdollar 5$" — the shape the College Board exports arrive
+  // in — is an undefined control sequence and renders as red source.
+  // \textcent and \textpercent it does not define at all. A macro is expanded
+  // in both modes, which fixes the maths without touching the stored text.
+  //
+  // Every body below therefore has to parse in both modes, because a macro
+  // shadows the text-mode original it is standing in for: "\text{30\textdegree}"
+  // parses today and must keep parsing. That rules out the obvious ^\circ and
+  // \backslash, which are maths-only, and \\, which is a line break in maths.
+  // KaTeX has no metrics for U+00A2, so a cent warns once and is drawn with
+  // approximate spacing; that beats not drawing it. The braces around \char
+  // are not decoration: a hex constant runs on until a non-hex character, so
+  // a bare \char"5C swallows the "b" in "a\textbackslash b" and draws U+05CB.
+  static MATH_MACROS = {
+    '\\textdollar': '\\$',
+    '\\textcent': '\u00a2',
+    '\\textdegree': '\u00b0',
+    '\\textpercent': '\\%',
+    '\\textbackslash': '{\\char"5C}'
+  };
+
+  // The same commands outside maths are just characters. KaTeX never sees
+  // these, and the "$" this puts back cannot be mistaken for a delimiter
+  // because splitMath has already finished by the time it runs.
+  static TEXT_MACRO_RE = /\\(\$|%)|\\(text(?:dollar|cent|degree|percent|backslash))[ ]?/g;
+  static TEXT_MACRO_MAP = {
+    '$': '$', '%': '%', textdollar: '$', textcent: '\u00a2',
+    textdegree: '\u00b0', textpercent: '%', textbackslash: '\\'
+  };
+
+  // Longest opener first: "$$" has to win against "$".
+  static MATH_DELIMS = [
+    { open: '$$', close: '$$', display: true },
+    { open: '\\[', close: '\\]', display: true },
+    { open: '\\(', close: '\\)', display: false },
+    { open: '$', close: '$', display: false }
+  ];
+
+  static warnedMath = new Set();
+
+  // Splits prose from maths. A backslash always takes the character after it
+  // along, so "\$" is a literal dollar rather than an opening delimiter, and
+  // an opener with no partner stays prose instead of swallowing the rest of
+  // the question — which is what the old split('$') did.
+  splitMath(src) {
+    const out = [];
+    let text = '', i = 0;
+    const flush = () => { if (text) { out.push({ math: false, body: text }); text = ''; } };
+
+    while (i < src.length) {
+      const d = Component.MATH_DELIMS.find((x) => src.startsWith(x.open, i));
+      if (d) {
+        const end = this.findClose(src, i + d.open.length, d.close);
+        if (end >= 0) {
+          flush();
+          out.push({ math: true, display: d.display, body: src.slice(i + d.open.length, end) });
+          i = end + d.close.length;
+          continue;
+        }
+      }
+      if (src[i] === '\\' && i + 1 < src.length) { text += src.slice(i, i + 2); i += 2; continue; }
+      text += src[i];
+      i += 1;
+    }
+    flush();
+    return out;
+  }
+
+  // The closer is tested before the escape skip, because "\]" and "\)" are
+  // themselves backslash pairs.
+  findClose(src, from, close) {
+    for (let i = from; i < src.length; i += 1) {
+      if (src.startsWith(close, i)) return i;
+      if (src[i] === '\\') i += 1;
+    }
+    return -1;
+  }
+
+  static plainText(body) {
+    return body.replace(Component.TEXT_MACRO_RE, (m, sym, word) => Component.TEXT_MACRO_MAP[sym || word]);
+  }
+
+  // KaTeX's own throwOnError:false prints the failed source in red, which is
+  // worse than the text it was given. Letting it throw instead names the
+  // command for the console and hands the caller a null, and the caller shows
+  // the source as ordinary prose — so a tutee sees a readable question rather
+  // than a red one.
+  katexHtml(body, display) {
+    if (!window.katex) return null;
+    try {
+      return window.katex.renderToString(body, {
+        displayMode: !!display,
+        macros: Component.MATH_MACROS,
+        throwOnError: true,
+        trust: false,
+        // Default "warn" fills the console with notes about the accented and
+        // unicode characters this corpus is full of, drowning the macro list.
+        strict: false
+      });
+    } catch (err) {
+      Component.noteMathFailure(err, body);
+      return null;
+    }
+  }
+
+  static noteMathFailure(err, body) {
+    const msg = (err && err.message) || String(err);
+    const hit = /(?:Undefined control sequence:|Can't use function)\s*'?(\\[a-zA-Z@]+)/.exec(msg);
+    const key = hit ? hit[1] : msg;
+    if (Component.warnedMath.has(key)) return;
+    Component.warnedMath.add(key);
+    console.warn(
+      '[ppa] KaTeX could not parse ' + key + ' \u2014 add it to Component.MATH_MACROS in index.html.'
+      + '\n  in: ' + body.slice(0, 120)
+      + '\n  all so far: ' + Array.from(Component.warnedMath).sort().join('  ')
+    );
+  }
+
+  renderMath(text) {
+    const R = React;
+    const segs = this.splitMath(String(text == null ? '' : text));
+    return R.createElement('span', null, segs.map((s, i) => {
+      if (!s.math) return R.createElement('span', { key: i }, Component.plainText(s.body));
+      const html = this.katexHtml(s.body, s.display);
+      if (html === null) return R.createElement('span', { key: i, style: { fontStyle: 'italic' } }, Component.plainText(s.body));
+      return R.createElement('span', { key: i, dangerouslySetInnerHTML: { __html: html } });
+    }));
   }
 
   renderVals() {
@@ -1541,7 +1704,7 @@ class Component extends DCLogic {
     const go = (name, extra) => () => this.setState({ route: Object.assign({ name: name }, extra || {}), problem: { choice: '', free: '' }, errAdd: this.blankErrAdd() });
     const goE = (name, extra) => (e) => { if (e && e.preventDefault) e.preventDefault(); go(name, extra)(); };
     const F = (sec, key) => (e) => this.setState({ [sec]: Object.assign({}, this.state[sec], { [key]: e.target.value }) });
-    const math = this.math.bind(this);
+    const math = this.renderMath.bind(this);
     const fmtDate = (iso) => { try { return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); } catch (e) { return iso; } };
     const todayISO = new Date().toISOString().slice(0, 10);
     // Three exclusive top-level screens. While the stored session is still
@@ -1612,10 +1775,16 @@ class Component extends DCLogic {
     // A tutor reaches session logs through a tutee on My Students rather than
     // through a tab of their own — there is nothing useful on such a tab that
     // is not already per-student.
+    //
+    // The count rides in the tab's own label because a nav link renders its
+    // label as text and has nowhere to hang a badge; the screen itself carries
+    // the badge proper.
+    const flaggedNow = me.role === 'admin' ? db.getFlaggedCount() : 0;
+    const flaggedTab = flaggedNow ? 'Flagged (' + flaggedNow + ')' : 'Flagged';
     const linkDefs = me.role === 'student' ? [['Dashboard', 'dash'], ['My Sessions', 'mySessions'], ['Error Log', 'errorLog']]
       : me.role === 'tutor' ? [['My Students', 'students'], ['Module Library', 'library'], ['Assign', 'assign'], ['Results', 'results'], ['Error Logs', 'errorLogs']]
-      : [['Users', 'users'], ['Modules', 'modules'], ['Import', 'import'], ['Session Logs', 'adminLogs'], ['Error Logs', 'errorLogs']];
-    const activeOf = { dash: 'dash', module: 'dash', problem: 'dash', students: 'students', profile: 'students', logs: 'students', library: 'library', preview: 'library', assign: 'assign', results: 'results', resultDetail: 'results', users: 'users', modules: 'modules', editor: 'modules', import: 'import', errorLog: 'errorLog', errorLogs: 'errorLogs', adminLogs: 'adminLogs', mySessions: 'mySessions' };
+      : [['Users', 'users'], ['Modules', 'modules'], ['Import', 'import'], [flaggedTab, 'flagged'], ['Session Logs', 'adminLogs'], ['Error Logs', 'errorLogs']];
+    const activeOf = { dash: 'dash', module: 'dash', problem: 'dash', students: 'students', profile: 'students', logs: 'students', library: 'library', preview: 'library', assign: 'assign', results: 'results', resultDetail: 'results', users: 'users', modules: 'modules', editor: 'modules', import: 'import', flagged: 'flagged', errorLog: 'errorLog', errorLogs: 'errorLogs', adminLogs: 'adminLogs', mySessions: 'mySessions' };
     // The log form is reached from two different tabs, so it lights whichever
     // one sent us there rather than picking one.
     const activeTab = route.name === 'logForm' ? (route.from === 'adminLogs' ? 'adminLogs' : 'students') : activeOf[route.name];
@@ -1625,7 +1794,7 @@ class Component extends DCLogic {
     v.sStudents = route.name === 'students'; v.sLibrary = route.name === 'library'; v.sPreview = route.name === 'preview';
     v.sAssign = route.name === 'assign'; v.sResults = route.name === 'results'; v.sResultDetail = route.name === 'resultDetail';
     v.sUsers = route.name === 'users'; v.sModules = route.name === 'modules'; v.sEditor = route.name === 'editor';
-    v.sImport = route.name === 'import';
+    v.sImport = route.name === 'import'; v.sFlagged = route.name === 'flagged';
     // A tutee reads their own log, a tutor or admin reads someone else's; one
     // screen, told apart by the role rather than by the route.
     v.sErrorLog = route.name === 'errorLog' || route.name === 'errorLogs';
@@ -2312,6 +2481,98 @@ class Component extends DCLogic {
           }, () => {});
         }
       }));
+    }
+
+    if (v.sFlagged) {
+      const FL = st.flags;
+      const all = db.getFlaggedProblems();
+      // 007 casts a much wider net than 006 did, so a big library can land a
+      // few hundred rows here at once, and every question in them renders
+      // through KaTeX. Draw a batch at a time; clearing it brings up the next.
+      const rows = all.slice(0, 150);
+      // A selection is only as good as the rows still on screen: unflagging or
+      // deleting removes rows, and an id left ticked in state would keep
+      // counting towards "3 selected" and towards the next action. Which is
+      // also why the cap is applied before this and not after — nothing off
+      // the end of the batch can be selected, so "Select all" means what it
+      // says and the two buttons act on what you can actually see.
+      const live = rows.filter((f) => FL.picked[f.id]).map((f) => f.id);
+      const setFlags = (patch) => this.setState({ flags: Object.assign({}, this.state.flags, patch) });
+
+      v.flagBadge = plural(all.length, 'problem');
+      v.flagEmpty = all.length === 0;
+      v.flagAny = all.length > 0;
+      v.flagMore = all.length > rows.length;
+      v.flagMoreLabel = 'Showing the first ' + rows.length + ' of ' + all.length + '. Clear these and the rest follow.';
+      v.flagNonePicked = live.length === 0;
+      v.flagAllPicked = live.length > 0 && live.length === rows.length;
+      v.flagPickLabel = live.length ? live.length + ' selected' : 'Select all';
+      v.flagMsg = FL.msg;
+      v.hasFlagMsg = !!FL.msg;
+      v.flagBusy = !!FL.busy;
+      v.rescanLabel = FL.busy ? 'Scanning\u2026' : 'Rescan library';
+
+      // The sweep runs server-side over every problem and reports only a
+      // count, so db reloads the cache rather than trying to guess which rows
+      // moved. db has already toasted anything that went wrong, so the
+      // rejection handler only has to put the button back.
+      v.rescanFigures = () => {
+        if (FL.busy) return;
+        setFlags({ busy: true, msg: '' });
+        db.rescanFigures().then(
+          (n) => this.setState({ flags: { picked: {}, busy: false,
+            msg: n ? 'Flagged ' + plural(n, 'further problem') + '.' : 'Nothing new to flag.' } }),
+          () => setFlags({ busy: false })
+        );
+      };
+
+      v.toggleAllFlagged = () => {
+        const picked = {};
+        if (live.length !== rows.length) rows.forEach((f) => { picked[f.id] = true; });
+        setFlags({ picked: picked, msg: '' });
+      };
+
+      v.flagRows = rows.map((f) => ({
+        moduleTitle: f.moduleTitle,
+        qEl: math(f.text),
+        reason: f.flagReason || '\u2014',
+        checked: !!FL.picked[f.id],
+        toggle: () => {
+          const cur = this.state.flags;
+          const next = Object.assign({}, cur.picked);
+          if (next[f.id]) delete next[f.id]; else next[f.id] = true;
+          setFlags({ picked: next, msg: '' });
+        }
+      }));
+
+      // Both actions clear the whole selection rather than the ids they
+      // touched: on success those rows are gone, and on failure db has rolled
+      // the cache back and said why, so starting again is the honest state.
+      const afterAct = (msg) => { this.setState({ flags: { picked: {}, busy: false, msg: msg } }); };
+
+      v.unflagPicked = () => {
+        if (!live.length) return;
+        db.setProblemsFlagged(live, false).then(
+          () => afterAct('Unflagged ' + plural(live.length, 'problem') + '.'),
+          () => {}
+        );
+      };
+
+      v.deletePicked = () => {
+        if (!live.length) return;
+        openDialog({
+          kicker: 'Delete problems',
+          title: plural(live.length, 'flagged problem'),
+          body: 'This removes them from the library for everyone, and cannot be undone.',
+          lines: [
+            'Any answers tutees submitted to them are discarded.',
+            'Any error log entries for them are cleared.',
+            'Assignments that included them keep the rest.'
+          ],
+          confirmLabel: 'Delete',
+          run: () => db.deleteProblems(live).then(() => afterAct('Deleted ' + plural(live.length, 'problem') + '.'))
+        });
+      };
     }
 
     if (v.sEditor) {
