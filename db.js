@@ -535,6 +535,16 @@
     const idx = isNew ? -1 : m.problems.findIndex((p) => p.id === id);
     const sortOrder = idx >= 0 ? m.problems[idx].sortOrder : m.problems.length;
 
+    // "Calculator allowed" is the editor's only tag control, so it rewrites
+    // exactly one member of the array and carries the rest — the difficulty,
+    // the topic labels the import wrote — through untouched. Without that
+    // filter-and-concat, saving an unrelated edit would quietly drop every
+    // tag the assign screen filters on.
+    const priorTags = (idx >= 0 ? m.problems[idx].tags : null) || [];
+    const tags = problem.calculator == null
+      ? priorTags.slice()
+      : priorTags.filter((t) => !isCalculator(t)).concat(problem.calculator ? [CALC_TAG] : []);
+
     const next = {
       id: id,
       type: problem.type,
@@ -542,9 +552,7 @@
       choices: problem.type === 'mc' ? (problem.choices || []) : [],
       answer: problem.answer == null ? '' : problem.answer,
       explanation: problem.explanation || '',
-      // The editor has no tag control, and the upsert below names no tag
-      // column, so an edit leaves whatever the import put there.
-      tags: idx >= 0 ? m.problems[idx].tags : [],
+      tags: tags,
       sortOrder: sortOrder
     };
     if (idx >= 0) m.problems[idx] = next; else m.problems.push(next);
@@ -558,6 +566,9 @@
       choices: next.type === 'mc' ? next.choices : null,
       answer: next.answer,
       explanation: next.explanation,
+      // null rather than [], matching what the importer writes, so the two
+      // paths cannot leave the same "no tags" state looking like two.
+      tags: next.tags.length ? next.tags : null,
       sort_order: next.sortOrder
     });
     if (error) { m.problems = before; notify(); throw fail('saveProblem', error); }
@@ -715,10 +726,33 @@
   const lower = (t) => String(t == null ? '' : t).trim().toLowerCase();
   const isDifficulty = (t) => DIFFICULTIES.indexOf(lower(t)) >= 0;
 
-  // The topic tags a tutor can filter a module by, difficulty excluded — it
-  // has its own control. Flagged problems are skipped here too, or a tag
-  // carried only by flagged problems would be offered as a filter that
-  // matches nothing.
+  // 'calculator' rides in the same array but is not a topic either: it says
+  // what a tutee may open on the problem screen. Same lower-case storage and
+  // same case-folded comparison as difficulty, for the same reason — a tag
+  // typed by hand in the editor may be capitalised.
+  const CALC_TAG = 'calculator';
+  const isCalculator = (t) => lower(t) === CALC_TAG;
+  const hasCalculator = (p) => ((p && p.tags) || []).some(isCalculator);
+
+  // Whether the problem screen offers the Desmos panel. Two ways to earn it —
+  // the module is SAT Math, where a calculator is allowed throughout, or the
+  // single problem is tagged — and one way to lose it that beats both: a
+  // Reading and Writing module never gets one, whatever a problem inside it
+  // was tagged, because there the calculator is not a tool but a distraction
+  // somebody mislabelled.
+  const READING_RE = /\b(reading|writing)\b/;
+  function calculatorAllowed(module, problem) {
+    const subject = lower(module && module.subject);
+    if (READING_RE.test(subject)) return false;
+    return subject === 'sat math' || hasCalculator(problem);
+  }
+
+  // The topic tags a tutor can filter a module by, difficulty and the
+  // calculator flag excluded — neither is a topic, and offering "calculator"
+  // in the topic list would let a tutor build an assignment out of the
+  // question of which tool is allowed. Flagged problems are skipped here too,
+  // or a tag carried only by flagged problems would be offered as a filter
+  // that matches nothing.
   function moduleTags(moduleId) {
     const m = S.modules.get(moduleId);
     const seen = new Map();
@@ -726,7 +760,8 @@
       m.problems.forEach((p) => {
         if (p.flagged) return;
         (p.tags || []).forEach((t) => {
-          if (!isDifficulty(t) && t && !seen.has(lower(t))) seen.set(lower(t), t);
+          if (!t || isDifficulty(t) || isCalculator(t)) return;
+          if (!seen.has(lower(t))) seen.set(lower(t), t);
         });
       });
     }
@@ -1221,6 +1256,11 @@
     getModuleTags: moduleTags,
     matchProblems: matchProblems,
     describeFilter: describeFilter,
+    // The calculator rule lives here rather than in the screen that draws the
+    // button, because it is a question about the data — the module's subject
+    // and the problem's tags — and the editor's checkbox has to agree with it.
+    calculatorAllowed: calculatorAllowed,
+    problemHasCalculator: hasCalculator,
     getAssignmentProblems: (assignmentId) => assignmentProblems(S.assignments.get(assignmentId)),
     // Assignments made before filtering existed have no label of their own.
     assignmentLabel: (a) => {

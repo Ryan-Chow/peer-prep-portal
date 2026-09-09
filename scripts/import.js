@@ -112,6 +112,12 @@ async function main() {
         .filter((k) => byLevel[k])
         .map((k) => byLevel[k] + ' ' + k);
       if (levels.length) console.log('      difficulty: ' + levels.join(', '));
+      // Only printed when something carries it. The count is the one cheap
+      // check that the flag landed on the rows meant to have it — otherwise
+      // it stays invisible until a tutee opens a problem and finds no
+      // calculator, or finds one they should not have had.
+      const calc = d.problems.filter((p) => !p.errors.length && p.calculator).length;
+      if (calc) console.log('      calculator: ' + calc + ' of ' + d.validCount);
     }
     d.problems.forEach((p) => {
       if (p.errors.length) console.log('      row ' + p.row + ': ' + p.errors.join(' '));

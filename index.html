@@ -17,10 +17,10 @@
      ten-minute cache: without this a returning tab can run a new index.html
      against an old db.js and call a function that does not exist yet. They
      move as one version because they are one layer. -->
-<script src="config.js?v=6"></script>
-<script src="supabaseClient.js?v=6"></script>
-<script src="importer.js?v=6"></script>
-<script src="db.js?v=6"></script>
+<script src="config.js?v=7"></script>
+<script src="supabaseClient.js?v=7"></script>
+<script src="importer.js?v=7"></script>
+<script src="db.js?v=7"></script>
 </head>
 <body>
 <x-dc>
@@ -457,6 +457,40 @@ textarea.input { min-height: 90px; resize: vertical; }
     a { color: var(--color-accent-700); }
     a:hover { color: var(--color-accent-900); }
     .katex { font-size: 1.05em; }
+
+    /* The calculator panel is positioned from JS, because dragging it through
+       setState would re-render the whole screen — and re-run KaTeX over every
+       problem on it — once per pointer event. Everything here is the chrome;
+       left/top/width/height arrive inline. */
+    .calc-launch { position: fixed; right: 20px; bottom: 20px; z-index: 60; }
+    .calc-panel {
+      position: fixed; z-index: 61; flex-direction: column; overflow: hidden;
+      background: var(--color-surface); border: 1px solid var(--color-neutral-400);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+    }
+    .calc-head {
+      display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 12px;
+      background: var(--color-neutral-200); border-bottom: 1px solid var(--color-neutral-300);
+      cursor: move; user-select: none; touch-action: none;
+    }
+    .calc-title { flex: 1; font-family: var(--font-heading); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.7; }
+    .calc-btn { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 14px; line-height: 1; padding: 4px 9px; }
+    .calc-btn:hover { background: var(--color-neutral-300); }
+    .calc-body { flex: 1; min-height: 0; }
+    /* Desmos sizes itself to the frame, so the frame has to be told a height in
+       pixels; a percentage of an auto-height parent would collapse to nothing. */
+    .calc-frame { display: block; width: 100%; height: 100%; border: 0; }
+    .calc-grip { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; touch-action: none; }
+    .calc-grip::after { content: ""; position: absolute; right: 3px; bottom: 3px; width: 8px; height: 8px; border-right: 2px solid var(--color-neutral-500); border-bottom: 2px solid var(--color-neutral-500); }
+
+    /* On a phone there is nowhere to drag a floating window to, so it stops
+       floating: full-screen sheet, and minimise leaves the bar at the bottom.
+       These beat the inline geometry, which is why they shout. */
+    @media (max-width: 700px) {
+      .calc-panel { left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important; width: auto !important; height: 100% !important; }
+      .calc-panel.calc-min { height: auto !important; }
+      .calc-grip { display: none; }
+    }
   </style>
 </helmet>
 
@@ -1152,6 +1186,10 @@ textarea.input { min-height: 90px; resize: vertical; }
             <div class="field" style="max-width:220px"><label>Correct answer</label><input class="input" value="{{pfAnswer}}" sc-camel-on-change="{{onPfAnswer}}"></div>
           </sc-if>
           <div class="field"><label>Explanation</label><textarea class="input" rows="2" value="{{pfExpl}}" sc-camel-on-change="{{onPfExpl}}"></textarea></div>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
+            <input type="checkbox" checked="{{pfCalc}}" sc-camel-on-change="{{onPfCalc}}">
+            <span>{{pfCalcLabel}}</span>
+          </label>
           <div style="display:flex;gap:8px">
             <button type="button" class="btn btn-primary blueprint" sc-camel-on-click="{{pfSave}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Save problem</button>
             <button type="button" class="btn btn-ghost" sc-camel-on-click="{{pfCancel}}">Cancel</button>
@@ -1343,6 +1381,11 @@ textarea.input { min-height: 90px; resize: vertical; }
   </sc-if>
 </sc-if>
 
+<!-- Outside every sc-if on purpose. Rendered inside the problem screen, the
+     Desmos iframe would unmount on Next and take the tutee's working with it;
+     out here React keeps the same DOM node across every route change. -->
+<div class="calc-mount">{{calcLayer}}</div>
+
 </x-dc>
 <script type="text/x-dc" data-dc-script="" data-props="{}">
 class Component extends DCLogic {
@@ -1372,8 +1415,17 @@ class Component extends DCLogic {
     openLogs: {},
     alogs: { tutor: '', tutee: '', from: '', to: '' },
     // picked  problem id -> true, on the Flagged problems screen
-    flags: { picked: {}, busy: false, msg: '' }
+    flags: { picked: {}, busy: false, msg: '' },
+    // open/minimised only. The window's position and size are in _calc below,
+    // deliberately out of state — see calcGesture.
+    calc: this.calcSaved()
   };
+
+  // Seeded from the same saved read as state.calc, so the window opens where it
+  // was left. Null x/y mean "never placed", which is not the same as a stored
+  // corner: it lets the default position follow the size of the window it is
+  // being drawn in rather than the one it was last dragged around.
+  _calc = { x: this.state.calc.x, y: this.state.calc.y, w: this.state.calc.w, h: this.state.calc.h };
 
   componentDidMount() {
     if (!window.katex) {
@@ -1388,7 +1440,14 @@ class Component extends DCLogic {
         const me = window.db.me();
         const at = this.state.route.name;
         if (me && at === 'login') this.setState({ route: this.homeRoute(me.role), login: this.blankLogin() });
-        else if (!me && at !== 'login') this.setState({ route: { name: 'login' }, login: this.blankLogin() });
+        else if (!me && at !== 'login') {
+          // Signing out takes the calculator with it. Leaving it mounted would
+          // hand the next person at this browser the last one's working, and
+          // leaving the flag set would remount the iframe on their dashboard
+          // before they had asked for a calculator at all.
+          this._calcMounted = false;
+          this.setState({ route: { name: 'login' }, login: this.blankLogin() });
+        }
         else this.forceUpdate();
       });
       // Idempotent — db already kicked this off at load time.
@@ -1669,6 +1728,171 @@ class Component extends DCLogic {
     }));
   }
 
+  // ---- Desmos calculator ---------------------------------------------------
+  //
+  // Whether a problem is allowed one is db.calculatorAllowed()'s business, so
+  // the editor's checkbox and the tutee's button cannot drift apart. All of
+  // this is just the window around the iframe.
+
+  static CALC_SRC = 'https://www.desmos.com/calculator';
+  static CALC_KEY = 'ppa-calc-v1';
+  static CALC_MIN_W = 300;
+  static CALC_MIN_H = 360;
+  static CALC_DEF_W = 420;
+  static CALC_DEF_H = 520;
+
+  // Runs during field initialisation, before the first render, so it has to
+  // survive anything: no entry, a half-written one, a browser that throws on
+  // localStorage in private mode. Every field is checked rather than trusted —
+  // a stored NaN width would otherwise reach a style property and take the
+  // panel out of the layout entirely.
+  calcSaved() {
+    let raw = null;
+    try { raw = JSON.parse(window.localStorage.getItem(Component.CALC_KEY) || 'null'); } catch (e) { raw = null; }
+    const s = raw && typeof raw === 'object' ? raw : {};
+    const px = (n, dflt) => (typeof n === 'number' && isFinite(n) ? n : dflt);
+    return {
+      open: s.open === true, min: s.min === true,
+      x: px(s.x, null), y: px(s.y, null),
+      w: px(s.w, Component.CALC_DEF_W), h: px(s.h, Component.CALC_DEF_H)
+    };
+  }
+
+  calcSave(c) {
+    const g = this._calc;
+    try {
+      window.localStorage.setItem(Component.CALC_KEY,
+        JSON.stringify({ open: c.open, min: c.min, x: g.x, y: g.y, w: g.w, h: g.h }));
+    } catch (e) { /* Private mode, or a full quota. The panel still works, it just forgets. */ }
+  }
+
+  calcSet(patch) {
+    const next = Object.assign({}, this.state.calc, patch);
+    this.setState({ calc: next });
+    this.calcSave(next);
+  }
+
+  // Clamped on the way out on every render, not once when the drag ends: the
+  // window a panel was placed in is not the window it is next drawn in, and a
+  // panel remembered at x=1500 on a desktop must not open off-screen on a
+  // laptop. When minimised the clamp uses the collapsed height, or the bar
+  // could not be dragged into the bottom two thirds of the screen.
+  calcGeom() {
+    const g = this._calc, W = window.innerWidth, H = window.innerHeight;
+    const w = Math.min(Math.max(g.w, Component.CALC_MIN_W), Math.max(Component.CALC_MIN_W, W));
+    const h = Math.min(Math.max(g.h, Component.CALC_MIN_H), Math.max(Component.CALC_MIN_H, H));
+    const tall = (this.state.calc.min && this._calcEl) ? this._calcEl.offsetHeight : h;
+    const maxX = Math.max(0, W - w), maxY = Math.max(0, H - tall);
+    return {
+      x: g.x == null ? Math.max(0, maxX - 20) : Math.min(Math.max(g.x, 0), maxX),
+      y: g.y == null ? Math.max(0, maxY - 20) : Math.min(Math.max(g.y, 0), maxY),
+      w: w, h: h
+    };
+  }
+
+  // The header and the resize grip are the same gesture reading the same
+  // pointer delta into a different pair of numbers, so they share a handler.
+  //
+  // It writes straight to the element's style rather than through setState.
+  // A pointermove arrives with every frame of the drag, and a setState per
+  // frame would re-render the whole screen — re-running KaTeX over every line
+  // of the problem behind the panel — to move a window twelve pixels. The
+  // committed position goes into _calc, which the next real render reads back,
+  // so the panel stays exactly where the pointer left it.
+  //
+  // Pointer capture is what lets the drag cross the iframe. Without it the
+  // moment the cursor passes over Desmos the events belong to Desmos, and the
+  // panel sticks at the edge of its own border.
+  calcGesture(mode) {
+    return (e) => {
+      if (e.button != null && e.button !== 0) return;
+      if (!this._calcEl) return;
+      e.preventDefault();
+      const el = this._calcEl, target = e.currentTarget;
+      const start = this.calcGeom(), x0 = e.clientX, y0 = e.clientY;
+      try { target.setPointerCapture(e.pointerId); } catch (err) { /* older Safari */ }
+      const move = (ev) => {
+        const dx = ev.clientX - x0, dy = ev.clientY - y0;
+        this._calc = mode === 'move'
+          ? { x: start.x + dx, y: start.y + dy, w: start.w, h: start.h }
+          : { x: start.x, y: start.y, w: start.w + dx, h: start.h + dy };
+        const c = this.calcGeom();
+        this._calc = c;
+        el.style.left = c.x + 'px'; el.style.top = c.y + 'px';
+        if (mode !== 'move') { el.style.width = c.w + 'px'; el.style.height = c.h + 'px'; }
+      };
+      const done = () => {
+        target.removeEventListener('pointermove', move);
+        target.removeEventListener('pointerup', done);
+        target.removeEventListener('pointercancel', done);
+        this.calcSave(this.state.calc);
+      };
+      target.addEventListener('pointermove', move);
+      target.addEventListener('pointerup', done);
+      target.addEventListener('pointercancel', done);
+    };
+  }
+
+  calcRef = (el) => { this._calcEl = el; };
+
+  // Built with createElement rather than written into the template, for three
+  // reasons that all point the same way: the template has no sc-raw-iframe, it
+  // has no pointermove to drag with, and — worst — an <iframe src> sitting in
+  // it is live DOM that would fetch Desmos on the login screen.
+  renderCalcLayer(allowed) {
+    const R = React, C = this.state.calc;
+    const showing = allowed && C.open;
+    // Mounted for good from the first time it is opened. That is what keeps the
+    // tutee's working alive across Next, Previous and the trip back through the
+    // problem list — the panel is hidden between problems, never removed. It is
+    // equally deliberate that nothing mounts before that first click: an iframe
+    // in the tree from page load would pull Desmos down for every tutee on
+    // every screen, including the ones not allowed a calculator at all.
+    if (showing) this._calcMounted = true;
+    const launch = (allowed && !C.open)
+      ? R.createElement('button', {
+        type: 'button', className: 'btn btn-secondary calc-launch',
+        onClick: () => this.calcSet({ open: true })
+      }, 'Calculator')
+      : null;
+    if (!this._calcMounted) return launch;
+    const g = this.calcGeom();
+    // Without this the buttons in the header start a drag as well as firing.
+    const stop = (ev) => ev.stopPropagation();
+    const panel = R.createElement('div', {
+      className: 'calc-panel' + (C.min ? ' calc-min' : ''),
+      ref: this.calcRef,
+      style: {
+        display: showing ? 'flex' : 'none',
+        left: g.x + 'px', top: g.y + 'px',
+        width: g.w + 'px', height: C.min ? 'auto' : g.h + 'px'
+      }
+    },
+      R.createElement('div', { className: 'calc-head', onPointerDown: this.calcGesture('move') },
+        R.createElement('span', { className: 'calc-title' }, 'Calculator'),
+        R.createElement('button', {
+          type: 'button', className: 'calc-btn', title: C.min ? 'Restore' : 'Minimise',
+          'aria-label': C.min ? 'Restore' : 'Minimise',
+          onPointerDown: stop, onClick: () => this.calcSet({ min: !C.min })
+        }, C.min ? '\u25a1' : '\u2013'),
+        R.createElement('button', {
+          type: 'button', className: 'calc-btn', title: 'Close', 'aria-label': 'Close',
+          onPointerDown: stop, onClick: () => this.calcSet({ open: false })
+        }, '\u00d7')
+      ),
+      // Hidden, not unmounted, when minimised — for the same reason as the
+      // panel itself. display:none costs Desmos nothing but a repaint.
+      R.createElement('div', { className: 'calc-body', style: { display: C.min ? 'none' : 'block' } },
+        R.createElement('iframe', {
+          className: 'calc-frame', src: Component.CALC_SRC,
+          title: 'Desmos graphing calculator', allow: 'fullscreen'
+        })
+      ),
+      C.min ? null : R.createElement('div', { className: 'calc-grip', onPointerDown: this.calcGesture('size') })
+    );
+    return R.createElement(R.Fragment, null, launch, panel);
+  }
+
   renderVals() {
     const st = this.state, db = window.db, route = st.route;
     const me = db ? db.me() : null;
@@ -1683,6 +1907,11 @@ class Component extends DCLogic {
     // signed-in reload flashes "log in" and then jumps.
     const booting = db ? db.booting() : true;
     const v = { isBooting: booting, isLogin: !booting && !me, isApp: !booting && !!me };
+    // Decided at the bottom of this function, once the problem screen has said
+    // whether this problem is allowed a calculator. Set here too, so the early
+    // return below leaves no undefined hole.
+    v.calcLayer = null;
+    let calcOK = false;
 
     // ---- login ----
     const L = st.login;
@@ -1876,6 +2105,7 @@ class Component extends DCLogic {
         v.posKicker = db.assignmentLabel(a) + ' \u00b7 Problem ' + (i + 1) + ' of ' + probs.length;
         v.backModule = goE('module', { assignmentId: a.id });
         v.qEl = math(p.text);
+        calcOK = db.calculatorAllowed(m, p);
         v.isMC = p.type === 'mc'; v.isFree = p.type === 'free';
         const answered = !!sub;
         v.answered = answered; v.notAnswered = !answered;
@@ -2545,10 +2775,10 @@ class Component extends DCLogic {
           num: String(i + 1).padStart(2, '0'),
           snippet: strip(p.text).slice(0, 90) + (p.text.length > 90 ? '\u2026' : ''),
           typeLabel: p.type === 'mc' ? 'MC' : 'Free',
-          edit: () => this.setState({ editor: Object.assign({}, this.state.editor, { editing: { id: p.id, text: p.text, type: p.type, c0: (p.choices || [])[0] || '', c1: (p.choices || [])[1] || '', c2: (p.choices || [])[2] || '', c3: (p.choices || [])[3] || '', answer: p.answer, explanation: p.explanation || '' } }) }),
+          edit: () => this.setState({ editor: Object.assign({}, this.state.editor, { editing: { id: p.id, text: p.text, type: p.type, c0: (p.choices || [])[0] || '', c1: (p.choices || [])[1] || '', c2: (p.choices || [])[2] || '', c3: (p.choices || [])[3] || '', answer: p.answer, explanation: p.explanation || '', calculator: db.problemHasCalculator(p) } }) }),
           del: () => { db.deleteProblem(m.id, p.id).catch(() => {}); }
         }));
-        v.addProblem = () => this.setState({ editor: Object.assign({}, this.state.editor, { editing: { id: null, text: '', type: 'mc', c0: '', c1: '', c2: '', c3: '', answer: 'A', explanation: '' } }) });
+        v.addProblem = () => this.setState({ editor: Object.assign({}, this.state.editor, { editing: { id: null, text: '', type: 'mc', c0: '', c1: '', c2: '', c3: '', answer: 'A', explanation: '', calculator: false } }) });
         const ed = E.editing;
         v.editing = !!ed;
         if (ed) {
@@ -2565,13 +2795,23 @@ class Component extends DCLogic {
           v.pfC3 = ed.c3; v.onPfC3 = (e) => this.setEd({ c3: e.target.value });
           v.pfAnswer = ed.answer; v.onPfAnswer = (e) => this.setEd({ answer: e.target.value });
           v.pfExpl = ed.explanation; v.onPfExpl = (e) => this.setEd({ explanation: e.target.value });
+          v.pfCalc = !!ed.calculator; v.onPfCalc = (e) => this.setEd({ calculator: e.target.checked });
+          // The label asks db the same two questions the tutee's screen asks,
+          // rather than restating the rule, so a checkbox that cannot change
+          // the outcome says so instead of looking broken.
+          const CALC = window.ppaImport.CALC_TAG;
+          v.pfCalcLabel = db.calculatorAllowed(m, { tags: [] })
+            ? 'Calculator allowed \u2014 already on for every problem in an ' + m.subject + ' module'
+            : !db.calculatorAllowed(m, { tags: [CALC] })
+              ? 'Calculator allowed \u2014 ignored on a reading or writing module'
+              : 'Calculator allowed on this problem';
           v.pfCancel = () => this.setState({ editor: Object.assign({}, this.state.editor, { editing: null }) });
           v.pfSave = () => {
             const e2 = this.state.editor.editing;
             if (!e2.text.trim()) return;
             const problem = e2.type === 'mc'
-              ? { id: e2.id || undefined, type: 'mc', text: e2.text, choices: [e2.c0, e2.c1, e2.c2, e2.c3], answer: e2.answer || 'A', explanation: e2.explanation }
-              : { id: e2.id || undefined, type: 'free', text: e2.text, answer: e2.answer, explanation: e2.explanation };
+              ? { id: e2.id || undefined, type: 'mc', text: e2.text, choices: [e2.c0, e2.c1, e2.c2, e2.c3], answer: e2.answer || 'A', explanation: e2.explanation, calculator: !!e2.calculator }
+              : { id: e2.id || undefined, type: 'free', text: e2.text, answer: e2.answer, explanation: e2.explanation, calculator: !!e2.calculator };
             db.saveProblem(m.id, problem).catch(() => {});
             this.setState({ editor: Object.assign({}, this.state.editor, { editing: null }) });
           };
@@ -2803,6 +3043,7 @@ class Component extends DCLogic {
       });
     }
 
+    v.calcLayer = this.renderCalcLayer(calcOK);
     return v;
   }
 }

@@ -21,6 +21,11 @@
   // problems.tags serves both "hard" and "Information and Ideas", and so a
   // problem can carry it without every other filter growing a column too.
   var DIFFICULTIES = ['easy', 'medium', 'hard'];
+  // "Calculator allowed" is a tag for the same reason, and the portal reads it
+  // straight out of problems.tags to decide whether to offer the Desmos panel.
+  // problems_public already carries tags, so a tutee's browser can see this
+  // one without a migration or a second column.
+  var CALC_TAG = 'calculator';
   // Page size for reads. Comfortably under PostgREST's default row cap, so a
   // short page always means "that was the last one".
   var PAGE = 500;
@@ -82,6 +87,13 @@
   function difficultyOf(tag) {
     var t = String(tag == null ? '' : tag).trim().toLowerCase();
     return DIFFICULTIES.indexOf(t) >= 0 ? t : '';
+  }
+
+  // Canonically lower case for the same reason difficulty is: everything
+  // downstream folds case anyway, and storing one form stops "Calculator" and
+  // "calculator" reading as two different tags in a tutor's filter list.
+  function calculatorOf(tag) {
+    return String(tag == null ? '' : tag).trim().toLowerCase() === CALC_TAG ? CALC_TAG : '';
   }
 
   function slugify(title) {
@@ -190,6 +202,7 @@
       explanation: '',
       tags: [],
       difficulty: '',
+      calculator: false,
       sourceId: '',
       errors: []
     };
@@ -215,7 +228,7 @@
     if (value.tags != null) {
       if (Array.isArray(value.tags)) {
         p.tags = value.tags.map(sanitizeText).filter(Boolean)
-          .map(function (t) { return difficultyOf(t) || t; });
+          .map(function (t) { return difficultyOf(t) || calculatorOf(t) || t; });
       } else {
         p.errors.push('tags must be an array of strings.');
       }
@@ -242,6 +255,21 @@
       p.errors.push('this problem has more than one difficulty (' + levels.join(', ') + ').');
     }
     if (!p.difficulty) p.difficulty = levels[0] || '';
+
+    // Same two ways of saying it as difficulty: the flag, or the word already
+    // sitting in "tags". The flag wins where they disagree, including when it
+    // is false — an explicit false takes the tag away, so a re-import can
+    // withdraw the calculator rather than the file being a one-way door.
+    if (value.calculator != null) {
+      if (typeof value.calculator !== 'boolean') {
+        p.errors.push('calculator must be true or false.');
+      } else if (value.calculator) {
+        if (!p.tags.some(calculatorOf)) p.tags.push(CALC_TAG);
+      } else {
+        p.tags = p.tags.filter(function (t) { return !calculatorOf(t); });
+      }
+    }
+    p.calculator = p.tags.some(calculatorOf);
 
     if (value.source_id != null && value.source_id !== '') {
       p.sourceId = sanitizeText(value.source_id);
@@ -664,6 +692,8 @@
     LETTERS: LETTERS,
     DIFFICULTIES: DIFFICULTIES,
     difficultyOf: difficultyOf,
+    CALC_TAG: CALC_TAG,
+    calculatorOf: calculatorOf,
     parse: parse,
     run: run,
     slugify: slugify,

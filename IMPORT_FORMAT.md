@@ -36,7 +36,7 @@ same as one array of four.
 | Field | Required | Notes |
 | --- | --- | --- |
 | `title` | yes | Must contain at least one letter or digit. Doubles as the module's identity — see [Re-importing](#re-importing). |
-| `subject` | no | Defaults to `General`. Shown as the tag on the module card. |
+| `subject` | no | Defaults to `General`. Shown as the tag on the module card, and read by the [calculator](#calculator) rule. |
 | `description` | no | Defaults to empty. |
 
 Two modules in one file cannot share a title.
@@ -52,8 +52,9 @@ An array. Each entry:
 | `choices` | for `multiple_choice` | Exactly four non-empty strings, in A–D order. |
 | `answer` | yes | For `multiple_choice`, a single letter `A`–`D`. For `free_response`, the exact string a tutee must type. |
 | `explanation` | no | Shown after the tutee answers. May contain LaTeX. |
-| `tags` | no | Array of strings. Tutors filter on these when assigning. Not shown to tutees. |
+| `tags` | no | Array of strings. Tutors filter on these when assigning; two of them, the difficulty and `calculator`, also drive behaviour. |
 | `difficulty` | no | `"easy"`, `"medium"` or `"hard"`. See [Difficulty](#difficulty). |
+| `calculator` | no | `true` or `false`. See [Calculator](#calculator). |
 | `source_id` | no | Your own identifier for this problem. See [Re-importing](#re-importing). |
 
 Four choices is a hard requirement, not a default: the rest of the portal —
@@ -85,7 +86,36 @@ writing anything.
 
 Every other tag is a topic label. Tutors pick from the distinct tags found in
 the module — `"Information and Ideas"`, `"word-problem"` — and can combine one
-with a difficulty and a count: *Information and Ideas — Hard (10 random)*.
+with a difficulty and a count: *Information and Ideas — Hard (10 random)*. The
+difficulty and `calculator` are kept out of that list, so they cannot be picked
+as if they were topics.
+
+### Calculator
+
+A tutee working a problem that allows a calculator gets a **Calculator** button,
+which opens Desmos in a panel beside the question. Like difficulty, this is a
+tag rather than a column, written either way:
+
+```json
+{ "tags": ["algebra", "calculator"] }
+{ "tags": ["algebra"], "calculator": true }
+```
+
+A module whose `subject` is **`SAT Math`** enables it on every problem in the
+module, tag or no tag — the digital SAT allows a calculator throughout the maths
+section, so tagging each problem would only be a way to get it wrong once.
+Other maths subjects do not: a `Math` or `Algebra 1` module gets the calculator
+only on the problems that carry the tag.
+
+A **reading or writing** module never gets one, whatever its problems are tagged.
+The tag is not an error there; it is ignored.
+
+Where the flag and the tag disagree the flag wins, including when it is `false`,
+which removes the tag. A re-import can therefore withdraw a calculator, rather
+than the file being a one-way door.
+
+Admins can toggle the same tag on one problem with the **Calculator allowed**
+box in the problem editor.
 
 ### LaTeX
 
@@ -180,10 +210,24 @@ From the CLI, `--replace` applies replace mode to every module in the run.
       "explanation": "The cost is $3 + 2m = 17$. Subtracting 3 gives $2m = 14$, so $m = 7$ miles.",
       "tags": ["algebra", "word-problem", "medium"],
       "source_id": "ppa-alg-003"
+    },
+    {
+      "question": "To the nearest hundredth, what is the positive solution to $2x^2 - 7x - 9 = 0$?",
+      "type": "free_response",
+      "answer": "4.5",
+      "explanation": "Factoring gives $(2x - 9)(x + 1) = 0$, so the positive solution is $x = 4.5$.",
+      "tags": ["algebra", "quadratic", "hard"],
+      "calculator": true,
+      "source_id": "ppa-alg-004"
     }
   ]
 }
 ```
+
+The `"calculator": true` on the last problem changes nothing in this particular
+file — the subject is `SAT Math`, so all four problems have one already. It is
+there to show the shape. Move the same problem into a `Math` module and it
+becomes the only one of the four with a calculator.
 
 ## Importing from the admin UI
 

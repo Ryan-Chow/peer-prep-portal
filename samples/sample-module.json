@@ -31,6 +31,15 @@
       "explanation": "The cost is $3 + 2m = 17$. Subtracting 3 gives $2m = 14$, so $m = 7$ miles.",
       "tags": ["algebra", "word-problem", "medium"],
       "source_id": "ppa-alg-003"
+    },
+    {
+      "question": "To the nearest hundredth, what is the positive solution to $2x^2 - 7x - 9 = 0$?",
+      "type": "free_response",
+      "answer": "4.5",
+      "explanation": "Factoring gives $(2x - 9)(x + 1) = 0$, so the positive solution is $x = 4.5$.",
+      "tags": ["algebra", "quadratic", "hard"],
+      "calculator": true,
+      "source_id": "ppa-alg-004"
     }
   ]
 }
