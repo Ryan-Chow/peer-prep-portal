@@ -815,7 +815,12 @@
   // What the assignment is called once it is no longer just the module —
   // "Information and Ideas — Hard (10 random)". Written here rather than in
   // the UI so the stored label and the tutor's preview cannot drift apart.
-  function describeFilter(moduleId, filter, take) {
+  //
+  // "chosen" and "random" are mutually exclusive by construction: a hand-picked
+  // assignment never runs the draw. They are named differently on purpose, so a
+  // tutee looking at "12 chosen" knows somebody selected those twelve for them
+  // and a re-run would produce the same twelve.
+  function describeFilter(moduleId, filter, take, chosen) {
     const m = S.modules.get(moduleId);
     const parts = [];
     const level = lower(filter && filter.difficulty);
@@ -824,7 +829,7 @@
     if (tags.length) parts.push(tags.join(', '));
     return (m ? m.title : 'Module') +
       (parts.length ? ' \u2014 ' + parts.join(' \u2014 ') : '') +
-      (take ? ' (' + take + ' random)' : '');
+      (take ? ' (' + take + ' random)' : chosen ? ' (' + chosen + ' chosen)' : '');
   }
 
   // The problems this assignment actually covers. A null problemIds is an
@@ -843,7 +848,7 @@
   // retagged next month cannot change what a tutee was asked to do, and cannot
   // quietly add problems to an assignment they have half finished.
   //
-  // spec: { moduleId, studentIds, tutorId, due, difficulty, tags, limit }
+  // spec: { moduleId, studentIds, tutorId, due, difficulty, tags, limit, problemIds }
   async function assignModule(spec) {
     const m = S.modules.get(spec.moduleId);
     if (!m) return [];
@@ -856,11 +861,28 @@
     if (!pool.length) {
       throw fail('assignModule', { message: 'Nothing in \u201c' + m.title + '\u201d matches those options.' });
     }
+
+    // Hand-picked problems replace the draw rather than narrowing it: the tutor
+    // has named the questions they want, so neither the count nor the shuffle
+    // has anything left to decide. Every tutee then gets the same set, which is
+    // the point — a random assignment deliberately gives them different ones.
+    //
+    // Intersected with the pool rather than trusted, because the ids arrive
+    // from a screen that was rendered against some earlier state of the world:
+    // a problem flagged, retagged or deleted between ticking and pressing
+    // Assign must not survive on the strength of a stale checkbox.
+    const wanted = Array.isArray(spec.problemIds) && spec.problemIds.length
+      ? new Set(spec.problemIds) : null;
+    const picked = wanted ? pool.filter((p) => wanted.has(p.id)) : pool;
+    if (!picked.length) {
+      throw fail('assignModule', { message: 'None of the problems you picked are still in \u201c' + m.title + '\u201d.' });
+    }
+
     // Asking for more than there are is not an error; it just means everything
     // matched, and the label should not claim a random draw that never happened.
-    const take = filter.limit && filter.limit < pool.length ? filter.limit : 0;
-    const narrowed = !!(filter.difficulty || filter.tags.length || filter.limit);
-    const label = describeFilter(spec.moduleId, filter, take);
+    const take = !wanted && filter.limit && filter.limit < pool.length ? filter.limit : 0;
+    const narrowed = !!(wanted || filter.difficulty || filter.tags.length || filter.limit);
+    const label = describeFilter(spec.moduleId, filter, take, wanted ? picked.length : 0);
 
     const made = [];
     const payload = [];
@@ -868,7 +890,7 @@
       const id = uuid();
       // Seeded on the assignment id, so the draw is reproducible from the row
       // and two tutees given the same filter get different questions.
-      const chosen = take ? pickSome(pool, take, id) : pool;
+      const chosen = take ? pickSome(pool, take, id) : picked;
       const problemIds = narrowed ? chosen.map((p) => p.id) : null;
       made.push({
         id: id, moduleId: spec.moduleId, studentId: sid, tutorId: spec.tutorId,
