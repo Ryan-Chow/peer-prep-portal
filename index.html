@@ -17,10 +17,10 @@
      ten-minute cache: without this a returning tab can run a new index.html
      against an old db.js and call a function that does not exist yet. They
      move as one version because they are one layer. -->
-<script src="config.js?v=5"></script>
-<script src="supabaseClient.js?v=5"></script>
-<script src="importer.js?v=5"></script>
-<script src="db.js?v=5"></script>
+<script src="config.js?v=6"></script>
+<script src="supabaseClient.js?v=6"></script>
+<script src="importer.js?v=6"></script>
+<script src="db.js?v=6"></script>
 </head>
 <body>
 <x-dc>
@@ -837,35 +837,6 @@ textarea.input { min-height: 90px; resize: vertical; }
               </div>
             </sc-for>
             <div><button type="button" class="btn btn-secondary" sc-camel-on-click="{{g.edit}}">Edit log</button></div>
-          </div>
-        </sc-for>
-      </div>
-    </sc-if>
-
-    <sc-if value="{{sMySessions}}" hint-placeholder-val="{{false}}">
-      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Student</div>
-      <h1 style="margin:4px 0 6px">My sessions</h1>
-      <p style="margin:0 0 20px;font-size:14px;opacity:0.65">What your tutor recorded after each session, newest first.</p>
-      <sc-if value="{{msEmpty}}" hint-placeholder-val="{{false}}"><p style="font-size:14px;opacity:0.65">No sessions have been written up yet.</p></sc-if>
-      <div style="display:flex;flex-direction:column;gap:12px;max-width:760px">
-        <sc-for list="{{msLogs}}" as="g" hint-placeholder-count="3">
-          <div class="card blueprint" style="display:flex;flex-direction:column;gap:10px">
-            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;cursor:pointer" sc-camel-on-click="{{g.toggle}}">
-              <span class="card-kicker">{{g.dateText}}</span>
-              <span style="font-size:13px;opacity:0.7">{{g.summary}}</span>
-              <span style="margin-left:auto;font-size:12px;opacity:0.6">{{g.toggleLabel}}</span>
-            </div>
-            <sc-if value="{{g.open}}" hint-placeholder-val="{{false}}">
-              <div style="display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--color-neutral-300);padding-top:12px">
-                <sc-for list="{{g.fields}}" as="f" hint-placeholder-count="9">
-                  <div>
-                    <div style="font-size:11px;letter-spacing:0.06em;opacity:0.55">{{f.label}}</div>
-                    <div style="font-size:14px;line-height:1.6;white-space:pre-wrap">{{f.value}}</div>
-                  </div>
-                </sc-for>
-              </div>
-            </sc-if>
           </div>
         </sc-for>
       </div>
@@ -1781,10 +1752,10 @@ class Component extends DCLogic {
     // the badge proper.
     const flaggedNow = me.role === 'admin' ? db.getFlaggedCount() : 0;
     const flaggedTab = flaggedNow ? 'Flagged (' + flaggedNow + ')' : 'Flagged';
-    const linkDefs = me.role === 'student' ? [['Dashboard', 'dash'], ['My Sessions', 'mySessions'], ['Error Log', 'errorLog']]
+    const linkDefs = me.role === 'student' ? [['Dashboard', 'dash'], ['Error Log', 'errorLog']]
       : me.role === 'tutor' ? [['My Students', 'students'], ['Module Library', 'library'], ['Assign', 'assign'], ['Results', 'results'], ['Error Logs', 'errorLogs']]
       : [['Users', 'users'], ['Modules', 'modules'], ['Import', 'import'], [flaggedTab, 'flagged'], ['Session Logs', 'adminLogs'], ['Error Logs', 'errorLogs']];
-    const activeOf = { dash: 'dash', module: 'dash', problem: 'dash', students: 'students', profile: 'students', logs: 'students', library: 'library', preview: 'library', assign: 'assign', results: 'results', resultDetail: 'results', users: 'users', modules: 'modules', editor: 'modules', import: 'import', flagged: 'flagged', errorLog: 'errorLog', errorLogs: 'errorLogs', adminLogs: 'adminLogs', mySessions: 'mySessions' };
+    const activeOf = { dash: 'dash', module: 'dash', problem: 'dash', students: 'students', profile: 'students', logs: 'students', library: 'library', preview: 'library', assign: 'assign', results: 'results', resultDetail: 'results', users: 'users', modules: 'modules', editor: 'modules', import: 'import', flagged: 'flagged', errorLog: 'errorLog', errorLogs: 'errorLogs', adminLogs: 'adminLogs' };
     // The log form is reached from two different tabs, so it lights whichever
     // one sent us there rather than picking one.
     const activeTab = route.name === 'logForm' ? (route.from === 'adminLogs' ? 'adminLogs' : 'students') : activeOf[route.name];
@@ -1803,8 +1774,9 @@ class Component extends DCLogic {
     // only guards against a route that outlived its buffer.
     v.sProfile = route.name === 'profile' && !!st.sprof;
     v.sLogForm = route.name === 'logForm' && !!st.slog;
+    // Session logs are staff-only: a tutee has no screen for them, and RLS
+    // does not return them to one either.
     v.sLogs = route.name === 'logs'; v.sAdminLogs = route.name === 'adminLogs';
-    v.sMySessions = route.name === 'mySessions';
 
     const scorePct = (correct, answered) => answered ? Math.round(100 * correct / answered) + '%' : '\u2014';
     const plural = (n, one, many) => n + ' ' + (n === 1 ? one : (many || one + 's'));
@@ -2241,21 +2213,6 @@ class Component extends DCLogic {
         toggle: toggleLog(l.id),
         fields: logFields(l),
         edit: openLogForm(l.tuteeId, l.id, 'adminLogs')
-      }));
-    }
-
-    if (v.sMySessions) {
-      // Drafts are the tutor's scratch copy and are not shown. Every field of a
-      // submitted sheet is: the handbook marks none of them internal.
-      const logs = db.getSessionLogs(me.id).filter((l) => l.status === 'submitted');
-      v.msEmpty = logs.length === 0;
-      v.msLogs = logs.map((l) => ({
-        dateText: fmtLogDate(l.sessionDate),
-        summary: summarise(l),
-        open: isOpen(l.id),
-        toggleLabel: isOpen(l.id) ? 'Hide' : 'Read',
-        toggle: toggleLog(l.id),
-        fields: logFields(l)
       }));
     }
 

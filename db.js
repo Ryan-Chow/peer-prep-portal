@@ -297,7 +297,10 @@
     // Both id lists are bounded by this tutee's own assignments, so those two
     // reads cannot run long. The rest can: a handful of assigned modules is
     // already more than a thousand problems.
-    const [profRes, modRes, probs, revealed, subs, errors, sprofs, logs] = await Promise.all([
+    // No session_logs read here: the log is the tutor's write-up for staff, and
+    // RLS no longer returns it to a tutee. Asking anyway would just cost a
+    // round trip to be handed an empty list.
+    const [profRes, modRes, probs, revealed, subs, errors, sprofs] = await Promise.all([
       tutorIds.length ? sb.from('profiles').select('*').in('id', tutorIds) : NONE,
       moduleIds.length ? sb.from('modules').select('*').in('id', moduleIds) : NONE,
       moduleIds.length ? allRows('problems_public', { filter: (q) => q.in('module_id', moduleIds) }) : NO_ROWS,
@@ -307,10 +310,7 @@
       // and it keeps entries whose module has since been unassigned.
       allRows('error_log_view'),
       // At most one row, but the filter costs nothing and says what is meant.
-      allRows('student_profiles', { order: ['tutee_id'], filter: (q) => q.eq('tutee_id', id) }),
-      // A weekly session for a few years is still well under one page, but this
-      // is the table that accumulates fastest of anything a tutee reads.
-      allRows('session_logs', { filter: (q) => q.eq('tutee_id', id) })
+      allRows('student_profiles', { order: ['tutee_id'], filter: (q) => q.eq('tutee_id', id) })
     ]);
 
     rows(profRes, 'profiles').forEach(putUser);
@@ -320,7 +320,6 @@
     subs.forEach(putSubmission);
     errors.forEach(putErrorEntry);
     sprofs.forEach(putStudentProfile);
-    logs.forEach(putSessionLog);
   }
 
   async function loadTutor(id) {
