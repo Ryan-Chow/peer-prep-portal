@@ -843,24 +843,21 @@
     return m.problems.filter((p) => want.has(p.id));
   }
 
-  // Assign a slice of a module rather than all of it. The filter is resolved
-  // here, once, and only the resulting ids are stored: a module reworded or
-  // retagged next month cannot change what a tutee was asked to do, and cannot
-  // quietly add problems to an assignment they have half finished.
+  // Turns an assign-screen spec into the pool it reaches and the problems it
+  // would hand out. Shared by assignModule() and the tutor's preview of it, so
+  // what the preview shows and what the tutee is given cannot be computed two
+  // different ways.
   //
-  // spec: { moduleId, studentIds, tutorId, due, difficulty, tags, limit, problemIds }
-  async function assignModule(spec) {
+  // spec: { moduleId, difficulty, tags, limit, problemIds }
+  function resolveSpec(spec) {
     const m = S.modules.get(spec.moduleId);
-    if (!m) return [];
+    if (!m) return null;
     const filter = {
       difficulty: spec.difficulty || '',
       tags: (spec.tags || []).slice(),
       limit: Number(spec.limit) || 0
     };
     const pool = matchProblems(spec.moduleId, filter);
-    if (!pool.length) {
-      throw fail('assignModule', { message: 'Nothing in \u201c' + m.title + '\u201d matches those options.' });
-    }
 
     // Hand-picked problems replace the draw rather than narrowing it: the tutor
     // has named the questions they want, so neither the count nor the shuffle
@@ -874,24 +871,58 @@
     const wanted = Array.isArray(spec.problemIds) && spec.problemIds.length
       ? new Set(spec.problemIds) : null;
     const picked = wanted ? pool.filter((p) => wanted.has(p.id)) : pool;
-    if (!picked.length) {
-      throw fail('assignModule', { message: 'None of the problems you picked are still in \u201c' + m.title + '\u201d.' });
-    }
 
     // Asking for more than there are is not an error; it just means everything
     // matched, and the label should not claim a random draw that never happened.
     const take = !wanted && filter.limit && filter.limit < pool.length ? filter.limit : 0;
     const narrowed = !!(wanted || filter.difficulty || filter.tags.length || filter.limit);
-    const label = describeFilter(spec.moduleId, filter, take, wanted ? picked.length : 0);
+    return {
+      module: m, filter: filter, pool: pool, picked: picked, take: take, narrowed: narrowed,
+      label: describeFilter(spec.moduleId, filter, take, wanted ? picked.length : 0),
+      // Seeded on the assignment id, so the draw is reproducible from the row
+      // and two tutees given the same filter get different questions.
+      draw: (seed) => (take ? pickSome(pool, take, seed) : picked)
+    };
+  }
+
+  // What the assign screen's Preview button opens: the problems one tutee
+  // would get from this spec, before anything is written. A random draw is
+  // shown once, seeded on the module rather than on an assignment id that does
+  // not exist yet — so it is one possible draw, and `random` says so.
+  function previewAssignment(spec) {
+    const r = resolveSpec(spec);
+    if (!r) return null;
+    return {
+      label: r.label,
+      random: r.take > 0,
+      poolSize: r.pool.length,
+      problems: r.draw('preview:' + spec.moduleId)
+    };
+  }
+
+  // Assign a slice of a module rather than all of it. The filter is resolved
+  // here, once, and only the resulting ids are stored: a module reworded or
+  // retagged next month cannot change what a tutee was asked to do, and cannot
+  // quietly add problems to an assignment they have half finished.
+  //
+  // spec: { moduleId, studentIds, tutorId, due, difficulty, tags, limit, problemIds }
+  async function assignModule(spec) {
+    const r = resolveSpec(spec);
+    if (!r) return [];
+    const m = r.module, filter = r.filter, label = r.label;
+    if (!r.pool.length) {
+      throw fail('assignModule', { message: 'Nothing in \u201c' + m.title + '\u201d matches those options.' });
+    }
+    if (!r.picked.length) {
+      throw fail('assignModule', { message: 'None of the problems you picked are still in \u201c' + m.title + '\u201d.' });
+    }
 
     const made = [];
     const payload = [];
     (spec.studentIds || []).forEach((sid) => {
       const id = uuid();
-      // Seeded on the assignment id, so the draw is reproducible from the row
-      // and two tutees given the same filter get different questions.
-      const chosen = take ? pickSome(pool, take, id) : picked;
-      const problemIds = narrowed ? chosen.map((p) => p.id) : null;
+      const chosen = r.draw(id);
+      const problemIds = r.narrowed ? chosen.map((p) => p.id) : null;
       made.push({
         id: id, moduleId: spec.moduleId, studentId: sid, tutorId: spec.tutorId,
         due: spec.due || '',
@@ -935,6 +966,13 @@
     const { error } = await sb.from('assignments').delete().eq('id', assignmentId);
     if (error) { S.assignments.set(assignmentId, a); notify(); throw fail('unassign', error); }
   }
+
+  // The comparison submit_answer() makes in Postgres — trimmed, lower-cased,
+  // whitespace removed — so a tutor's preview grades exactly as the tutee's
+  // submission will. Only the preview calls it: a tutee's answer is still
+  // graded server-side, where the key is.
+  const canon = (s) => String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, '');
+  const gradeAnswer = (answer, key) => canon(answer) === canon(key);
 
   // Grading happens in Postgres: the tutee's client never sees the answer key
   // until the RPC hands it back.
@@ -1271,6 +1309,9 @@
     getAssignment: (id) => S.assignments.get(id) || null,
     getTutorAssignments: (tutorId) =>
       Array.from(S.assignments.values()).filter((a) => a.tutorId === tutorId),
+    // Everything the caller may read. Only an admin's cache holds more than
+    // their own tutees' rows, so for a tutor this is the same list as above.
+    getAllAssignments: () => Array.from(S.assignments.values()),
     assignModule: assignModule,
     unassign: unassign,
     // For the assign screen: what a filter would select, and what it would be
@@ -1278,6 +1319,7 @@
     getModuleTags: moduleTags,
     matchProblems: matchProblems,
     describeFilter: describeFilter,
+    previewAssignment: previewAssignment,
     // The calculator rule lives here rather than in the screen that draws the
     // button, because it is a question about the data — the module's subject
     // and the problem's tags — and the editor's checkbox has to agree with it.
@@ -1303,6 +1345,8 @@
       return out;
     },
     submitAnswer: submitAnswer,
+    // Client-side grading for the tutor's preview only; it writes nothing.
+    gradeAnswer: gradeAnswer,
 
     // Per assignment, not per module: two filtered assignments of the same
     // module each count out of their own set. A submission belongs to the

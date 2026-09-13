@@ -40,6 +40,34 @@ not there yet.
 - `supabaseClient.js` — the single Supabase client. Guard against double
   evaluation: dc-runtime re-injects `<helmet>` scripts into `<head>`.
 
+## Module / problem viewer modes
+
+The tutee's module list and problem screen (`route.name` of `module` /
+`problem`) are the one viewer for everybody. `route.mode` picks the behaviour:
+
+- `live` — the tutee working an assignment. Answers go through
+  `db.submitAnswer()`; the error-log offer appears on a wrong answer.
+- `preview` — a tutor or admin seeing exactly what a tutee sees. Answers are
+  graded in the browser with `db.gradeAnswer()` (the same comparison as the
+  `submit_answer()` RPC) and kept in `state.viewer`; nothing is written. The
+  banner's "Show answers" toggle reveals the key for every problem.
+- `review` — a tutor or admin reading a tutee's submitted answers. Read-only,
+  key always shown, error-log status shown per problem.
+
+`viewerContext(route, me)` is the only place that resolves the route: it forces
+`live` for a tutee whatever the route says, refuses `live` for staff, and
+refuses a tutor any assignment whose tutee is not in `tutor_tutees` (RLS
+already keeps such rows out of the cache; the screen refuses for the same
+reason). A preview is over an `assignmentId`, a `moduleId` (all non-flagged
+problems), or a `moduleId` plus a `spec` (the assign screen's filter, resolved
+by `db.previewAssignment()` — the same resolver `db.assignModule()` uses).
+`route.from` names the screen the viewer was opened from, for the back link and
+the nav highlight. Every way in goes through `openViewer()`, which clears the
+scratch answers of the last preview.
+
+Tutees must never see a Preview button or the Show-answers toggle: both are
+rendered only from staff screens or when `mode !== 'live'`.
+
 ## Conventions
 
 - Data-layer scripts belong in the real `<head>`, never in `<helmet>`.

@@ -17,10 +17,10 @@
      ten-minute cache: without this a returning tab can run a new index.html
      against an old db.js and call a function that does not exist yet. They
      move as one version because they are one layer. -->
-<script src="config.js?v=8"></script>
-<script src="supabaseClient.js?v=8"></script>
-<script src="importer.js?v=8"></script>
-<script src="db.js?v=8"></script>
+<script src="config.js?v=9"></script>
+<script src="supabaseClient.js?v=9"></script>
+<script src="importer.js?v=9"></script>
+<script src="db.js?v=9"></script>
 </head>
 <body>
 <x-dc>
@@ -588,20 +588,48 @@ textarea.input { min-height: 90px; resize: vertical; }
       </div>
     </sc-if>
 
-    <sc-if value="{{sModule}}" hint-placeholder-val="{{false}}">
-      <a href="#" sc-camel-on-click="{{backDash}}" style="font-size:13px;text-decoration:none">← Dashboard</a>
-      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55;margin-top:16px">{{modSubject}}</div>
-      <h1 style="margin:4px 0 6px">{{modTitle}}</h1>
-      <p style="margin:0 0 16px;font-size:14px;opacity:0.65">{{modDue}} · {{modTutor}}</p>
-      <div style="max-width:420px;display:flex;flex-direction:column;gap:6px;margin-bottom:28px">
-        <div style="font-size:13px">{{modProgressText}}</div>
-        <div style="height:6px;border:1px solid var(--color-neutral-300)"><div style="height:100%;background:var(--color-accent);width:{{modPctW}}"></div></div>
+    <sc-if value="{{hasVwBanner}}" hint-placeholder-val="{{false}}">
+      <div class="card blueprint" style="margin-bottom:20px;flex-direction:row;gap:12px;align-items:center;flex-wrap:wrap;border-color:var(--color-accent);background:var(--color-accent-100)">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <span class="tag tag-accent">{{vwModeLabel}}</span>
+        <span style="font-size:14px;flex:1;min-width:200px">{{vwBannerText}}</span>
+        <sc-if value="{{vwCanReveal}}" hint-placeholder-val="{{false}}">
+          <button type="button" class="btn btn-secondary" style="padding:3px 10px;font-size:12px" sc-camel-on-click="{{vwToggleAnswers}}">{{vwToggleLabel}}</button>
+        </sc-if>
+        <sc-if value="{{vwCalc}}" hint-placeholder-val="{{false}}">
+          <button type="button" class="btn btn-secondary" style="padding:3px 10px;font-size:12px" sc-camel-on-click="{{vwOpenCalc}}">Calculator</button>
+        </sc-if>
       </div>
+    </sc-if>
+
+    <sc-if value="{{sModule}}" hint-placeholder-val="{{false}}">
+      <a href="#" sc-camel-on-click="{{modBack}}" style="font-size:13px;text-decoration:none">{{modBackLabel}}</a>
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55;margin-top:16px">{{modSubject}}</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div>
+          <h1 style="margin:4px 0 6px">{{modTitle}}</h1>
+          <p style="margin:0 0 16px;font-size:14px;opacity:0.65">{{modMeta}}</p>
+        </div>
+        <sc-if value="{{vwCanAssign}}" hint-placeholder-val="{{false}}">
+          <button type="button" class="btn btn-primary blueprint" style="margin-top:4px" sc-camel-on-click="{{vwAssign}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Assign this module</button>
+        </sc-if>
+      </div>
+      <sc-if value="{{modHasProgress}}" hint-placeholder-val="{{true}}">
+        <div style="max-width:420px;display:flex;flex-direction:column;gap:6px;margin-bottom:28px">
+          <div style="font-size:13px">{{modProgressText}}</div>
+          <div style="height:6px;border:1px solid var(--color-neutral-300)"><div style="height:100%;background:var(--color-accent);width:{{modPctW}}"></div></div>
+        </div>
+      </sc-if>
+      <sc-if value="{{modEmpty}}" hint-placeholder-val="{{false}}"><p style="font-size:14px;opacity:0.65">{{modEmptyText}}</p></sc-if>
       <div style="border-top:1px solid var(--color-neutral-300)">
         <sc-for list="{{modRows}}" as="r" hint-placeholder-count="4">
           <div sc-camel-on-click="{{r.open}}" style="display:flex;align-items:center;gap:14px;padding:14px 6px;border-bottom:1px solid var(--color-neutral-300);cursor:pointer" style-hover="background:var(--color-accent-100)">
             <span style="font-family:var(--font-heading);font-size:16px;width:28px;opacity:0.55">{{r.num}}</span>
-            <span style="flex:1;font-size:14px">{{r.label}}</span>
+            <span style="flex:1;display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:14px">{{r.label}}</span>
+              <sc-if value="{{r.hasDetail}}" hint-placeholder-val="{{false}}"><span style="font-size:12px;opacity:0.65">{{r.detail}}</span></sc-if>
+            </span>
+            <sc-if value="{{r.inLog}}" hint-placeholder-val="{{false}}"><span class="tag" style="border:1px solid #1f6f43;color:#1f6f43">In error log</span></sc-if>
             <span class="{{r.tagClass}}">{{r.statusLabel}}</span>
           </div>
         </sc-for>
@@ -618,27 +646,29 @@ textarea.input { min-height: 90px; resize: vertical; }
           <div style="display:flex;flex-direction:column;gap:8px;margin-top:20px">
             <sc-for list="{{choices}}" as="c" hint-placeholder-count="4">
               <label class="radio" style="border:1px solid {{c.border}};padding:10px 12px;display:flex;align-items:center;gap:10px;cursor:pointer">
-                <input type="radio" name="choice" checked="{{c.selected}}" sc-camel-on-change="{{c.pick}}" disabled="{{answered}}">
+                <input type="radio" name="choice" checked="{{c.selected}}" sc-camel-on-change="{{c.pick}}" disabled="{{inputsLocked}}">
                 <span class="dot"></span>
                 <span style="font-family:var(--font-heading);font-size:15px;width:20px;opacity:0.7">{{c.letter}}</span>
                 <span style="flex:1;font-size:15px">{{c.el}}</span>
                 <sc-if value="{{c.isCorrectMark}}" hint-placeholder-val="{{false}}"><span class="tag tag-accent">Correct</span></sc-if>
-                <sc-if value="{{c.isWrongMark}}" hint-placeholder-val="{{false}}"><span class="tag tag-outline">Your answer</span></sc-if>
+                <sc-if value="{{c.isWrongMark}}" hint-placeholder-val="{{false}}"><span class="tag tag-outline">{{c.wrongLabel}}</span></sc-if>
               </label>
             </sc-for>
           </div>
         </sc-if>
         <sc-if value="{{isFree}}" hint-placeholder-val="{{false}}">
-          <div class="field" style="margin-top:20px;max-width:260px"><label>Your answer</label><input class="input" value="{{freeShown}}" sc-camel-on-change="{{onFree}}" disabled="{{answered}}"></div>
+          <div class="field" style="margin-top:20px;max-width:260px"><label>{{freeLabel}}</label><input class="input" value="{{freeShown}}" placeholder="{{freePlaceholder}}" sc-camel-on-change="{{onFree}}" disabled="{{inputsLocked}}"></div>
         </sc-if>
-        <sc-if value="{{notAnswered}}" hint-placeholder-val="{{true}}">
+        <sc-if value="{{canCheck}}" hint-placeholder-val="{{true}}">
           <button type="button" class="btn btn-primary blueprint" style="margin-top:20px" disabled="{{cantSubmit}}" sc-camel-on-click="{{doSubmit}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Check answer</button>
         </sc-if>
-        <sc-if value="{{answered}}" hint-placeholder-val="{{false}}">
+        <sc-if value="{{showFeedback}}" hint-placeholder-val="{{false}}">
           <div style="margin-top:20px;border-top:1px solid var(--color-neutral-300);padding-top:16px;display:flex;flex-direction:column;gap:10px">
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
               <sc-if value="{{wasCorrect}}" hint-placeholder-val="{{false}}"><span class="tag tag-accent">Correct</span></sc-if>
-              <sc-if value="{{wasWrong}}" hint-placeholder-val="{{false}}"><span class="tag tag-outline">Incorrect</span><span style="font-size:13px">Correct answer: {{correctAnswerEl}}</span></sc-if>
+              <sc-if value="{{wasWrong}}" hint-placeholder-val="{{false}}"><span class="tag tag-outline">Incorrect</span></sc-if>
+              <sc-if value="{{notAttempted}}" hint-placeholder-val="{{false}}"><span class="tag tag-neutral">{{notAttemptedLabel}}</span></sc-if>
+              <sc-if value="{{showCorrectAnswer}}" hint-placeholder-val="{{false}}"><span style="font-size:13px">Correct answer: {{correctAnswerEl}}</span></sc-if>
             </div>
             <div style="font-size:14px;line-height:1.6;opacity:0.85">{{explEl}}</div>
             <sc-if value="{{elCanAdd}}" hint-placeholder-val="{{false}}">
@@ -655,6 +685,9 @@ textarea.input { min-height: 90px; resize: vertical; }
             </sc-if>
             <sc-if value="{{elInLog}}" hint-placeholder-val="{{false}}">
               <button type="button" class="btn btn-ghost" style="align-self:flex-start;color:#1f6f43;border-color:#1f6f43" disabled="{{elInLog}}">In error log ✓</button>
+            </sc-if>
+            <sc-if value="{{rvInLog}}" hint-placeholder-val="{{false}}">
+              <span class="tag" style="align-self:flex-start;border:1px solid #1f6f43;color:#1f6f43">{{rvLogText}}</span>
             </sc-if>
           </div>
         </sc-if>
@@ -710,6 +743,7 @@ textarea.input { min-height: 90px; resize: vertical; }
                   <div style="display:flex;align-items:center;gap:8px;font-size:13px">
                     <span style="flex:1">{{am.title}}</span>
                     <span style="opacity:0.6">{{am.progress}}</span>
+                    <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{am.preview}}">Preview</button>
                     <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{am.unassign}}">Unassign</button>
                   </div>
                 </sc-for>
@@ -916,29 +950,6 @@ textarea.input { min-height: 90px; resize: vertical; }
       </div>
     </sc-if>
 
-    <sc-if value="{{sPreview}}" hint-placeholder-val="{{false}}">
-      <a href="#" sc-camel-on-click="{{backLibrary}}" style="font-size:13px;text-decoration:none">← Module library</a>
-      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:16px">
-        <div>
-          <h1 style="margin:0 0 4px">{{pvTitle}}</h1>
-          <p style="margin:0;font-size:14px;opacity:0.65">{{pvMeta}}</p>
-        </div>
-        <button type="button" class="btn btn-primary blueprint" sc-camel-on-click="{{pvAssign}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Assign this module</button>
-      </div>
-      <div style="border-top:1px solid var(--color-neutral-300);margin-top:20px">
-        <sc-for list="{{pvRows}}" as="p" hint-placeholder-count="4">
-          <div style="padding:16px 6px;border-bottom:1px solid var(--color-neutral-300);display:flex;flex-direction:column;gap:8px">
-            <div style="display:flex;gap:10px;align-items:center">
-              <span style="font-family:var(--font-heading);font-size:16px;opacity:0.55">{{p.num}}</span>
-              <span class="tag tag-neutral">{{p.typeLabel}}</span>
-            </div>
-            <div style="font-size:15px;line-height:1.6">{{p.qEl}}</div>
-            <div style="font-size:13px;opacity:0.7">Answer: {{p.answerEl}}</div>
-          </div>
-        </sc-for>
-      </div>
-    </sc-if>
-
     <sc-if value="{{sAssign}}" hint-placeholder-val="{{false}}">
       <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Tutor</div>
       <h1 style="margin:4px 0 24px">Assign a module</h1>
@@ -1014,15 +1025,19 @@ textarea.input { min-height: 90px; resize: vertical; }
           <div style="font-size:13px;opacity:0.8">{{matchText}}</div>
         </div>
         <div class="field" style="max-width:220px"><label>Due date</label><input class="input" type="date" value="{{due}}" sc-camel-on-change="{{onDue}}"></div>
-        <button type="button" class="btn btn-primary btn-block blueprint" disabled="{{cantAssign}}" sc-camel-on-click="{{doAssign}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>{{assignLabel}}</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+          <button type="button" class="btn btn-primary blueprint" style="flex:1" disabled="{{cantAssign}}" sc-camel-on-click="{{doAssign}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>{{assignLabel}}</button>
+          <button type="button" class="btn btn-secondary" disabled="{{cantPreview}}" sc-camel-on-click="{{doPreviewAssign}}">Preview</button>
+        </div>
         <sc-if value="{{hasAssignMsg}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;border-left:2px solid var(--color-accent);padding-left:10px">{{assignMsg}}</p></sc-if>
       </div>
     </sc-if>
 
     <sc-if value="{{sResults}}" hint-placeholder-val="{{false}}">
-      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Tutor</div>
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">{{resultsKicker}}</div>
       <h1 style="margin:4px 0 6px">Results</h1>
-      <p style="margin:0 0 20px;font-size:14px;opacity:0.65">One row per assignment. Click a row for per-problem answers.</p>
+      <p style="margin:0 0 20px;font-size:14px;opacity:0.65">One row per assignment. Click a row to review their answers problem by problem, or Preview to see the assignment as they do.</p>
+      <sc-if value="{{noResults}}" hint-placeholder-val="{{false}}"><p style="font-size:14px;opacity:0.65">Nothing has been assigned yet.</p></sc-if>
       <div style="overflow-x:auto">
         <sc-raw-table class="table">
           <sc-raw-thead><sc-raw-tr><sc-raw-th>Student</sc-raw-th><sc-raw-th>Assignment</sc-raw-th><sc-raw-th>Due</sc-raw-th><sc-raw-th>Answered</sc-raw-th><sc-raw-th>Score</sc-raw-th><sc-raw-th></sc-raw-th></sc-raw-tr></sc-raw-thead>
@@ -1030,29 +1045,7 @@ textarea.input { min-height: 90px; resize: vertical; }
             <sc-for list="{{resultRows}}" as="r" hint-placeholder-count="5">
               <sc-raw-tr sc-camel-on-click="{{r.open}}" style="cursor:pointer">
                 <sc-raw-td>{{r.student}}</sc-raw-td><sc-raw-td>{{r.module}}</sc-raw-td><sc-raw-td class="text-muted">{{r.due}}</sc-raw-td><sc-raw-td>{{r.progress}}</sc-raw-td><sc-raw-td>{{r.score}}</sc-raw-td>
-                <sc-raw-td style="text-align:right"><button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{r.unassign}}">Unassign</button></sc-raw-td>
-              </sc-raw-tr>
-            </sc-for>
-          </sc-raw-tbody>
-        </sc-raw-table>
-      </div>
-    </sc-if>
-
-    <sc-if value="{{sResultDetail}}" hint-placeholder-val="{{false}}">
-      <a href="#" sc-camel-on-click="{{backResults}}" style="font-size:13px;text-decoration:none">← Results</a>
-      <h1 style="margin:16px 0 4px">{{rdTitle}}</h1>
-      <p style="margin:0 0 20px;font-size:14px;opacity:0.65">{{rdMeta}}</p>
-      <div style="overflow-x:auto">
-        <sc-raw-table class="table">
-          <sc-raw-thead><sc-raw-tr><sc-raw-th>#</sc-raw-th><sc-raw-th style="min-width:260px">Problem</sc-raw-th><sc-raw-th>Their answer</sc-raw-th><sc-raw-th>Correct answer</sc-raw-th><sc-raw-th>Result</sc-raw-th></sc-raw-tr></sc-raw-thead>
-          <sc-raw-tbody>
-            <sc-for list="{{rdRows}}" as="r" hint-placeholder-count="4">
-              <sc-raw-tr>
-                <sc-raw-td class="text-muted">{{r.num}}</sc-raw-td>
-                <sc-raw-td style="min-width:260px;line-height:1.5">{{r.qEl}}</sc-raw-td>
-                <sc-raw-td>{{r.given}}</sc-raw-td>
-                <sc-raw-td>{{r.correctAns}}</sc-raw-td>
-                <sc-raw-td><span class="{{r.tagClass}}">{{r.statusLabel}}</span></sc-raw-td>
+                <sc-raw-td style="text-align:right;white-space:nowrap"><button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{r.preview}}">Preview</button> <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{r.unassign}}">Unassign</button></sc-raw-td>
               </sc-raw-tr>
             </sc-for>
           </sc-raw-tbody>
@@ -1129,7 +1122,7 @@ textarea.input { min-height: 90px; resize: vertical; }
           <sc-raw-tbody>
             <sc-for list="{{adminModRows}}" as="m" hint-placeholder-count="4">
               <sc-raw-tr><sc-raw-td>{{m.title}}</sc-raw-td><sc-raw-td class="text-muted">{{m.subject}}</sc-raw-td><sc-raw-td>{{m.count}}</sc-raw-td>
-                <sc-raw-td style="text-align:right;white-space:nowrap"><button type="button" class="btn btn-ghost" sc-camel-on-click="{{m.edit}}">Edit</button> <button type="button" class="btn btn-ghost" style="color:#8c1d18" sc-camel-on-click="{{m.del}}">Delete</button></sc-raw-td></sc-raw-tr>
+                <sc-raw-td style="text-align:right;white-space:nowrap"><button type="button" class="btn btn-ghost" sc-camel-on-click="{{m.preview}}">Preview</button> <button type="button" class="btn btn-ghost" sc-camel-on-click="{{m.edit}}">Edit</button> <button type="button" class="btn btn-ghost" style="color:#8c1d18" sc-camel-on-click="{{m.del}}">Delete</button></sc-raw-td></sc-raw-tr>
             </sc-for>
           </sc-raw-tbody>
         </sc-raw-table>
@@ -1460,6 +1453,9 @@ class Component extends DCLogic {
     alogs: { tutor: '', tutee: '', from: '', to: '' },
     // picked  problem id -> true, on the Flagged problems screen
     flags: { picked: {}, busy: false, msg: '' },
+    // The tutor's scratch answers while previewing, and whether the answer key
+    // is turned on. Component state only: nothing in here is ever written.
+    viewer: this.blankViewer(),
     // open/minimised only. The window's position and size are in _calc below,
     // deliberately out of state — see calcGesture.
     calc: this.calcSaved()
@@ -1527,6 +1523,96 @@ class Component extends DCLogic {
   // the route moves so it never carries a note onto the next problem.
   blankErrAdd() { return { open: false, comment: '', busy: false }; }
   setImp(patch) { this.setState({ imp: Object.assign({}, this.state.imp, patch) }); }
+
+  // ---- module / problem viewer ---------------------------------------------
+  //
+  // The module list and the problem screen are one component pair driven by
+  // route.mode:
+  //   live     the tutee working an assignment; answers go through submitAnswer
+  //   preview  a tutor or admin seeing exactly what a tutee sees; answers are
+  //            graded locally from the key already in the cache and kept in
+  //            state.viewer, so nothing is written
+  //   review   a tutor or admin reading a tutee's submitted answers; read-only
+  // route.from names the screen the viewer was opened from, for the back link
+  // and the nav highlight. viewerContext() is the only place that resolves any
+  // of this; renderVals asks it and draws.
+
+  // answers      problem id -> { answer, correct }, preview only
+  // showAnswers  the "Show answers" toggle, preview only
+  blankViewer() { return { answers: {}, showAnswers: false }; }
+
+  // Every way into the viewer goes through here so the scratch answers from the
+  // last preview cannot leak into the next one.
+  openViewer(route) {
+    return (e) => {
+      if (e && e.preventDefault) e.preventDefault();
+      if (e && e.stopPropagation) e.stopPropagation();
+      this.setState({ route: route, problem: { choice: '', free: '' }, errAdd: this.blankErrAdd(), viewer: this.blankViewer() });
+    };
+  }
+
+  static VIEWER_HOME = {
+    dash:     { label: '\u2190 Dashboard',      route: 'dash' },
+    students: { label: '\u2190 My students',    route: 'students' },
+    library:  { label: '\u2190 Module library', route: 'library' },
+    assign:   { label: '\u2190 Assign',         route: 'assign' },
+    results:  { label: '\u2190 Results',        route: 'results' },
+    modules:  { label: '\u2190 Modules',        route: 'modules' }
+  };
+
+  // What the viewer is looking at, or null when the route names something the
+  // caller may not see. A tutee is always live, whatever the route says: the
+  // other two modes exist only for staff. Staff are never live, because they
+  // have no assignments of their own. Tutors are held to their own tutees here
+  // as well as by RLS — the cache already contains nothing else, but the
+  // screen should refuse for the same reason the server would.
+  viewerContext(route, me) {
+    const db = window.db;
+    if (!db || !me) return null;
+    const staff = me.role !== 'student';
+    const mode = !staff ? 'live' : (route.mode === 'review' ? 'review' : route.mode === 'preview' ? 'preview' : null);
+    if (!mode) return null;
+    const ctx = { mode: mode, assignment: null, tutee: null, module: null, problems: [], subs: {}, label: '', random: false, spec: null };
+
+    if (route.assignmentId) {
+      const a = db.getAssignment(route.assignmentId);
+      if (!a) return null;
+      if (mode === 'live' && a.studentId !== me.id) return null;
+      if (me.role === 'tutor' && !db.getStudentsOf(me.id).some((s) => s.id === a.studentId)) return null;
+      ctx.assignment = a;
+      ctx.tutee = db.getUser(a.studentId);
+      ctx.module = db.getModule(a.moduleId);
+      ctx.problems = db.getAssignmentProblems(a.id);
+      ctx.subs = mode === 'preview' ? this.state.viewer.answers : db.getSubmissions(a.id);
+      ctx.label = db.assignmentLabel(a);
+    } else if (route.moduleId && mode === 'preview') {
+      const m = db.getModule(route.moduleId);
+      if (!m) return null;
+      ctx.module = m;
+      ctx.subs = this.state.viewer.answers;
+      if (route.spec) {
+        // The assign screen's filter, resolved by the same code that will
+        // resolve it when Assign is pressed.
+        const r = db.previewAssignment(route.spec);
+        ctx.spec = route.spec;
+        ctx.problems = r ? r.problems : [];
+        ctx.label = r ? r.label : m.title;
+        ctx.random = !!(r && r.random);
+      } else {
+        // The whole module as a tutee could be given it: flagged problems are
+        // out of every pool, so they are out of this too.
+        ctx.problems = db.matchProblems(m.id, {});
+        ctx.label = m.title;
+      }
+    } else {
+      return null;
+    }
+    if (!ctx.module) return null;
+
+    const dflt = mode === 'live' ? 'dash' : mode === 'review' ? 'results' : ctx.assignment ? 'students' : 'library';
+    ctx.from = (staff && Component.VIEWER_HOME[route.from]) ? route.from : dflt;
+    return ctx;
+  }
 
   // ---- session sheets -------------------------------------------------------
 
@@ -1903,7 +1989,10 @@ class Component extends DCLogic {
   // reasons that all point the same way: the template has no sc-raw-iframe, it
   // has no pointermove to drag with, and — worst — an <iframe src> sitting in
   // it is live DOM that would fetch Desmos on the login screen.
-  renderCalcLayer(allowed) {
+  // inBanner: a staff preview or review draws the launch button in its banner
+  // instead, because a fixed button cannot know how tall that banner wrapped.
+  // The panel itself is the same either way.
+  renderCalcLayer(allowed, inBanner) {
     const R = React, C = this.state.calc;
     const showing = allowed && C.open;
     // Mounted for good from the first time it is opened. That is what keeps the
@@ -1913,7 +2002,7 @@ class Component extends DCLogic {
     // in the tree from page load would pull Desmos down for every tutee on
     // every screen, including the ones not allowed a calculator at all.
     if (showing) this._calcMounted = true;
-    const launch = (allowed && !C.open)
+    const launch = (allowed && !C.open && !inBanner)
       ? R.createElement('button', {
         type: 'button', className: 'btn btn-secondary calc-launch',
         onClick: () => this.calcSet({ open: true })
@@ -2045,18 +2134,29 @@ class Component extends DCLogic {
     // the badge proper.
     const flaggedNow = me.role === 'admin' ? db.getFlaggedCount() : 0;
     const flaggedTab = flaggedNow ? 'Flagged (' + flaggedNow + ')' : 'Flagged';
+    // Admin has Assign and Results too: they are how an admin previews and
+    // reviews any tutee's work, which a tutor does from My Students.
     const linkDefs = me.role === 'student' ? [['Dashboard', 'dash'], ['Error Log', 'errorLog']]
       : me.role === 'tutor' ? [['My Students', 'students'], ['Module Library', 'library'], ['Assign', 'assign'], ['Results', 'results'], ['Error Logs', 'errorLogs']]
-      : [['Users', 'users'], ['Modules', 'modules'], ['Import', 'import'], [flaggedTab, 'flagged'], ['Session Logs', 'adminLogs'], ['Error Logs', 'errorLogs']];
-    const activeOf = { dash: 'dash', module: 'dash', problem: 'dash', students: 'students', profile: 'students', logs: 'students', library: 'library', preview: 'library', assign: 'assign', results: 'results', resultDetail: 'results', users: 'users', modules: 'modules', editor: 'modules', import: 'import', flagged: 'flagged', errorLog: 'errorLog', errorLogs: 'errorLogs', adminLogs: 'adminLogs' };
+      : [['Users', 'users'], ['Modules', 'modules'], ['Assign', 'assign'], ['Results', 'results'], ['Import', 'import'], [flaggedTab, 'flagged'], ['Session Logs', 'adminLogs'], ['Error Logs', 'errorLogs']];
+    const activeOf = { dash: 'dash', students: 'students', profile: 'students', logs: 'students', library: 'library', assign: 'assign', results: 'results', users: 'users', modules: 'modules', editor: 'modules', import: 'import', flagged: 'flagged', errorLog: 'errorLog', errorLogs: 'errorLogs', adminLogs: 'adminLogs' };
+    // Resolved up here because the nav needs to know where the viewer was
+    // opened from; the screens below read the same object.
+    const inViewer = route.name === 'module' || route.name === 'problem';
+    const ctx = inViewer ? this.viewerContext(route, me) : null;
     // The log form is reached from two different tabs, so it lights whichever
-    // one sent us there rather than picking one.
-    const activeTab = route.name === 'logForm' ? (route.from === 'adminLogs' ? 'adminLogs' : 'students') : activeOf[route.name];
+    // one sent us there rather than picking one. The viewer lights the tab it
+    // was opened from, for the same reason.
+    const activeTab = route.name === 'logForm' ? (route.from === 'adminLogs' ? 'adminLogs' : 'students')
+      : inViewer ? (ctx ? ctx.from : 'dash')
+      : activeOf[route.name];
     v.navLinks = linkDefs.map(([label, name]) => ({ label: label, cur: activeTab === name ? 'page' : undefined, go: goE(name) }));
 
-    v.sDash = route.name === 'dash'; v.sModule = route.name === 'module'; v.sProblem = route.name === 'problem';
-    v.sStudents = route.name === 'students'; v.sLibrary = route.name === 'library'; v.sPreview = route.name === 'preview';
-    v.sAssign = route.name === 'assign'; v.sResults = route.name === 'results'; v.sResultDetail = route.name === 'resultDetail';
+    // Both viewer screens need a context; a route the caller may not see, or
+    // one whose data has gone, shows nothing rather than half a screen.
+    v.sDash = route.name === 'dash'; v.sModule = route.name === 'module' && !!ctx; v.sProblem = route.name === 'problem' && !!ctx;
+    v.sStudents = route.name === 'students'; v.sLibrary = route.name === 'library';
+    v.sAssign = route.name === 'assign'; v.sResults = route.name === 'results';
     v.sUsers = route.name === 'users'; v.sModules = route.name === 'modules'; v.sEditor = route.name === 'editor';
     v.sImport = route.name === 'import'; v.sFlagged = route.name === 'flagged';
     // A tutee reads their own log, a tutor or admin reads someone else's; one
@@ -2136,59 +2236,123 @@ class Component extends DCLogic {
       });
     }
 
-    if (v.sModule || v.sProblem) {
-      const a = db.getAssignment(route.assignmentId);
-      const m = a && db.getModule(a.moduleId);
-      // What this assignment covers, which is the whole module only when it
-      // was assigned unfiltered. Numbering below is within this list.
-      const probs = a ? db.getAssignmentProblems(a.id) : [];
-      const subs = a ? db.getSubmissions(a.id) : {};
-      // An assignment whose problems have gone (module replaced under it) has
-      // nothing to show, and a stale problem index cannot be rendered either.
-      if (!a || !m || !probs.length || (v.sProblem && !probs[route.idx])) { v.sModule = v.sProblem = false; }
-      else if (v.sModule) {
-        const pr = db.getProgress(a.id), t = db.getUser(a.tutorId);
-        v.modTitle = db.assignmentLabel(a); v.modSubject = m.subject;
-        v.modDue = 'Due ' + fmtDate(a.due); v.modTutor = 'Assigned by ' + (t ? t.name : '\u2014');
-        v.modProgressText = pr.answered + '/' + pr.total + ' answered';
-        v.modPctW = (pr.total ? Math.round(100 * pr.answered / pr.total) : 0) + '%';
-        v.backDash = goE('dash');
+    // ---- module / problem viewer ----
+    const VW = st.viewer;
+    v.hasVwBanner = !!ctx && ctx.mode !== 'live';
+    if (v.hasVwBanner) {
+      const who = ctx.tutee ? ctx.tutee.name : 'this tutee';
+      v.vwModeLabel = ctx.mode === 'review' ? 'Review' : 'Preview';
+      v.vwBannerText = ctx.mode === 'review' ? 'Reviewing ' + who + '\u2019s answers \u2014 read-only.'
+        : ctx.assignment ? 'Previewing as ' + who + ' \u2014 answers are not recorded.'
+        : ctx.spec ? 'Previewing what would be assigned \u2014 answers are not recorded.'
+        : 'Previewing \u201c' + ctx.module.title + '\u201d \u2014 answers are not recorded.';
+      // Review shows the key on every problem already; the toggle is for the
+      // preview, where a tutor may want to try the questions blind first.
+      v.vwCanReveal = ctx.mode === 'preview';
+      v.vwToggleLabel = VW.showAnswers ? 'Hide answers' : 'Show answers';
+      v.vwToggleAnswers = () => { const cur = this.state.viewer; this.setState({ viewer: Object.assign({}, cur, { showAnswers: !cur.showAnswers }) }); };
+    }
+
+    if (ctx) {
+      const mode = ctx.mode, live = mode === 'live', preview = mode === 'preview', review = mode === 'review';
+      const a = ctx.assignment, m = ctx.module, probs = ctx.problems, subs = ctx.subs;
+      // Moving between the list and the problems keeps everything that says
+      // what is being looked at; only the name and the index change.
+      const base = { mode: route.mode, from: ctx.from, assignmentId: route.assignmentId, moduleId: route.moduleId, spec: route.spec };
+      const step = (name, extra) => go(name, Object.assign({}, base, extra));
+      const stepE = (name, extra) => goE(name, Object.assign({}, base, extra));
+      const letters = 'ABCD';
+      const keyText = (p) => (p.type === 'mc' ? p.answer + '. ' + (p.choices[letters.indexOf(p.answer)] || '') : p.answer);
+      // A stale index — the problem list shrank under an open problem — falls
+      // back to the list rather than to a blank screen.
+      if (v.sProblem && !probs[route.idx]) { v.sProblem = false; v.sModule = true; }
+
+      if (v.sModule) {
+        const home = Component.VIEWER_HOME[ctx.from];
+        v.modBack = goE(home.route); v.modBackLabel = home.label;
+        v.modTitle = ctx.label; v.modSubject = m.subject;
+        const t = a && db.getUser(a.tutorId);
+        const due = a ? 'Due ' + fmtDate(a.due) : '';
+        const by = 'Assigned by ' + (t ? t.name : '\u2014');
+        const count = plural(probs.length, 'problem');
+        // The preview has no progress of anyone's to show; live and review
+        // show the tutee's.
+        const pr = a && !preview ? db.getProgress(a.id) : null;
+        v.modHasProgress = !!pr;
+        v.modProgressText = pr ? pr.answered + '/' + pr.total + ' answered' : '';
+        v.modPctW = pr ? (pr.total ? Math.round(100 * pr.answered / pr.total) : 0) + '%' : '0%';
+        v.modMeta = live ? due + ' \u00b7 ' + by
+          : review ? due + ' \u00b7 ' + by + ' \u00b7 ' + pr.answered + '/' + pr.total + ' answered \u00b7 ' + plural(pr.correct, 'correct', 'correct')
+          : a ? due + ' \u00b7 ' + by + ' \u00b7 ' + count
+          : m.subject + ' \u00b7 ' + count + (ctx.random ? ' \u00b7 one possible draw \u2014 each tutee gets their own' : '');
+        v.modEmpty = probs.length === 0;
+        v.modEmptyText = ctx.spec ? 'Nothing in this module matches those options.'
+          : m.problems.length ? 'Every problem in this module is flagged, so there is nothing a tutee could be given.'
+          : a ? 'The problems this assignment covered are no longer in the module.'
+          : 'This module has no problems yet.';
+        // Only the whole-module preview from the library offers to assign: an
+        // assignment preview already is one, and the assign screen's preview
+        // goes back to a form that is already filled in.
+        v.vwCanAssign = preview && !a && !ctx.spec;
+        v.vwAssign = () => this.setState({ route: { name: 'assign' }, assign: Object.assign({}, this.state.assign, { moduleId: m.id, msg: '', tags: {}, picks: {} }) });
         v.modRows = probs.map((p, i) => {
-          const s = subs[p.id];
+          const sub = subs[p.id];
+          const theirs = review ? db.getErrorEntry(a.studentId, p.id) : null;
+          const detail = review && sub ? 'Their answer: ' + sub.answer + (sub.correct ? '' : ' \u00b7 Correct: ' + p.answer) : '';
           return {
             num: String(i + 1).padStart(2, '0'),
             label: p.type === 'mc' ? 'Multiple choice' : 'Free response',
-            statusLabel: s ? (s.correct ? 'Correct' : 'Incorrect') : 'Not started',
-            tagClass: s ? (s.correct ? 'tag tag-accent' : 'tag tag-outline') : 'tag tag-neutral',
-            open: go('problem', { assignmentId: a.id, idx: i })
+            statusLabel: sub ? (sub.correct ? 'Correct' : 'Incorrect') : (review ? 'Not answered' : 'Not started'),
+            tagClass: sub ? (sub.correct ? 'tag tag-accent' : 'tag tag-outline') : 'tag tag-neutral',
+            hasDetail: !!detail, detail: detail,
+            inLog: !!theirs,
+            open: step('problem', { idx: i })
           };
         });
-      } else {
+      } else if (v.sProblem) {
         const i = route.idx, p = probs[i], P = st.problem, sub = subs[p.id];
-        const letters = 'ABCD';
-        v.posKicker = db.assignmentLabel(a) + ' \u00b7 Problem ' + (i + 1) + ' of ' + probs.length;
-        v.backModule = goE('module', { assignmentId: a.id });
+        const answered = !!sub;
+        // Review always shows the key; the preview shows it once the toggle is
+        // on; live only once the tutee has answered — which is also the only
+        // moment a tutee's cache holds it at all.
+        const revealed = review || (preview && VW.showAnswers);
+        const showKey = answered || revealed;
+        v.posKicker = ctx.label + ' \u00b7 Problem ' + (i + 1) + ' of ' + probs.length;
+        v.backModule = stepE('module');
         v.qEl = math(p.text);
         calcOK = db.calculatorAllowed(m, p);
         v.isMC = p.type === 'mc'; v.isFree = p.type === 'free';
-        const answered = !!sub;
-        v.answered = answered; v.notAnswered = !answered;
+        v.inputsLocked = answered || review;
         if (v.isMC) v.choices = p.choices.map((c, ci) => {
           const letter = letters[ci];
           return {
             letter: letter + '.', el: math(c),
-            selected: answered ? sub.answer === letter : P.choice === letter,
-            pick: () => this.setState({ problem: Object.assign({}, P, { choice: letter }) }),
-            isCorrectMark: answered && p.answer === letter,
+            selected: answered ? sub.answer === letter : (!review && P.choice === letter),
+            pick: () => this.setState({ problem: Object.assign({}, this.state.problem, { choice: letter }) }),
+            isCorrectMark: showKey && p.answer === letter,
             isWrongMark: answered && sub.answer === letter && !sub.correct,
-            border: (answered && p.answer === letter) ? 'var(--color-accent)' : 'var(--color-neutral-300)'
+            wrongLabel: review ? 'Their answer' : 'Your answer',
+            border: (showKey && p.answer === letter) ? 'var(--color-accent)' : 'var(--color-neutral-300)'
           };
         });
-        v.freeShown = answered ? sub.answer : P.free; v.onFree = F('problem', 'free');
+        v.freeLabel = review ? 'Their answer' : 'Your answer';
+        v.freeShown = answered ? sub.answer : (review ? '' : P.free);
+        v.freePlaceholder = review && !answered ? 'Not answered' : '';
+        v.onFree = F('problem', 'free');
+        v.canCheck = !answered && !review;
         v.cantSubmit = (v.isMC ? !P.choice : !P.free.trim()) || !!this._submitting;
         v.doSubmit = () => {
           const ans = v.isMC ? this.state.problem.choice : this.state.problem.free.trim();
           if (!ans || this._submitting) return;
+          if (!live) {
+            // Graded here from the key the tutor already holds, and kept in
+            // component state. Nothing reaches Supabase.
+            const cur = this.state.viewer;
+            this.setState({ viewer: Object.assign({}, cur, {
+              answers: Object.assign({}, cur.answers, { [p.id]: { answer: ans, correct: db.gradeAnswer(ans, p.answer) } })
+            }) });
+            return;
+          }
           this._submitting = true;
           this.forceUpdate();
           // Grading runs in Postgres, so this is a round trip: db re-renders us
@@ -2197,18 +2361,23 @@ class Component extends DCLogic {
             .catch(() => {})
             .then(() => { this._submitting = false; this.forceUpdate(); });
         };
+        v.showFeedback = showKey;
         v.wasCorrect = answered && sub.correct; v.wasWrong = answered && !sub.correct;
-        v.correctAnswerEl = answered ? (v.isMC ? math(p.answer + '. ' + p.choices[letters.indexOf(p.answer)]) : math(p.answer)) : null;
-        v.explEl = answered ? math(p.explanation) : null;
+        v.notAttempted = !answered && revealed;
+        v.notAttemptedLabel = review ? 'Not answered' : 'Answer key';
+        v.showCorrectAnswer = showKey && !v.wasCorrect;
+        v.correctAnswerEl = showKey ? math(keyText(p)) : null;
+        v.explEl = showKey ? math(p.explanation) : null;
 
         // The error log offer only appears on a wrong answer, and only once —
         // an entry already there turns it into a badge. Postgres enforces the
-        // same rule: no submission, no entry.
-        const logged = db.getErrorEntry(me.id, p.id);
+        // same rule: no submission, no entry. Live only: a preview has no
+        // submission to hang an entry on, and a review is somebody else's log.
+        const logged = live ? db.getErrorEntry(me.id, p.id) : null;
         const EA = st.errAdd;
-        v.elInLog = answered && !!logged;
-        v.elCanAdd = answered && !sub.correct && !logged && !EA.open;
-        v.elFormOpen = answered && !sub.correct && !logged && EA.open;
+        v.elInLog = live && answered && !!logged;
+        v.elCanAdd = live && answered && !sub.correct && !logged && !EA.open;
+        v.elFormOpen = live && answered && !sub.correct && !logged && EA.open;
         v.elComment = EA.comment; v.elBusy = EA.busy;
         v.onElComment = (e) => this.setState({ errAdd: Object.assign({}, this.state.errAdd, { comment: e.target.value }) });
         v.elOpen = () => this.setState({ errAdd: { open: true, comment: '', busy: false } });
@@ -2222,10 +2391,14 @@ class Component extends DCLogic {
             () => this.setState({ errAdd: Object.assign({}, this.state.errAdd, { busy: false }) })
           );
         };
+        // In review, whether the tutee kept this one.
+        const theirs = review ? db.getErrorEntry(a.studentId, p.id) : null;
+        v.rvInLog = !!theirs;
+        v.rvLogText = theirs ? 'In their error log \u00b7 ' + (theirs.resolved ? 'Resolved' : 'Unresolved') : '';
 
         v.noPrev = i === 0; v.noNext = i === probs.length - 1;
-        v.goPrev = go('problem', { assignmentId: a.id, idx: Math.max(0, i - 1) });
-        v.goNext = go('problem', { assignmentId: a.id, idx: Math.min(probs.length - 1, i + 1) });
+        v.goPrev = step('problem', { idx: Math.max(0, i - 1) });
+        v.goNext = step('problem', { idx: Math.min(probs.length - 1, i + 1) });
       }
     }
 
@@ -2315,6 +2488,7 @@ class Component extends DCLogic {
             return {
               title: db.assignmentLabel(a),
               progress: pr.answered + '/' + pr.total,
+              preview: this.openViewer({ name: 'module', mode: 'preview', assignmentId: a.id, from: 'students' }),
               unassign: () => confirmUnassign(a)
             };
           })
@@ -2516,24 +2690,9 @@ class Component extends DCLogic {
       v.subjectOpts = subjects.map((s) => ({ label: s, active: s === subj, pick: () => this.setState({ lib: { subject: s } }) }));
       v.libModules = mods.filter((m) => subj === 'All' || m.subject === subj).map((m) => ({
         subject: m.subject, title: m.title, count: m.problems.length + ' problems',
-        preview: go('preview', { moduleId: m.id }),
+        preview: this.openViewer({ name: 'module', mode: 'preview', moduleId: m.id, from: 'library' }),
         assignIt: () => this.setState({ route: { name: 'assign' }, assign: Object.assign({}, this.state.assign, { moduleId: m.id, msg: '', tags: {}, picks: {} }) })
       }));
-    }
-
-    if (v.sPreview) {
-      const m = db.getModule(route.moduleId);
-      if (m) {
-        v.pvTitle = m.title; v.pvMeta = m.subject + ' \u00b7 ' + m.problems.length + ' problems';
-        v.backLibrary = goE('library');
-        v.pvAssign = () => this.setState({ route: { name: 'assign' }, assign: Object.assign({}, this.state.assign, { moduleId: m.id, msg: '', tags: {}, picks: {} }) });
-        v.pvRows = m.problems.map((p, i) => ({
-          num: String(i + 1).padStart(2, '0'),
-          typeLabel: p.type === 'mc' ? 'Multiple choice' : 'Free response',
-          qEl: math(p.text),
-          answerEl: p.type === 'mc' ? math(p.answer + '. ' + p.choices['ABCD'.indexOf(p.answer)]) : math(p.answer)
-        }));
-      }
     }
 
     if (v.sAssign) {
@@ -2548,10 +2707,18 @@ class Component extends DCLogic {
       // they no longer remember making.
       v.onSelModule = (e) => setAssign({ moduleId: e.target.value, tags: {}, picks: {} });
       v.moduleOptions = db.getModules().map((m) => ({ id: m.id, label: m.title + ' (' + m.subject + ', ' + m.problems.length + ' problems)' }));
-      v.tutees = db.getStudentsOf(me.id).map((s) => ({
-        name: s.name, sub: s.email, checked: !!A.picked[s.id],
-        toggle: () => { const A2 = this.state.assign; setAssign({ picked: Object.assign({}, A2.picked, { [s.id]: !A2.picked[s.id] }) }); }
-      }));
+      // A tutor assigns to their own tutees; an admin to anyone, with the
+      // tutee's tutor named so the list can be read.
+      const assignees = me.role === 'admin'
+        ? db.getUsers().filter((u) => u.role === 'student').slice().sort((x, y) => String(x.name).localeCompare(String(y.name)))
+        : db.getStudentsOf(me.id);
+      v.tutees = assignees.map((s) => {
+        const t = me.role === 'admin' ? db.tutorOf(s.id) : null;
+        return {
+          name: s.name, sub: t ? t.name : s.email, checked: !!A.picked[s.id],
+          toggle: () => { const A2 = this.state.assign; setAssign({ picked: Object.assign({}, A2.picked, { [s.id]: !A2.picked[s.id] }) }); }
+        };
+      });
 
       v.selDifficulty = A.difficulty;
       v.onDifficulty = (e) => setAssign({ difficulty: e.target.value });
@@ -2654,39 +2821,31 @@ class Component extends DCLogic {
         );
       };
       v.assignMsg = A.msg; v.hasAssignMsg = !!A.msg;
+      // The same spec Assign would send, minus the tutees, so what the preview
+      // shows is what db.assignModule() would resolve.
+      v.cantPreview = !(A.moduleId && pool.length && count);
+      v.doPreviewAssign = this.openViewer({
+        name: 'module', mode: 'preview', moduleId: A.moduleId, from: 'assign',
+        spec: { moduleId: A.moduleId, difficulty: A.difficulty, tags: tags, limit: limit, problemIds: v.isPickMode ? chosenIds : null }
+      });
     }
 
     if (v.sResults) {
-      v.resultRows = db.getTutorAssignments(me.id).filter((a) => db.getModule(a.moduleId)).map((a) => {
+      v.resultsKicker = me.role === 'admin' ? 'Admin' : 'Tutor';
+      const asg = (me.role === 'admin' ? db.getAllAssignments() : db.getTutorAssignments(me.id)).filter((a) => db.getModule(a.moduleId));
+      v.noResults = asg.length === 0;
+      v.resultRows = asg.map((a) => {
         const s = db.getUser(a.studentId), pr = db.getProgress(a.id);
         return {
           student: s ? s.name : '\u2014', module: db.assignmentLabel(a), due: fmtDate(a.due),
           progress: pr.answered + '/' + pr.total,
           score: scorePct(pr.correct, pr.answered),
-          open: go('resultDetail', { assignmentId: a.id }),
-          // The row itself opens the detail view, so this must not travel up.
+          open: this.openViewer({ name: 'module', mode: 'review', assignmentId: a.id, from: 'results' }),
+          // The row itself opens the review, so the buttons must not travel up.
+          preview: this.openViewer({ name: 'module', mode: 'preview', assignmentId: a.id, from: 'results' }),
           unassign: (e) => { if (e && e.stopPropagation) e.stopPropagation(); confirmUnassign(a); }
         };
       });
-    }
-
-    if (v.sResultDetail) {
-      const a = db.getAssignment(route.assignmentId);
-      if (a) {
-        const s = db.getUser(a.studentId), subs = db.getSubmissions(a.id), pr = db.getProgress(a.id);
-        v.rdTitle = (s ? s.name : '\u2014') + ' \u2014 ' + db.assignmentLabel(a);
-        v.rdMeta = 'Due ' + fmtDate(a.due) + ' \u00b7 ' + pr.answered + '/' + pr.total + ' answered \u00b7 ' + pr.correct + ' correct';
-        v.backResults = goE('results');
-        v.rdRows = db.getAssignmentProblems(a.id).map((p, i) => {
-          const sub = subs[p.id];
-          return {
-            num: String(i + 1).padStart(2, '0'), qEl: math(p.text),
-            given: sub ? sub.answer : '\u2014', correctAns: p.answer,
-            tagClass: sub ? (sub.correct ? 'tag tag-accent' : 'tag tag-outline') : 'tag tag-neutral',
-            statusLabel: sub ? (sub.correct ? 'Correct' : 'Incorrect') : 'Not started'
-          };
-        });
-      }
     }
 
     if (v.sUsers) {
@@ -2764,6 +2923,7 @@ class Component extends DCLogic {
       };
       v.adminModRows = db.getModules().map((m) => ({
         title: m.title, subject: m.subject, count: m.problems.length,
+        preview: this.openViewer({ name: 'module', mode: 'preview', moduleId: m.id, from: 'modules' }),
         edit: () => this.setState({ route: { name: 'editor', moduleId: m.id }, editor: { title: m.title, subject: m.subject, editing: null } }),
         del: () => {
           openDialog({
@@ -3164,7 +3324,9 @@ class Component extends DCLogic {
       });
     }
 
-    v.calcLayer = this.renderCalcLayer(calcOK);
+    v.vwCalc = v.hasVwBanner && calcOK && !st.calc.open;
+    v.vwOpenCalc = () => this.calcSet({ open: true });
+    v.calcLayer = this.renderCalcLayer(calcOK, v.hasVwBanner);
     return v;
   }
 }
