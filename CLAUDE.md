@@ -68,6 +68,38 @@ scratch answers of the last preview.
 Tutees must never see a Preview button or the Show-answers toggle: both are
 rendered only from staff screens or when `mode !== 'live'`.
 
+## Session calendar
+
+`sessions` (migration 009) holds one row per tutoring session. The browser
+works in its own zone and stores UTC. `db.atLocal(date, 'HH:MM', plusDays)` is
+the one place local wall-clock times become instants, so a weekly 4pm stays
+4pm across a DST change.
+
+- **Series** are N concrete rows that share a `recurrence_id`. There is no
+  RRULE. `db.updateSessions(id, patch, 'one' | 'future')` applies to every
+  session in scope only the fields the patch *changes* relative to the session
+  it was opened on, so a week that was moved on its own keeps its time when
+  only the room changes. The whole scope goes up in one upsert.
+- **Overlap guard** is the `sessions_no_overlap` exclusion constraint
+  (btree_gist, cancelled rows excluded, `deferrable initially immediate` so a
+  series can shift in one statement). `db.js` checks the cache first to name
+  the clashing session; a `23P01` from Postgres is still mapped to a readable
+  message.
+- **RLS:** a tutor *reads* every session with their `tutor_id`, including
+  sessions with tutees since reassigned, because the constraint still counts
+  those. They *write* only for current tutees. Tutees read their own. Admins
+  have full access. No parent role exists yet.
+- **Availability** (`tutor_availability`, weekday 0 = Sunday, wall-clock
+  times) is advice only. It hatches the week grid and greys time options, and
+  never blocks a booking.
+- **Logs:** `session_logs.session_id` links a sheet to its session.
+  `db.getLogForSession()` falls back to an unlinked sheet for the same tutee on
+  the same local day.
+- The event popover (`state.calPop`) and the create/edit form
+  (`state.calForm`) are overlays outside any screen, because My Students opens
+  them too. The grid is built with `createElement` in `renderCalGrid()`, the
+  same way the calculator layer is.
+
 ## Conventions
 
 - Data-layer scripts belong in the real `<head>`, never in `<helmet>`.

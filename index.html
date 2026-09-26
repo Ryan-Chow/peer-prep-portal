@@ -17,10 +17,10 @@
      ten-minute cache: without this a returning tab can run a new index.html
      against an old db.js and call a function that does not exist yet. They
      move as one version because they are one layer. -->
-<script src="config.js?v=9"></script>
-<script src="supabaseClient.js?v=9"></script>
-<script src="importer.js?v=9"></script>
-<script src="db.js?v=9"></script>
+<script src="config.js?v=10"></script>
+<script src="supabaseClient.js?v=10"></script>
+<script src="importer.js?v=10"></script>
+<script src="db.js?v=10"></script>
 </head>
 <body>
 <x-dc>
@@ -568,6 +568,13 @@ textarea.input { min-height: 90px; resize: vertical; }
       <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Dashboard</div>
       <h1 style="margin:4px 0 6px">Your modules</h1>
       <p style="margin:0 0 24px;font-size:14px;opacity:0.65">Work through what your tutor assigned. Progress saves as you go.</p>
+      <sc-if value="{{hasNextSession}}" hint-placeholder-val="{{false}}">
+        <div class="card blueprint" style="margin-bottom:24px;display:flex;flex-direction:row;gap:12px;align-items:center;flex-wrap:wrap;border-color:var(--color-accent);background:var(--color-accent-100);cursor:pointer" sc-camel-on-click="{{nextSessionOpen}}">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <span style="font-size:14px;flex:1;min-width:220px">{{nextSessionText}}</span>
+          <sc-if value="{{hasNextSessionLoc}}" hint-placeholder-val="{{false}}"><span class="tag tag-neutral">{{nextSessionLoc}}</span></sc-if>
+        </div>
+      </sc-if>
       <sc-if value="{{noAssignments}}" hint-placeholder-val="{{false}}"><p style="font-size:14px;opacity:0.65">Nothing assigned yet — your tutor will add modules here.</p></sc-if>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px">
         <sc-for list="{{dashCards}}" as="a" hint-placeholder-count="3">
@@ -586,6 +593,68 @@ textarea.input { min-height: 90px; resize: vertical; }
           </div>
         </sc-for>
       </div>
+    </sc-if>
+
+    <sc-if value="{{sCalendar}}" hint-placeholder-val="{{false}}">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">{{calKicker}}</div>
+      <h1 style="margin:4px 0 6px">Calendar</h1>
+      <p style="margin:0 0 20px;font-size:14px;opacity:0.65">Times are shown in {{calTz}}.</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+        <button type="button" class="btn btn-secondary" sc-camel-on-click="{{calToday}}">Today</button>
+        <button type="button" class="btn btn-ghost" aria-label="Previous" sc-camel-on-click="{{calPrev}}">&#8249;</button>
+        <button type="button" class="btn btn-ghost" aria-label="Next" sc-camel-on-click="{{calNext}}">&#8250;</button>
+        <span class="cal-title" style="font-family:var(--font-heading);font-size:18px;min-width:180px">{{calTitle}}</span>
+        <div class="seg" style="display:inline-flex">
+          <label class="seg-opt"><input type="radio" name="calview" checked="{{calIsMonth}}" sc-camel-on-change="{{calPickMonth}}">Month</label>
+          <label class="seg-opt"><input type="radio" name="calview" checked="{{calIsWeek}}" sc-camel-on-change="{{calPickWeek}}">Week</label>
+        </div>
+        <sc-if value="{{calIsAdmin}}" hint-placeholder-val="{{false}}">
+          <sc-raw-select class="input" name="calTutor" style="max-width:200px" value="{{calTutor}}" sc-camel-on-change="{{onCalTutor}}">
+            <sc-for list="{{calTutorOpts}}" as="o"><option value="{{o.id}}">{{o.label}}</option></sc-for>
+          </sc-raw-select>
+        </sc-if>
+        <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-secondary" sc-camel-on-click="{{calIcs}}">Add to my calendar (.ics)</button>
+          <sc-if value="{{calCanWrite}}" hint-placeholder-val="{{false}}">
+            <button type="button" class="btn btn-primary blueprint" sc-camel-on-click="{{calNew}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>New session</button>
+          </sc-if>
+        </span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;font-size:12px">
+        <sc-for list="{{calStatusLegend}}" as="k" hint-placeholder-count="4"><span style="{{k.style}};padding:1px 8px">{{k.label}}</span></sc-for>
+        <sc-if value="{{calShowTutorLegend}}" hint-placeholder-val="{{false}}">
+          <span style="margin-left:10px;opacity:0.6">Tutors:</span>
+          <sc-for list="{{calTutorLegend}}" as="t" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:4px"><i style="{{t.style}};display:inline-block;width:10px;height:10px"></i>{{t.name}}</span></sc-for>
+        </sc-if>
+      </div>
+      <sc-if value="{{calHasErr}}" hint-placeholder-val="{{false}}">
+        <p style="margin:0 0 10px;font-size:13px;color:#8c1d18;border-left:2px solid #8c1d18;padding-left:10px">{{calErr}}</p>
+      </sc-if>
+      <div class="cal-grid">{{calGrid}}</div>
+      <sc-if value="{{calShowAvail}}" hint-placeholder-val="{{false}}">
+        <div class="card blueprint" style="margin-top:24px;max-width:640px;display:flex;flex-direction:column;gap:12px">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <div class="card-kicker">My weekly availability</div>
+          <p style="margin:0;font-size:13px;opacity:0.7">When you are usually free to tutor, in your own time zone. Whoever schedules you sees the rest of the week greyed out; nothing stops a session being booked outside it.</p>
+          <sc-if value="{{avNone}}" hint-placeholder-val="{{true}}"><p style="margin:0;font-size:13px;opacity:0.6">No availability set yet.</p></sc-if>
+          <sc-for list="{{avBlocks}}" as="b" hint-placeholder-count="2">
+            <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+              <span style="flex:1">{{b.label}}</span>
+              <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{b.remove}}">Remove</button>
+            </div>
+          </sc-for>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <div class="field" style="min-width:150px"><label>Day</label>
+              <sc-raw-select class="input" value="{{avDay}}" sc-camel-on-change="{{onAvDay}}">
+                <sc-for list="{{avDayOpts}}" as="o"><option value="{{o.id}}">{{o.label}}</option></sc-for>
+              </sc-raw-select>
+            </div>
+            <div class="field"><label>From</label><input class="input" type="time" step="900" value="{{avStart}}" sc-camel-on-change="{{onAvStart}}"></div>
+            <div class="field"><label>To</label><input class="input" type="time" step="900" value="{{avEnd}}" sc-camel-on-change="{{onAvEnd}}"></div>
+            <button type="button" class="btn btn-secondary" sc-camel-on-click="{{avAdd}}">Add block</button>
+          </div>
+        </div>
+      </sc-if>
     </sc-if>
 
     <sc-if value="{{hasVwBanner}}" hint-placeholder-val="{{false}}">
@@ -707,6 +776,45 @@ textarea.input { min-height: 90px; resize: vertical; }
           <span style="font-size:14px;color:#8c1d18">{{logBannerText}}</span>
         </div>
       </sc-if>
+      <div class="card blueprint" style="margin-bottom:24px;display:flex;flex-direction:column;gap:10px">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="card-kicker" style="flex:1">This week</div>
+          <sc-if value="{{hasNeedsStatus}}" hint-placeholder-val="{{false}}">
+            <span class="tag" style="border:1px solid #8c1d18;color:#8c1d18">{{needsStatusText}}</span>
+          </sc-if>
+          <button type="button" class="btn btn-secondary" style="padding:3px 10px;font-size:12px" sc-camel-on-click="{{goCalendar}}">Open calendar</button>
+        </div>
+        <sc-if value="{{noWeekSessions}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;opacity:0.65">Nothing on the calendar this week.</p></sc-if>
+        <sc-for list="{{weekSessions}}" as="w" hint-placeholder-count="2">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--color-neutral-300);font-size:13px">
+            <a href="#" style="min-width:210px;text-decoration:none" sc-camel-on-click="{{w.open}}">{{w.when}}</a>
+            <span style="flex:1;min-width:120px">{{w.who}}</span>
+            <span class="tag" style="{{w.statusStyle}}">{{w.statusLabel}}</span>
+            <sc-if value="{{w.logDone}}" hint-placeholder-val="{{false}}"><span style="color:#1f7a44;font-weight:700" title="Session log submitted">&#10003;</span></sc-if>
+            <sc-if value="{{w.logNeeded}}" hint-placeholder-val="{{false}}"><span class="tag" style="border:1px solid #8c1d18;color:#8c1d18">Log needed</span></sc-if>
+            <sc-if value="{{w.canMark}}" hint-placeholder-val="{{false}}">
+              <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.complete}}">Completed</button>
+              <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.noShow}}">No-show</button>
+            </sc-if>
+            <sc-if value="{{w.canLog}}" hint-placeholder-val="{{false}}">
+              <button type="button" class="btn btn-secondary" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.log}}">{{w.logLabel}}</button>
+            </sc-if>
+          </div>
+        </sc-for>
+        <sc-if value="{{hasOlderNeedsStatus}}" hint-placeholder-val="{{false}}">
+          <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55;margin-top:6px">Earlier, still to mark</div>
+          <sc-for list="{{olderNeedsStatus}}" as="w" hint-placeholder-count="1">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--color-neutral-300);font-size:13px">
+              <a href="#" style="min-width:210px;text-decoration:none" sc-camel-on-click="{{w.open}}">{{w.when}}</a>
+              <span style="flex:1;min-width:120px">{{w.who}}</span>
+              <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.complete}}">Completed</button>
+              <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.noShow}}">No-show</button>
+              <button type="button" class="btn btn-secondary" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.log}}">{{w.logLabel}}</button>
+            </div>
+          </sc-for>
+        </sc-if>
+      </div>
       <sc-if value="{{noStudents}}" hint-placeholder-val="{{false}}"><p style="font-size:14px;opacity:0.65">No tutees linked to you yet — ask an admin.</p></sc-if>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px">
         <sc-for list="{{students}}" as="s" hint-placeholder-count="3">
@@ -1397,6 +1505,128 @@ textarea.input { min-height: 90px; resize: vertical; }
 
   </div>
 
+  <sc-if value="{{hasCalPop}}" hint-placeholder-val="{{false}}">
+    <div style="position:fixed;inset:0;background:rgba(24,26,30,0.35);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50" sc-camel-on-click="{{popClose}}">
+      <div class="card blueprint cal-pop" style="max-width:440px;width:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;background:var(--color-neutral-100);max-height:90vh;overflow:auto" sc-camel-on-click="{{popStop}}">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="tag" style="{{popStatusStyle}}">{{popStatus}}</span>
+          <span style="flex:1"></span>
+          <button type="button" class="btn btn-ghost" aria-label="Close" style="padding:2px 8px" sc-camel-on-click="{{popClose}}">&#215;</button>
+        </div>
+        <div class="card-title">{{popTitle}}</div>
+        <div style="font-size:14px;line-height:1.6">{{popWhen}}<br>{{popTime}}</div>
+        <sc-if value="{{popHasTutorLine}}" hint-placeholder-val="{{false}}"><div style="font-size:13px">{{popTutorLine}}</div></sc-if>
+        <sc-if value="{{popHasLoc}}" hint-placeholder-val="{{false}}">
+          <div style="font-size:13px">Where:
+            <sc-if value="{{popLocIsLink}}" hint-placeholder-val="{{false}}"><a href="{{popLoc}}" target="_blank" rel="noopener noreferrer" style="word-break:break-all">{{popLoc}}</a></sc-if>
+            <sc-if value="{{popLocText}}" hint-placeholder-val="{{true}}"><span>{{popLoc}}</span></sc-if>
+          </div>
+        </sc-if>
+        <sc-if value="{{popHasNotes}}" hint-placeholder-val="{{false}}"><div style="font-size:13px;white-space:pre-wrap;opacity:0.8">{{popNotes}}</div></sc-if>
+        <sc-if value="{{popHasSeries}}" hint-placeholder-val="{{false}}"><div style="font-size:12px;opacity:0.6">{{popSeries}}</div></sc-if>
+        <sc-if value="{{popHasLogState}}" hint-placeholder-val="{{false}}"><div style="{{popLogStyle}};font-size:13px">{{popLogState}}</div></sc-if>
+        <sc-if value="{{popHasErr}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;color:#8c1d18;border-left:2px solid #8c1d18;padding-left:10px">{{popErr}}</p></sc-if>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;border-top:1px solid var(--color-neutral-300);padding-top:10px">
+          <sc-if value="{{popCanLog}}" hint-placeholder-val="{{false}}">
+            <button type="button" class="btn btn-primary" style="padding:3px 10px;font-size:12px" disabled="{{popBusy}}" sc-camel-on-click="{{popLog}}">{{popLogLabel}}</button>
+          </sc-if>
+          <sc-if value="{{popCanWrite}}" hint-placeholder-val="{{false}}">
+            <button type="button" class="btn btn-secondary" style="padding:3px 10px;font-size:12px" disabled="{{popBusy}}" sc-camel-on-click="{{popEdit}}">Edit</button>
+          </sc-if>
+          <sc-if value="{{popIsScheduled}}" hint-placeholder-val="{{false}}">
+            <button type="button" class="btn btn-secondary" style="padding:3px 10px;font-size:12px" disabled="{{popBusy}}" sc-camel-on-click="{{popComplete}}">Mark completed</button>
+            <button type="button" class="btn btn-secondary" style="padding:3px 10px;font-size:12px" disabled="{{popBusy}}" sc-camel-on-click="{{popNoShow}}">Mark no-show</button>
+            <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:12px" disabled="{{popBusy}}" sc-camel-on-click="{{popCancel}}">Cancel session</button>
+          </sc-if>
+          <sc-if value="{{popCanCancelFuture}}" hint-placeholder-val="{{false}}">
+            <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:12px" disabled="{{popBusy}}" sc-camel-on-click="{{popCancelFuture}}">{{popCancelFutureLabel}}</button>
+          </sc-if>
+          <sc-if value="{{popCanReopen}}" hint-placeholder-val="{{false}}">
+            <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:12px" disabled="{{popBusy}}" sc-camel-on-click="{{popReopen}}">Mark scheduled again</button>
+          </sc-if>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px">
+          <a href="{{popGoogle}}" target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>
+          <sc-if value="{{popCanWrite}}" hint-placeholder-val="{{false}}">
+            <a href="#" style="margin-left:auto;color:#8c1d18" sc-camel-on-click="{{popDelete}}">Delete</a>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{hasCalForm}}" hint-placeholder-val="{{false}}">
+    <div style="position:fixed;inset:0;background:rgba(24,26,30,0.5);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50" sc-camel-on-click="{{fmClose}}">
+      <div class="card blueprint cal-form" style="max-width:520px;width:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;background:var(--color-neutral-100);max-height:92vh;overflow:auto" sc-camel-on-click="{{fmStop}}">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div class="card-kicker">{{fmKicker}}</div>
+        <div class="card-title">{{fmTitle}}</div>
+        <sc-if value="{{fmPickTutor}}" hint-placeholder-val="{{false}}">
+          <div class="field"><label>Tutor</label>
+            <sc-raw-select class="input" name="fmTutor" value="{{fmTutor}}" sc-camel-on-change="{{onFmTutor}}">
+              <sc-for list="{{fmTutorOpts}}" as="o"><option value="{{o.id}}">{{o.label}}</option></sc-for>
+            </sc-raw-select>
+          </div>
+        </sc-if>
+        <div class="field"><label>Tutee</label>
+          <sc-raw-select class="input" name="fmTutee" value="{{fmTutee}}" disabled="{{fmNoTutor}}" sc-camel-on-change="{{onFmTutee}}">
+            <sc-for list="{{fmTuteeOpts}}" as="o"><option value="{{o.id}}">{{o.label}}</option></sc-for>
+          </sc-raw-select>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div class="field" style="flex:1;min-width:150px"><label>Date</label><input class="input" name="fmDate" type="date" value="{{fmDate}}" sc-camel-on-change="{{onFmDate}}"></div>
+          <div class="field" style="flex:1;min-width:150px"><label>Start time</label>
+            <sc-raw-select class="input" name="fmTime" value="{{fmTime}}" sc-camel-on-change="{{onFmTime}}">
+              <sc-for list="{{fmTimeOpts}}" as="o"><option value="{{o.value}}" style="{{o.style}}">{{o.label}}</option></sc-for>
+            </sc-raw-select>
+          </div>
+        </div>
+        <sc-if value="{{fmHasAvailText}}" hint-placeholder-val="{{false}}"><div style="font-size:12px;opacity:0.65">{{fmAvailText}}</div></sc-if>
+        <sc-if value="{{fmHasAvailWarn}}" hint-placeholder-val="{{false}}"><div style="font-size:12px;color:#8a5a00">{{fmAvailWarn}}</div></sc-if>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div class="field" style="flex:1;min-width:150px"><label>Duration</label>
+            <sc-raw-select class="input" name="fmDur" value="{{fmDur}}" sc-camel-on-change="{{onFmDur}}">
+              <sc-for list="{{fmDurOpts}}" as="o"><option value="{{o.id}}">{{o.label}}</option></sc-for>
+            </sc-raw-select>
+          </div>
+          <sc-if value="{{fmIsCustom}}" hint-placeholder-val="{{false}}">
+            <div class="field" style="flex:1;min-width:120px"><label>Minutes</label><input class="input" name="fmCustom" type="number" min="5" max="720" step="5" value="{{fmCustom}}" sc-camel-on-change="{{onFmCustom}}"></div>
+          </sc-if>
+        </div>
+        <div class="field"><label>Location</label>
+          <input class="input" name="fmLoc" placeholder="Zoom, in person, a link or an address" value="{{fmLoc}}" sc-camel-on-change="{{onFmLoc}}">
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <sc-for list="{{fmLocPresets}}" as="p" hint-placeholder-count="3">
+              <button type="button" class="btn btn-ghost" style="padding:1px 8px;font-size:12px" sc-camel-on-click="{{p.pick}}">{{p.label}}</button>
+            </sc-for>
+          </div>
+        </div>
+        <div class="field"><label>Notes</label><textarea class="input" name="fmNotes" rows="2" value="{{fmNotes}}" sc-camel-on-change="{{onFmNotes}}"></textarea></div>
+        <sc-if value="{{fmIsNew}}" hint-placeholder-val="{{true}}">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:14px">
+            <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="fmRepeat" checked="{{fmRepeat}}" sc-camel-on-change="{{onFmRepeat}}">Repeat weekly for</label>
+            <input class="input" name="fmWeeks" type="number" min="2" max="26" style="width:80px" disabled="{{fmNoRepeat}}" value="{{fmWeeks}}" sc-camel-on-change="{{onFmWeeks}}">
+            <span>weeks</span>
+          </div>
+        </sc-if>
+        <sc-if value="{{fmHasScope}}" hint-placeholder-val="{{false}}">
+          <div class="field"><label>Apply changes to</label>
+            <div style="display:flex;flex-direction:column;gap:4px;font-size:14px">
+              <label style="display:flex;gap:6px;align-items:center"><input type="radio" name="fmScope" value="one" checked="{{fmScopeOne}}" sc-camel-on-change="{{fmPickOne}}">This session only</label>
+              <label style="display:flex;gap:6px;align-items:center"><input type="radio" name="fmScope" value="future" checked="{{fmScopeFuture}}" sc-camel-on-change="{{fmPickFuture}}">{{fmFutureLabel}}</label>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{fmHasErr}}" hint-placeholder-val="{{false}}"><p class="cal-form-err" style="margin:0;font-size:13px;color:#8c1d18;border-left:2px solid #8c1d18;padding-left:10px">{{fmErr}}</p></sc-if>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost" sc-camel-on-click="{{fmClose}}">Close</button>
+          <button type="button" class="btn btn-primary blueprint" disabled="{{fmBusy}}" sc-camel-on-click="{{fmSave}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>{{fmSaveLabel}}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
   <sc-if value="{{hasDialog}}" hint-placeholder-val="{{false}}">
     <div style="position:fixed;inset:0;background:rgba(24,26,30,0.5);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50" sc-camel-on-click="{{dlgCancel}}">
       <div class="card blueprint" style="max-width:460px;width:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;background:var(--color-neutral-100)" sc-camel-on-click="{{dlgStop}}">
@@ -1458,7 +1688,13 @@ class Component extends DCLogic {
     viewer: this.blankViewer(),
     // open/minimised only. The window's position and size are in _calc below,
     // deliberately out of state — see calcGesture.
-    calc: this.calcSaved()
+    calc: this.calcSaved(),
+    cal: this.blankCal(),
+    // The session form and the event popover are overlays over whichever
+    // screen opened them, so they live beside the route rather than in it.
+    calForm: null,
+    calPop: null,
+    calAvail: this.blankAvailForm()
   };
 
   // Seeded from the same saved read as state.calc, so the window opens where it
@@ -1689,6 +1925,7 @@ class Component extends DCLogic {
       parentCommunication: l ? l.parentCommunication : '',
       paymentStatus: l ? l.paymentStatus : '',
       status: l ? l.status : 'draft',
+      sessionId: l ? l.sessionId : '',
       err: '', busy: false
     };
   }
@@ -2046,6 +2283,312 @@ class Component extends DCLogic {
     return R.createElement(R.Fragment, null, launch, panel);
   }
 
+  // ---- session calendar -----------------------------------------------------
+  //
+  // Everything on screen is in the browser's zone; db.js converts to UTC on the
+  // way out. The grid is built with createElement rather than in the template:
+  // positioning each event by its minutes and laying overlapping ones side by
+  // side is arithmetic the template has no way to express.
+
+  static CAL_FIRST_HOUR = 7;
+  static CAL_LAST_HOUR = 22;
+  static CAL_HOUR_PX = 48;
+  static SESSION_STATUS = {
+    scheduled: { label: 'Scheduled', bg: '#e3eefb', edge: '#2f6fb5', fg: '#1b4a80' },
+    completed: { label: 'Completed', bg: '#e2f3e8', edge: '#1f7a44', fg: '#155d33' },
+    cancelled: { label: 'Cancelled', bg: '#ededee', edge: '#8a8a8d', fg: '#6b6b6e' },
+    no_show:   { label: 'No-show',   bg: '#fbe5e3', edge: '#b3261e', fg: '#8c1d18' }
+  };
+  // One colour per tutor in the admin's all-tutors view, as the event's left
+  // edge; the fill stays the status colour so both read at once.
+  static TUTOR_COLORS = ['#5980a6', '#b5651d', '#6a4c93', '#2a9d8f', '#c2185b', '#7c6f00', '#1565c0', '#8d6e63'];
+  static WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  // view    'week' | 'month'
+  // anchor  any local date inside the week or month on screen
+  // tutor   the admin's filter: '' for every tutor
+  blankCal() { return { view: 'week', anchor: this.todayLocal(), tutor: '', err: '' }; }
+  blankAvailForm() { return { weekday: '2', start: '15:00', end: '18:00' }; }
+
+  // The create/edit form. `init` is { id } to edit a session, or any of
+  // { date, time, tutorId, tuteeId } to prefill a new one.
+  blankCalForm(init) {
+    const db = window.db, me = db.me();
+    const s = init && init.id ? db.getSession(init.id) : null;
+    if (s) {
+      const minutes = Math.round((s.end - s.start) / 60000);
+      const preset = ['30', '45', '60', '90'].indexOf(String(minutes)) >= 0;
+      return {
+        id: s.id, tutorId: s.tutorId, tuteeId: s.tuteeId,
+        date: db.localDate(s.start), time: db.localTime(s.start),
+        duration: preset ? String(minutes) : 'custom', custom: preset ? '' : String(minutes),
+        location: s.location, notes: s.notes, repeat: false, weeks: '8',
+        scope: 'one', err: '', busy: false
+      };
+    }
+    const tutorId = me.role === 'tutor' ? me.id : ((init && init.tutorId) || '');
+    const tutees = tutorId ? db.getStudentsOf(tutorId) : [];
+    const tuteeId = (init && init.tuteeId) || (tutees.length === 1 ? tutees[0].id : '');
+    return {
+      id: '', tutorId: tutorId, tuteeId: tuteeId,
+      date: (init && init.date) || this.todayLocal(), time: (init && init.time) || '16:00',
+      duration: '60', custom: '', location: '', notes: '', repeat: false, weeks: '8',
+      scope: 'one', err: '', busy: false
+    };
+  }
+
+  // Sunday of the week holding `iso`, as a local date string.
+  calWeekStart(iso) {
+    const db = window.db, t = db.atLocal(iso, '12:00');
+    return db.localDate(db.atLocal(iso, '12:00', -new Date(t).getDay()));
+  }
+
+  fmtClock(ms) { return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); }
+  fmtSpan(s) { return this.fmtClock(s.start) + ' \u2013 ' + this.fmtClock(s.end); }
+
+  // An RFC 5545 file of the given sessions. UTC throughout (the trailing Z),
+  // so the importing calendar puts each one at the right instant whatever zone
+  // it is set to. A cancelled session is still written, marked CANCELLED, so
+  // re-importing the file takes it off a calendar that imported it earlier —
+  // the UID is the session id, which is what lets the two be matched up.
+  downloadIcs(filename, events) {
+    const stamp = (ms) => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const esc = (v) => String(v == null ? '' : v).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+    // Lines longer than 75 octets are folded: CRLF plus one space, which the
+    // reader strips. Counted in UTF-8 bytes, and never inside a character.
+    const fold = (line) => {
+      const out = [];
+      let cur = '', bytes = 0;
+      for (const ch of line) {
+        const n = new TextEncoder().encode(ch).length;
+        if (bytes + n > (out.length ? 74 : 75)) { out.push(cur); cur = ''; bytes = 0; }
+        cur += ch; bytes += n;
+      }
+      out.push(cur);
+      return out.join('\r\n ');
+    };
+    const now = stamp(Date.now());
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Peer Prep Academy//Calendar//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+    events.forEach((e) => {
+      lines.push('BEGIN:VEVENT', 'UID:' + e.uid, 'DTSTAMP:' + now,
+        'DTSTART:' + stamp(e.start), 'DTEND:' + stamp(e.end),
+        'SUMMARY:' + esc(e.summary), 'STATUS:' + (e.cancelled ? 'CANCELLED' : 'CONFIRMED'));
+      if (e.location) lines.push('LOCATION:' + esc(e.location));
+      if (e.description) lines.push('DESCRIPTION:' + esc(e.description));
+      lines.push('END:VEVENT');
+    });
+    lines.push('END:VCALENDAR');
+    const url = URL.createObjectURL(new Blob([lines.map(fold).join('\r\n') + '\r\n'], { type: 'text/calendar;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // Google's "add event" template link. dates is start/end in the same UTC
+  // basic format as the .ics.
+  googleCalendarHref(e) {
+    const stamp = (ms) => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const q = [
+      'action=TEMPLATE',
+      'text=' + encodeURIComponent(e.summary),
+      'dates=' + stamp(e.start) + '/' + stamp(e.end),
+      'details=' + encodeURIComponent(e.description || ''),
+      'location=' + encodeURIComponent(e.location || '')
+    ];
+    return 'https://calendar.google.com/calendar/render?' + q.join('&');
+  }
+
+  // Overlapping events in one day column share its width. Events are grouped
+  // into clusters that overlap transitively; inside a cluster each takes the
+  // first lane free at its start, and every member is drawn 1/lanes wide.
+  calLanes(list) {
+    const out = new Map();
+    let cluster = [], lanes = [], clusterEnd = -Infinity;
+    const flush = () => { cluster.forEach((x) => { out.get(x.id).of = lanes.length; }); cluster = []; lanes = []; };
+    list.slice().sort((a, b) => a.start - b.start || b.end - a.end).forEach((s) => {
+      if (s.start >= clusterEnd) { flush(); clusterEnd = -Infinity; }
+      let lane = lanes.findIndex((end) => end <= s.start);
+      if (lane < 0) { lane = lanes.length; lanes.push(s.end); } else lanes[lane] = s.end;
+      out.set(s.id, { lane: lane, of: 1 });
+      cluster.push(s);
+      clusterEnd = Math.max(clusterEnd, s.end);
+    });
+    flush();
+    return out;
+  }
+
+  // g: { view, anchor, sessions, labelOf, edgeOf, badgeOf, canWrite,
+  //      onEvent(id), onSlot(dateISO, 'HH:MM'), onMove(id, startMs),
+  //      availOf(dateISO) -> [{ from, to }] minutes, or null when unknown,
+  //      onMore(dateISO) }
+  renderCalGrid(g) {
+    const R = React, db = window.db, C = Component;
+    const today = this.todayLocal();
+    const ST = C.SESSION_STATUS;
+    const eventStyle = (s, extra) => {
+      const st = ST[s.status] || ST.scheduled;
+      return Object.assign({
+        background: st.bg, color: st.fg, borderLeft: '4px solid ' + (g.edgeOf(s) || st.edge),
+        textDecoration: s.status === 'cancelled' ? 'line-through' : 'none',
+        fontSize: '12px', lineHeight: '1.3', cursor: 'pointer', boxSizing: 'border-box', overflow: 'hidden'
+      }, extra || {});
+    };
+    const badge = (s) => {
+      const b = g.badgeOf(s);
+      if (!b) return null;
+      return R.createElement('span', {
+        title: b.done ? 'Session log submitted' : 'No submitted log for this session',
+        style: b.done
+          ? { marginLeft: '4px', fontWeight: 700, color: '#1f7a44', textDecoration: 'none', display: 'inline-block' }
+          : { marginLeft: '4px', fontSize: '10px', padding: '0 4px', border: '1px solid #8c1d18', color: '#8c1d18', background: '#fff', textDecoration: 'none', display: 'inline-block' }
+      }, b.done ? '\u2713' : 'Log needed');
+    };
+    const pick = (id) => (e) => { e.stopPropagation(); g.onEvent(id); };
+
+    if (g.view === 'month') {
+      const [y, m] = g.anchor.split('-').map(Number);
+      const first = db.localDate(new Date(y, m - 1, 1).getTime());
+      const start = this.calWeekStart(first);
+      const heads = C.WEEKDAYS.map((d) => R.createElement('div', {
+        key: d, style: { padding: '6px', fontSize: '11px', letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.6 }
+      }, d.slice(0, 3)));
+      const cells = [];
+      for (let i = 0; i < 42; i++) {
+        const iso = db.localDate(db.atLocal(start, '12:00', i));
+        const dayStart = db.atLocal(iso, '00:00'), dayEnd = db.atLocal(iso, '00:00', 1);
+        const list = g.sessions.filter((s) => s.start < dayEnd && s.start >= dayStart);
+        const inMonth = Number(iso.slice(5, 7)) === m;
+        const shown = list.slice(0, 3);
+        cells.push(R.createElement('div', {
+          key: iso, 'data-date': iso,
+          onClick: g.canWrite ? () => g.onSlot(iso, '16:00') : undefined,
+          style: {
+            minHeight: '104px', padding: '4px', borderRight: '1px solid var(--color-neutral-300)', borderBottom: '1px solid var(--color-neutral-300)',
+            background: iso === today ? 'var(--color-accent-100)' : inMonth ? 'transparent' : 'color-mix(in srgb, var(--color-text) 4%, transparent)',
+            cursor: g.canWrite ? 'pointer' : 'default', display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0
+          }
+        },
+          R.createElement('div', { style: { fontSize: '12px', fontWeight: iso === today ? 700 : 400, opacity: inMonth ? 0.85 : 0.4 } }, String(Number(iso.slice(8)))),
+          shown.map((s) => R.createElement('div', {
+            key: s.id, 'data-session': s.id, onClick: pick(s.id), title: g.labelOf(s) + ' \u00b7 ' + this.fmtSpan(s),
+            style: eventStyle(s, { padding: '2px 4px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' })
+          }, this.fmtClock(s.start).replace(':00', '').replace(' ', '').toLowerCase() + ' ' + g.labelOf(s), badge(s))),
+          list.length > shown.length
+            ? R.createElement('a', { href: '#', style: { fontSize: '11px' }, onClick: (e) => { e.preventDefault(); e.stopPropagation(); g.onMore(iso); } }, '+' + (list.length - shown.length) + ' more')
+            : null
+        ));
+      }
+      return R.createElement('div', { style: { overflowX: 'auto' } },
+        R.createElement('div', {
+          className: 'cal-month',
+          style: { display: 'grid', gridTemplateColumns: 'repeat(7, minmax(92px, 1fr))', minWidth: '660px', borderTop: '1px solid var(--color-neutral-300)', borderLeft: '1px solid var(--color-neutral-300)' }
+        }, heads.concat(cells)));
+    }
+
+    const H0 = C.CAL_FIRST_HOUR, H1 = C.CAL_LAST_HOUR, PX = C.CAL_HOUR_PX;
+    const height = (H1 - H0) * PX;
+    const weekStart = this.calWeekStart(g.anchor);
+    const days = [0, 1, 2, 3, 4, 5, 6].map((i) => db.localDate(db.atLocal(weekStart, '12:00', i)));
+    const toPx = (min) => Math.max(0, Math.min(height, (min - H0 * 60) / 60 * PX));
+    const snap = (min, step) => Math.round(min / step) * step;
+    const hhmm = (min) => String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0');
+    const yToMin = (e, el) => H0 * 60 + (e.clientY - el.getBoundingClientRect().top) / PX * 60;
+
+    const gutter = R.createElement('div', { style: { position: 'relative', height: height + 'px' } },
+      Array.from({ length: H1 - H0 }, (_, i) => R.createElement('div', {
+        key: i, style: { position: 'absolute', top: (i * PX - 7) + 'px', right: '6px', fontSize: '11px', opacity: 0.55, whiteSpace: 'nowrap' }
+      }, i === 0 ? '' : this.fmtClock(new Date(2000, 0, 1, H0 + i).getTime()).replace(':00', ''))));
+
+    const columns = days.map((iso) => {
+      const dayStart = db.atLocal(iso, '00:00'), dayEnd = db.atLocal(iso, '00:00', 1);
+      const list = g.sessions.filter((s) => s.start < dayEnd && s.start >= dayStart);
+      const lanes = this.calLanes(list);
+      const avail = g.availOf(iso);
+      // Hatched where the tutor has said they are not available; the gaps
+      // between their blocks, not the blocks themselves, so the hour lines
+      // stay visible where they can be booked.
+      const off = [];
+      if (avail) {
+        let at = H0 * 60;
+        avail.slice().sort((a, b) => a.from - b.from).forEach((b) => {
+          if (b.from > at) off.push({ from: at, to: b.from });
+          at = Math.max(at, b.to);
+        });
+        if (at < H1 * 60) off.push({ from: at, to: H1 * 60 });
+      }
+      const shade = off.map((b, i) => R.createElement('div', {
+        key: 'off' + i, className: 'cal-off',
+        style: {
+          position: 'absolute', left: 0, right: 0, top: toPx(b.from) + 'px', height: (toPx(b.to) - toPx(b.from)) + 'px', pointerEvents: 'none',
+          background: 'repeating-linear-gradient(135deg, color-mix(in srgb, var(--color-text) 8%, transparent) 0 6px, transparent 6px 12px)'
+        }
+      }));
+      const events = list.map((s) => {
+        const d0 = new Date(s.start);
+        const startMin = d0.getHours() * 60 + d0.getMinutes();
+        const top = toPx(startMin);
+        const bottom = toPx(startMin + (s.end - s.start) / 60000);
+        const L = lanes.get(s.id);
+        return R.createElement('div', {
+          key: s.id, 'data-session': s.id,
+          draggable: g.canWrite ? 'true' : undefined,
+          onDragStart: g.canWrite ? (e) => {
+            this._calDrag = { id: s.id, grab: (e.clientY - e.currentTarget.getBoundingClientRect().top) / PX * 60 };
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', s.id);
+          } : undefined,
+          onDragEnd: () => { this._calDrag = null; },
+          onClick: pick(s.id),
+          title: g.labelOf(s) + ' \u00b7 ' + this.fmtSpan(s),
+          style: eventStyle(s, {
+            position: 'absolute', top: top + 'px', height: Math.max(20, bottom - top - 2) + 'px',
+            left: 'calc(' + (100 * L.lane / L.of) + '% + 2px)', width: 'calc(' + (100 / L.of) + '% - 4px)',
+            padding: '2px 4px', zIndex: 2
+          })
+        },
+          R.createElement('div', { style: { fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, g.labelOf(s), badge(s)),
+          R.createElement('div', { style: { opacity: 0.8, whiteSpace: 'nowrap' } }, this.fmtSpan(s)));
+      });
+      return R.createElement('div', {
+        key: iso, 'data-date': iso,
+        onClick: g.canWrite ? (e) => {
+          const min = Math.max(H0 * 60, Math.min(H1 * 60 - 30, Math.floor(yToMin(e, e.currentTarget) / 30) * 30));
+          g.onSlot(iso, hhmm(min));
+        } : undefined,
+        onDragOver: g.canWrite ? (e) => { if (this._calDrag) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } } : undefined,
+        onDrop: g.canWrite ? (e) => {
+          const d = this._calDrag;
+          this._calDrag = null;
+          if (!d) return;
+          e.preventDefault();
+          const min = Math.max(0, Math.min(24 * 60 - 15, snap(yToMin(e, e.currentTarget) - d.grab, 15)));
+          g.onMove(d.id, db.atLocal(iso, hhmm(min)));
+        } : undefined,
+        style: {
+          position: 'relative', height: height + 'px', borderLeft: '1px solid var(--color-neutral-300)',
+          backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0 ' + (PX - 1) + 'px, var(--color-neutral-300) ' + (PX - 1) + 'px ' + PX + 'px)',
+          backgroundColor: iso === today ? 'var(--color-accent-100)' : 'transparent',
+          cursor: g.canWrite ? 'copy' : 'default'
+        }
+      }, shade.concat(events));
+    });
+
+    const head = [R.createElement('div', { key: 'g' })].concat(days.map((iso) => {
+      const d = new Date(db.atLocal(iso, '12:00'));
+      return R.createElement('div', {
+        key: iso, style: { padding: '6px 4px', textAlign: 'center', fontSize: '12px', borderLeft: '1px solid var(--color-neutral-300)', fontWeight: iso === today ? 700 : 400, background: iso === today ? 'var(--color-accent-100)' : 'transparent' }
+      }, d.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' + d.getDate());
+    }));
+
+    return R.createElement('div', { style: { overflowX: 'auto', border: '1px solid var(--color-neutral-300)' } },
+      R.createElement('div', { className: 'cal-week', style: { minWidth: '720px' } },
+        R.createElement('div', { style: { display: 'grid', gridTemplateColumns: '52px repeat(7, 1fr)', borderBottom: '1px solid var(--color-neutral-300)' } }, head),
+        R.createElement('div', { style: { display: 'grid', gridTemplateColumns: '52px repeat(7, 1fr)' } }, [R.createElement('div', { key: 'gutter' }, gutter)].concat(columns))));
+  }
+
   renderVals() {
     const st = this.state, db = window.db, route = st.route;
     const me = db ? db.me() : null;
@@ -2136,10 +2679,13 @@ class Component extends DCLogic {
     const flaggedTab = flaggedNow ? 'Flagged (' + flaggedNow + ')' : 'Flagged';
     // Admin has Assign and Results too: they are how an admin previews and
     // reviews any tutee's work, which a tutor does from My Students.
-    const linkDefs = me.role === 'student' ? [['Dashboard', 'dash'], ['Error Log', 'errorLog']]
-      : me.role === 'tutor' ? [['My Students', 'students'], ['Module Library', 'library'], ['Assign', 'assign'], ['Results', 'results'], ['Error Logs', 'errorLogs']]
-      : [['Users', 'users'], ['Modules', 'modules'], ['Assign', 'assign'], ['Results', 'results'], ['Import', 'import'], [flaggedTab, 'flagged'], ['Session Logs', 'adminLogs'], ['Error Logs', 'errorLogs']];
-    const activeOf = { dash: 'dash', students: 'students', profile: 'students', logs: 'students', library: 'library', assign: 'assign', results: 'results', users: 'users', modules: 'modules', editor: 'modules', import: 'import', flagged: 'flagged', errorLog: 'errorLog', errorLogs: 'errorLogs', adminLogs: 'adminLogs' };
+    // Past sessions a tutor has not yet marked completed or no-show.
+    const unmarked = me.role === 'tutor' ? db.sessionsNeedingStatus(me.id).length : 0;
+    const calendarTab = unmarked ? 'Calendar (' + unmarked + ')' : 'Calendar';
+    const linkDefs = me.role === 'student' ? [['Dashboard', 'dash'], ['Calendar', 'calendar'], ['Error Log', 'errorLog']]
+      : me.role === 'tutor' ? [['My Students', 'students'], [calendarTab, 'calendar'], ['Module Library', 'library'], ['Assign', 'assign'], ['Results', 'results'], ['Error Logs', 'errorLogs']]
+      : [['Users', 'users'], ['Calendar', 'calendar'], ['Modules', 'modules'], ['Assign', 'assign'], ['Results', 'results'], ['Import', 'import'], [flaggedTab, 'flagged'], ['Session Logs', 'adminLogs'], ['Error Logs', 'errorLogs']];
+    const activeOf = { calendar: 'calendar', dash: 'dash', students: 'students', profile: 'students', logs: 'students', library: 'library', assign: 'assign', results: 'results', users: 'users', modules: 'modules', editor: 'modules', import: 'import', flagged: 'flagged', errorLog: 'errorLog', errorLogs: 'errorLogs', adminLogs: 'adminLogs' };
     // Resolved up here because the nav needs to know where the viewer was
     // opened from; the screens below read the same object.
     const inViewer = route.name === 'module' || route.name === 'problem';
@@ -2147,7 +2693,7 @@ class Component extends DCLogic {
     // The log form is reached from two different tabs, so it lights whichever
     // one sent us there rather than picking one. The viewer lights the tab it
     // was opened from, for the same reason.
-    const activeTab = route.name === 'logForm' ? (route.from === 'adminLogs' ? 'adminLogs' : 'students')
+    const activeTab = route.name === 'logForm' ? (route.from === 'adminLogs' ? 'adminLogs' : route.from === 'calendar' ? 'calendar' : 'students')
       : inViewer ? (ctx ? ctx.from : 'dash')
       : activeOf[route.name];
     v.navLinks = linkDefs.map(([label, name]) => ({ label: label, cur: activeTab === name ? 'page' : undefined, go: goE(name) }));
@@ -2539,13 +3085,14 @@ class Component extends DCLogic {
       const G = st.slog, tutee = db.getUser(G.tuteeId);
       const setG = (patch) => this.setState({ slog: Object.assign({}, this.state.slog, patch) });
       const fg = (key) => (e) => setG({ [key]: e.target.value, err: '' });
-      const from = route.from === 'adminLogs' ? 'adminLogs' : route.from === 'logs' ? 'logs' : 'students';
+      const from = ['adminLogs', 'logs', 'calendar'].indexOf(route.from) >= 0 ? route.from : 'students';
       const back = from === 'adminLogs' ? { name: 'adminLogs' }
         : from === 'logs' ? { name: 'logs', tuteeId: G.tuteeId }
+        : from === 'calendar' ? { name: 'calendar' }
         : { name: 'students' };
       const leave = () => this.setState({ route: back, slog: null });
       v.lfBack = (e) => { if (e && e.preventDefault) e.preventDefault(); leave(); };
-      v.lfBackLabel = from === 'students' ? '\u2190 My students' : '\u2190 Session logs';
+      v.lfBackLabel = from === 'students' ? '\u2190 My students' : from === 'calendar' ? '\u2190 Calendar' : '\u2190 Session logs';
       v.lfKicker = G.id ? 'Edit session log' : 'New session log';
       v.lfTitle = tutee ? tutee.name : 'Session log';
       v.lfDate = G.sessionDate; v.onLfDate = fg('sessionDate');
@@ -2583,6 +3130,7 @@ class Component extends DCLogic {
           topicsCovered: G.topicsCovered, homeworkAssigned: G.homeworkAssigned,
           progressRating: G.progressRating, struggles: G.struggles,
           parentCommunication: G.parentCommunication, paymentStatus: G.paymentStatus,
+          sessionId: G.sessionId,
           status: status
         }).then(leave, () => setG({ busy: false }));
       };
@@ -3322,6 +3870,383 @@ class Component extends DCLogic {
           })
         };
       });
+    }
+
+    // ---- session calendar ----
+    // The popover and the form are overlays rather than screens, because My
+    // Students opens them too; everything they need is computed here whatever
+    // the route.
+    const CAL = st.cal, SST = Component.SESSION_STATUS;
+    const staff = me.role !== 'student';
+    const canSchedule = me.role === 'tutor' || me.role === 'admin';
+    const setCal = (patch) => this.setState({ cal: Object.assign({}, this.state.cal, patch) });
+    const personName = (id) => { const u = id && db.getUser(id); return u ? u.name : '\u2014'; };
+    // A tutee's session with a tutor they have since moved on from: RLS no
+    // longer returns that tutor's profile, so there is no name to show.
+    const tutorName = (id) => { const u = id && db.getUser(id); return u ? u.name : (me.role === 'student' ? 'a previous tutor' : '\u2014'); };
+    const labelOf = (s) => (me.role === 'student' ? tutorName(s.tutorId) : personName(s.tuteeId));
+    const nowMs = Date.now();
+    // Past, not cancelled or a no-show: a session that happened needs a sheet.
+    const logState = (s) => {
+      if (!staff || s.end > nowMs || (s.status !== 'scheduled' && s.status !== 'completed')) return null;
+      const log = db.getLogForSession(s.id);
+      return { done: !!(log && log.status === 'submitted'), log: log };
+    };
+    const whenText = (s) => new Date(s.start).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + ' \u00b7 ' + this.fmtSpan(s);
+    const icsEvent = (s) => ({
+      uid: s.id + '@peerprepacademy',
+      start: s.start, end: s.end, cancelled: s.status === 'cancelled',
+      summary: me.role === 'student' ? 'Tutoring with ' + tutorName(s.tutorId) : 'Tutoring: ' + personName(s.tuteeId),
+      location: s.location,
+      description: [me.role === 'admin' ? 'Tutor: ' + personName(s.tutorId) : '', s.notes].filter(Boolean).join('\n')
+    });
+    const openPop = (id) => this.setState({ calPop: { id: id, busy: false, err: '' } });
+    const openForm = (init) => this.setState({ calForm: this.blankCalForm(init), calPop: null });
+    // The log sheet for a calendar session: the existing one if there is one,
+    // otherwise a new sheet with the tutee, date, length and session filled in.
+    const logFromSession = (s, from) => {
+      const log = db.getLogForSession(s.id);
+      if (log && log.status === 'submitted') {
+        this.setState({ route: { name: 'logs', tuteeId: s.tuteeId }, calPop: null });
+        return;
+      }
+      const buf = this.blankSLog(s.tuteeId, log ? log.id : '');
+      if (!log) {
+        buf.sessionDate = db.localDate(s.start);
+        buf.duration = Math.round((s.end - s.start) / 60000) + ' min';
+      }
+      if (!buf.sessionId) buf.sessionId = s.id;
+      this.setState({ route: { name: 'logForm', tuteeId: s.tuteeId, logId: log ? log.id : '', from: from }, slog: buf, calPop: null });
+    };
+    const logLabel = (s) => {
+      const log = db.getLogForSession(s.id);
+      return !log ? 'Log session' : log.status === 'submitted' ? 'View log' : 'Finish log';
+    };
+    const quickStatus = (s, status) => () => { db.updateSessions(s.id, { status: status }, 'one').catch(() => {}); };
+
+    // Which sessions the calendar draws. A tutor's and a tutee's caches only
+    // hold their own; an admin narrows everyone's by the tutor filter.
+    const calTutor = me.role === 'tutor' ? me.id : me.role === 'admin' ? CAL.tutor : '';
+    const visible = db.getSessions({ tutorId: calTutor || undefined });
+    const tutorsSorted = db.getUsers().filter((u) => u.role === 'tutor').sort((a, b) => a.name.localeCompare(b.name));
+    const tutorColor = (id) => {
+      const i = tutorsSorted.findIndex((t) => t.id === id);
+      return i < 0 ? '#98989b' : Component.TUTOR_COLORS[i % Component.TUTOR_COLORS.length];
+    };
+
+    v.sCalendar = route.name === 'calendar';
+    if (v.sCalendar) {
+      const view = CAL.view === 'month' ? 'month' : 'week';
+      const a = CAL.anchor;
+      const shiftAnchor = (dir) => {
+        if (view === 'week') return db.localDate(db.atLocal(a, '12:00', 7 * dir));
+        const [y, m] = a.split('-').map(Number);
+        return db.localDate(new Date(y, m - 1 + dir, 1, 12).getTime());
+      };
+      v.calKicker = me.role === 'student' ? 'Student' : me.role === 'tutor' ? 'Tutor' : 'Admin';
+      v.calTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'your local time';
+      v.calToday = () => setCal({ anchor: this.todayLocal(), err: '' });
+      v.calPrev = () => setCal({ anchor: shiftAnchor(-1), err: '' });
+      v.calNext = () => setCal({ anchor: shiftAnchor(1), err: '' });
+      v.calIsWeek = view === 'week'; v.calIsMonth = view === 'month';
+      v.calPickWeek = () => setCal({ view: 'week' });
+      v.calPickMonth = () => setCal({ view: 'month' });
+      if (view === 'week') {
+        const ws = this.calWeekStart(a);
+        const d0 = new Date(db.atLocal(ws, '12:00')), d6 = new Date(db.atLocal(ws, '12:00', 6));
+        const md = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        v.calTitle = d0.getFullYear() !== d6.getFullYear() ? md(d0) + ', ' + d0.getFullYear() + ' \u2013 ' + md(d6) + ', ' + d6.getFullYear()
+          : (md(d0) + ' \u2013 ' + (d0.getMonth() === d6.getMonth() ? d6.getDate() : md(d6)) + ', ' + d6.getFullYear());
+      } else {
+        v.calTitle = new Date(db.atLocal(a, '12:00')).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      }
+      v.calIsAdmin = me.role === 'admin';
+      v.calTutor = CAL.tutor;
+      v.calTutorOpts = [{ id: '', label: 'All tutors' }].concat(tutorsSorted.map((t) => ({ id: t.id, label: t.name })));
+      v.onCalTutor = (e) => setCal({ tutor: e.target.value });
+      v.calCanWrite = canSchedule;
+      v.calNew = () => openForm({ date: CAL.anchor >= this.todayLocal() ? CAL.anchor : this.todayLocal(), tutorId: calTutor });
+      v.calErr = CAL.err; v.calHasErr = !!CAL.err;
+      v.calStatusLegend = ['scheduled', 'completed', 'cancelled', 'no_show'].map((k) => ({
+        label: SST[k].label,
+        style: 'background:' + SST[k].bg + ';color:' + SST[k].fg + ';border-left:4px solid ' + SST[k].edge + (k === 'cancelled' ? ';text-decoration:line-through' : '')
+      }));
+      const allTutors = me.role === 'admin' && !CAL.tutor;
+      v.calShowTutorLegend = allTutors && tutorsSorted.length > 0;
+      v.calTutorLegend = tutorsSorted.map((t) => ({ name: t.name, style: 'background:' + tutorColor(t.id) }));
+
+      // The next 60 days of whatever this calendar is showing: a tutor's or a
+      // tutee's own sessions, or an admin's current filter.
+      v.calIcs = () => {
+        const upto = Date.now() + 60 * 86400000;
+        const list = visible.filter((s) => s.end > Date.now() && s.start < upto);
+        this.downloadIcs('peer-prep-sessions-' + this.todayLocal() + '.ics', list.map(icsEvent));
+      };
+
+      const availTutor = calTutor || null;
+      v.calGrid = this.renderCalGrid({
+        view: view, anchor: a, sessions: visible, canWrite: canSchedule,
+        labelOf: labelOf,
+        edgeOf: (s) => (allTutors ? tutorColor(s.tutorId) : null),
+        badgeOf: (s) => logState(s),
+        onEvent: openPop,
+        onSlot: (iso, time) => openForm({ date: iso, time: time, tutorId: calTutor }),
+        onMove: (id, start) => {
+          const s = db.getSession(id);
+          if (!s || s.start === start) return;
+          setCal({ err: '' });
+          db.moveSession(id, start).catch((err) => setCal({ err: (err && err.message) || 'Could not move the session.' }));
+        },
+        onMore: (iso) => setCal({ view: 'week', anchor: iso }),
+        availOf: (iso) => {
+          if (!availTutor || !staff) return null;
+          const blocks = db.getAvailability(availTutor);
+          if (!blocks.length) return null;
+          const day = new Date(db.atLocal(iso, '12:00')).getDay();
+          const toMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+          return blocks.filter((b) => b.weekday === day).map((b) => ({ from: toMin(b.start), to: toMin(b.end) }));
+        }
+      });
+
+      // A tutor keeps their own weekly availability here. It is advice for
+      // whoever books them, not a rule: nothing refuses a session outside it.
+      v.calShowAvail = me.role === 'tutor';
+      if (v.calShowAvail) {
+        const AF = st.calAvail;
+        const setAF = (patch) => this.setState({ calAvail: Object.assign({}, this.state.calAvail, patch) });
+        v.avBlocks = db.getAvailability(me.id).map((b) => ({
+          label: Component.WEEKDAYS[b.weekday] + ' \u00b7 ' + this.fmtClock(db.atLocal('2000-01-03', b.start)) + ' \u2013 ' + this.fmtClock(db.atLocal('2000-01-03', b.end)),
+          remove: () => { db.removeAvailability(b.id).catch(() => {}); }
+        }));
+        v.avNone = v.avBlocks.length === 0;
+        v.avDay = AF.weekday; v.onAvDay = (e) => setAF({ weekday: e.target.value });
+        v.avDayOpts = Component.WEEKDAYS.map((d, i) => ({ id: String(i), label: d }));
+        v.avStart = AF.start; v.onAvStart = (e) => setAF({ start: e.target.value });
+        v.avEnd = AF.end; v.onAvEnd = (e) => setAF({ end: e.target.value });
+        v.avAdd = () => { db.addAvailability({ tutorId: me.id, weekday: AF.weekday, start: AF.start, end: AF.end }).catch(() => {}); };
+      }
+    }
+
+    // ---- event popover ----
+    const POP = st.calPop;
+    const popS = POP ? db.getSession(POP.id) : null;
+    v.hasCalPop = !!popS;
+    if (popS) {
+      const s = popS, stt = SST[s.status] || SST.scheduled;
+      const setPop = (patch) => this.setState({ calPop: Object.assign({}, this.state.calPop, patch) });
+      const act = (work, close) => () => {
+        if (this.state.calPop && this.state.calPop.busy) return;
+        setPop({ busy: true, err: '' });
+        work().then(
+          () => { if (close) this.setState({ calPop: null }); else setPop({ busy: false }); },
+          (err) => setPop({ busy: false, err: (err && err.message) || 'That did not save.' })
+        );
+      };
+      const series = s.recurrenceId ? db.getSessions({}).filter((x) => x.recurrenceId === s.recurrenceId) : [];
+      const later = db.getSessionScope(s.id, 'future').length;
+      v.popClose = () => this.setState({ calPop: null });
+      v.popStop = (e) => { if (e && e.stopPropagation) e.stopPropagation(); };
+      v.popStatus = stt.label;
+      v.popStatusStyle = 'background:' + stt.bg + ';color:' + stt.fg + ';border:1px solid ' + stt.edge;
+      v.popTitle = me.role === 'student' ? 'Session with ' + tutorName(s.tutorId) : personName(s.tuteeId);
+      v.popWhen = new Date(s.start).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      v.popTime = this.fmtSpan(s) + ' (' + Math.round((s.end - s.start) / 60000) + ' min)';
+      v.popTutorLine = me.role === 'admin' ? 'Tutor: ' + personName(s.tutorId) : '';
+      v.popHasTutorLine = !!v.popTutorLine;
+      v.popHasLoc = !!s.location;
+      v.popLocIsLink = /^https?:\/\//i.test(s.location);
+      v.popLocText = !v.popLocIsLink;
+      v.popLoc = s.location;
+      v.popHasNotes = !!s.notes;
+      v.popNotes = s.notes;
+      v.popSeries = series.length > 1
+        ? 'Weekly series \u00b7 ' + (series.findIndex((x) => x.id === s.id) + 1) + ' of ' + series.length
+        : '';
+      v.popHasSeries = !!v.popSeries;
+      const ls = logState(s);
+      v.popHasLogState = !!ls;
+      v.popLogState = ls ? (ls.done ? '\u2713 Session log submitted' : 'Log needed') : '';
+      v.popLogStyle = ls && ls.done ? 'color:#1f7a44' : 'color:#8c1d18';
+      v.popGoogle = this.googleCalendarHref(icsEvent(s));
+      v.popErr = POP.err; v.popHasErr = !!POP.err;
+      v.popBusy = !!POP.busy;
+      v.popCanWrite = canSchedule;
+      v.popIsScheduled = canSchedule && s.status === 'scheduled';
+      v.popCanReopen = canSchedule && s.status !== 'scheduled';
+      v.popCanCancelFuture = v.popIsScheduled && later > 1;
+      v.popCancelFutureLabel = 'Cancel this and ' + plural(later - 1, 'later one');
+      v.popEdit = () => openForm({ id: s.id });
+      v.popComplete = act(() => db.updateSessions(s.id, { status: 'completed' }, 'one'));
+      v.popNoShow = act(() => db.updateSessions(s.id, { status: 'no_show' }, 'one'));
+      v.popReopen = act(() => db.updateSessions(s.id, { status: 'scheduled' }, 'one'));
+      v.popCancel = act(() => db.updateSessions(s.id, { status: 'cancelled' }, 'one'), true);
+      v.popCancelFuture = act(() => db.updateSessions(s.id, { status: 'cancelled' }, 'future'), true);
+      v.popDelete = () => openDialog({
+        kicker: 'Delete session',
+        title: personName(s.tuteeId) + ' \u00b7 ' + whenText(s),
+        body: 'Remove this session from the calendar altogether? Use Cancel instead if it was scheduled and called off.',
+        lines: ['Any session log written for it is kept.'],
+        confirmLabel: 'Delete',
+        run: () => db.deleteSession(s.id).then(() => this.setState({ calPop: null }))
+      });
+      v.popCanLog = me.role === 'tutor' && s.status !== 'cancelled' && s.start <= nowMs;
+      v.popLogLabel = logLabel(s);
+      v.popLog = () => logFromSession(s, route.name === 'students' ? 'students' : 'calendar');
+    }
+
+    // ---- create / edit form ----
+    const FM = st.calForm;
+    v.hasCalForm = !!FM;
+    if (FM) {
+      const setFM = (patch) => this.setState({ calForm: Object.assign({}, this.state.calForm, patch) });
+      const ff = (key) => (e) => setFM({ [key]: e.target.value, err: '' });
+      const editing = FM.id ? db.getSession(FM.id) : null;
+      const minutes = FM.duration === 'custom' ? Math.round(Number(FM.custom)) : Number(FM.duration);
+      v.fmKicker = editing ? 'Edit session' : 'New session';
+      v.fmTitle = editing ? personName(editing.tuteeId) + ' \u00b7 ' + whenText(editing) : 'Schedule a session';
+      v.fmClose = () => { if (!FM.busy) this.setState({ calForm: null }); };
+      v.fmStop = (e) => { if (e && e.stopPropagation) e.stopPropagation(); };
+
+      // An admin picks the tutor first, and the tutee list follows from it.
+      v.fmPickTutor = me.role === 'admin';
+      v.fmTutor = FM.tutorId;
+      v.fmTutorOpts = [{ id: '', label: 'Choose a tutor\u2026' }].concat(tutorsSorted.map((t) => ({ id: t.id, label: t.name })));
+      v.onFmTutor = (e) => {
+        const tid = e.target.value;
+        const keep = db.getStudentsOf(tid).some((x) => x.id === this.state.calForm.tuteeId);
+        setFM({ tutorId: tid, tuteeId: keep ? this.state.calForm.tuteeId : '', err: '' });
+      };
+      const tutees = FM.tutorId ? db.getStudentsOf(FM.tutorId).slice() : [];
+      if (FM.tuteeId && !tutees.some((x) => x.id === FM.tuteeId)) {
+        const cur = db.getUser(FM.tuteeId);
+        if (cur) tutees.push(cur);
+      }
+      tutees.sort((x, y) => x.name.localeCompare(y.name));
+      v.fmTutee = FM.tuteeId;
+      v.fmTuteeOpts = [{ id: '', label: FM.tutorId ? (tutees.length ? 'Choose a tutee\u2026' : 'No tutees linked to this tutor') : 'Choose a tutor first' }]
+        .concat(tutees.map((x) => ({ id: x.id, label: x.name })));
+      v.fmNoTutor = !FM.tutorId;
+      v.onFmTutee = ff('tuteeId');
+      v.fmDate = FM.date; v.onFmDate = ff('date');
+
+      // Every quarter hour from 6am to 10pm, marked where the tutor has said
+      // they are not available. Marked, not disabled: availability is advice.
+      const avail = (hhmm) => (FM.tutorId && minutes > 0 && FM.date
+        ? db.isAvailable(FM.tutorId, db.atLocal(FM.date, hhmm), db.atLocal(FM.date, hhmm) + minutes * 60000)
+        : null);
+      const times = [];
+      for (let t = 6 * 60; t <= 22 * 60; t += 15) times.push(String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'));
+      if (FM.time && times.indexOf(FM.time) < 0) { times.push(FM.time); times.sort(); }
+      v.fmTime = FM.time; v.onFmTime = ff('time');
+      v.fmTimeOpts = times.map((t) => {
+        const ok = avail(t);
+        return {
+          value: t,
+          label: this.fmtClock(db.atLocal('2000-01-03', t)) + (ok === false ? '  \u00b7 outside availability' : ''),
+          style: ok === false ? 'color:#98989b' : ''
+        };
+      });
+      const here = FM.time ? avail(FM.time) : null;
+      v.fmAvailWarn = here === false
+        ? 'Outside ' + (me.role === 'tutor' ? 'your' : personName(FM.tutorId) + '\u2019s') + ' availability. You can still book it.'
+        : '';
+      v.fmHasAvailWarn = !!v.fmAvailWarn;
+      const blocks = FM.tutorId ? db.getAvailability(FM.tutorId) : [];
+      v.fmAvailText = blocks.length
+        ? 'Available: ' + blocks.map((b) => Component.WEEKDAYS[b.weekday].slice(0, 3) + ' ' + this.fmtClock(db.atLocal('2000-01-03', b.start)) + '\u2013' + this.fmtClock(db.atLocal('2000-01-03', b.end))).join(', ')
+        : '';
+      v.fmHasAvailText = !!v.fmAvailText;
+
+      v.fmDur = FM.duration; v.onFmDur = ff('duration');
+      v.fmDurOpts = [['30', '30 min'], ['45', '45 min'], ['60', '1 hour'], ['90', '1\u00bd hours'], ['custom', 'Custom\u2026']].map(([id, label]) => ({ id: id, label: label }));
+      v.fmIsCustom = FM.duration === 'custom';
+      v.fmCustom = FM.custom; v.onFmCustom = ff('custom');
+      v.fmLoc = FM.location; v.onFmLoc = ff('location');
+      v.fmLocPresets = ['Zoom', 'In person', 'Google Meet'].map((p) => ({ label: p, pick: () => setFM({ location: p, err: '' }) }));
+      v.fmNotes = FM.notes; v.onFmNotes = ff('notes');
+      v.fmIsNew = !editing;
+      v.fmRepeat = !!FM.repeat;
+      v.fmNoRepeat = !FM.repeat;
+      v.onFmRepeat = (e) => setFM({ repeat: !!e.target.checked, err: '' });
+      v.fmWeeks = FM.weeks; v.onFmWeeks = ff('weeks');
+      const laterCount = editing ? db.getSessionScope(editing.id, 'future').length : 0;
+      v.fmHasScope = !!editing && laterCount > 1;
+      v.fmScopeOne = FM.scope !== 'future'; v.fmScopeFuture = FM.scope === 'future';
+      v.fmPickOne = () => setFM({ scope: 'one' });
+      v.fmPickFuture = () => setFM({ scope: 'future' });
+      v.fmFutureLabel = 'This and all future in the series (' + laterCount + ')';
+      v.fmErr = FM.err; v.fmHasErr = !!FM.err;
+      v.fmBusy = FM.busy;
+      v.fmSaveLabel = editing ? 'Save changes' : (FM.repeat ? 'Schedule ' + (Number(FM.weeks) || 0) + ' sessions' : 'Schedule');
+      v.fmSave = () => {
+        if (FM.busy) return;
+        if (!FM.tutorId) { setFM({ err: 'Choose a tutor.' }); return; }
+        if (!FM.tuteeId) { setFM({ err: 'Choose a tutee.' }); return; }
+        if (!FM.date || !FM.time) { setFM({ err: 'Choose a date and a start time.' }); return; }
+        if (!(minutes >= 5 && minutes <= 720)) { setFM({ err: 'Enter a length between 5 and 720 minutes.' }); return; }
+        const weeks = FM.repeat ? Math.round(Number(FM.weeks)) : 1;
+        if (FM.repeat && !(weeks >= 2 && weeks <= 26)) { setFM({ err: 'Repeat for 2 to 26 weeks.' }); return; }
+        setFM({ busy: true, err: '' });
+        const work = editing
+          ? db.updateSessions(editing.id, {
+            date: FM.date, time: FM.time, minutes: minutes,
+            location: FM.location, notes: FM.notes, tutorId: FM.tutorId, tuteeId: FM.tuteeId
+          }, FM.scope)
+          : db.createSessions({
+            tutorId: FM.tutorId, tuteeId: FM.tuteeId, date: FM.date, time: FM.time,
+            minutes: minutes, location: FM.location, notes: FM.notes, weeks: weeks
+          });
+        work.then(
+          () => this.setState({ calForm: null }),
+          (err) => setFM({ busy: false, err: (err && err.message) || 'That did not save.' })
+        );
+      };
+    }
+
+    // ---- tutee dashboard: next session ----
+    if (v.sDash) {
+      const next = db.nextSession(me.id);
+      v.hasNextSession = !!next;
+      v.nextSessionText = next
+        ? 'Next session: ' + new Date(next.start).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }) +
+          ', ' + this.fmtSpan(next) + ' with ' + tutorName(next.tutorId)
+        : '';
+      v.nextSessionLoc = next && next.location ? next.location : '';
+      v.hasNextSessionLoc = !!v.nextSessionLoc;
+      v.nextSessionOpen = next ? () => openPop(next.id) : null;
+    }
+
+    // ---- tutor dashboard: this week ----
+    if (v.sStudents) {
+      const ws = this.calWeekStart(this.todayLocal());
+      const from = db.atLocal(ws, '00:00'), to = db.atLocal(ws, '00:00', 7);
+      const row = (s) => {
+        const stt = SST[s.status] || SST.scheduled, ls = logState(s);
+        return {
+          when: whenText(s), who: personName(s.tuteeId), loc: s.location,
+          statusLabel: stt.label,
+          statusStyle: 'background:' + stt.bg + ';color:' + stt.fg + ';border:1px solid ' + stt.edge + (s.status === 'cancelled' ? ';text-decoration:line-through' : ''),
+          hasLogState: !!ls, logDone: !!(ls && ls.done), logNeeded: !!(ls && !ls.done),
+          canMark: s.status === 'scheduled' && s.start <= nowMs,
+          complete: quickStatus(s, 'completed'),
+          noShow: quickStatus(s, 'no_show'),
+          canLog: s.status !== 'cancelled' && s.start <= nowMs,
+          logLabel: logLabel(s),
+          log: () => logFromSession(s, 'students'),
+          open: () => openPop(s.id)
+        };
+      };
+      v.weekSessions = db.getSessions({ tutorId: me.id, from: from, to: to }).map(row);
+      v.noWeekSessions = v.weekSessions.length === 0;
+      // Before this week only: this week's own stragglers are already in the
+      // list above with their buttons.
+      const stale = db.sessionsNeedingStatus(me.id).filter((s) => s.start < from);
+      const pending = db.sessionsNeedingStatus(me.id).length;
+      v.hasNeedsStatus = pending > 0;
+      v.needsStatusText = plural(pending, 'past session') + ' still marked scheduled. Mark each one completed or a no-show.';
+      v.olderNeedsStatus = stale.map(row);
+      v.hasOlderNeedsStatus = stale.length > 0;
+      v.goCalendar = () => this.setState({ route: { name: 'calendar' } });
     }
 
     v.vwCalc = v.hasVwBanner && calcOK && !st.calc.open;

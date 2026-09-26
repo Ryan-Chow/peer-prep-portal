@@ -55,6 +55,8 @@
     errors: new Map(),      // id -> UI error log entry
     sprofiles: new Map(),   // tuteeId -> UI student profile (intake sheet)
     logs: new Map(),        // id -> UI session log
+    sessions: new Map(),    // id -> UI calendar session
+    avail: new Map(),       // id -> UI availability block
     loaded: false,
     // True until the first getSession() (and any profile load it triggers)
     // settles. The UI shows a neutral splash rather than flashing the login
@@ -75,6 +77,7 @@
     S.meId = null;
     S.users.clear(); S.modules.clear(); S.assignments.clear(); S.subs.clear();
     S.errors.clear(); S.sprofiles.clear(); S.logs.clear();
+    S.sessions.clear(); S.avail.clear();
     S.links = [];
     S.loaded = false;
   }
@@ -199,6 +202,8 @@
   // it lives on the profile — so only the grade half of "STUDENT NAME & GRADE"
   // has a column.
   const text = (v) => (v == null ? '' : String(v));
+  const SESSION_STATUSES = ['scheduled', 'completed', 'cancelled', 'no_show'];
+  const SESSION_ORDER = ['starts_at', 'id'];
 
   function putStudentProfile(row) {
     S.sprofiles.set(row.tutee_id, {
@@ -232,8 +237,40 @@
       parentCommunication: text(row.parent_communication),
       paymentStatus: text(row.payment_status),
       status: row.status === 'submitted' ? 'submitted' : 'draft',
+      // The calendar session this sheet was written for, or '' for a sheet
+      // logged from My Students or written before the calendar existed.
+      sessionId: row.session_id || '',
       createdAt: row.created_at,
       updatedAt: row.updated_at
+    });
+  }
+
+  // start and end are epoch milliseconds, kept alongside the ISO strings
+  // because every screen that draws a session compares and positions by them.
+  function putSession(row) {
+    const start = Date.parse(row.starts_at), end = Date.parse(row.ends_at);
+    S.sessions.set(row.id, {
+      id: row.id,
+      tutorId: row.tutor_id,
+      tuteeId: row.tutee_id,
+      start: start,
+      end: end,
+      location: text(row.location),
+      notes: text(row.notes),
+      status: SESSION_STATUSES.indexOf(row.status) >= 0 ? row.status : 'scheduled',
+      recurrenceId: row.recurrence_id || '',
+      createdBy: row.created_by || ''
+    });
+  }
+
+  // 'HH:MM', as Postgres returns 'HH:MM:SS'.
+  function putAvailability(row) {
+    S.avail.set(row.id, {
+      id: row.id,
+      tutorId: row.tutor_id,
+      weekday: Number(row.weekday),
+      start: String(row.start_time).slice(0, 5),
+      end: String(row.end_time).slice(0, 5)
     });
   }
 
@@ -300,7 +337,7 @@
     // No session_logs read here: the log is the tutor's write-up for staff, and
     // RLS no longer returns it to a tutee. Asking anyway would just cost a
     // round trip to be handed an empty list.
-    const [profRes, modRes, probs, revealed, subs, errors, sprofs] = await Promise.all([
+    const [profRes, modRes, probs, revealed, subs, errors, sprofs, sessions] = await Promise.all([
       tutorIds.length ? sb.from('profiles').select('*').in('id', tutorIds) : NONE,
       moduleIds.length ? sb.from('modules').select('*').in('id', moduleIds) : NONE,
       moduleIds.length ? allRows('problems_public', { filter: (q) => q.in('module_id', moduleIds) }) : NO_ROWS,
@@ -310,7 +347,8 @@
       // and it keeps entries whose module has since been unassigned.
       allRows('error_log_view'),
       // At most one row, but the filter costs nothing and says what is meant.
-      allRows('student_profiles', { order: ['tutee_id'], filter: (q) => q.eq('tutee_id', id) })
+      allRows('student_profiles', { order: ['tutee_id'], filter: (q) => q.eq('tutee_id', id) }),
+      allRows('sessions', { order: SESSION_ORDER, filter: (q) => q.eq('tutee_id', id) })
     ]);
 
     rows(profRes, 'profiles').forEach(putUser);
@@ -320,6 +358,7 @@
     subs.forEach(putSubmission);
     errors.forEach(putErrorEntry);
     sprofs.forEach(putStudentProfile);
+    sessions.forEach(putSession);
   }
 
   async function loadTutor(id) {
@@ -330,7 +369,7 @@
     // A tutor reads the whole library — every module and every problem in it,
     // not just what they have assigned — so this is the read that first outgrew
     // one page.
-    const [profRes, mods, probs, asg, subs, errors, sprofs, logs] = await Promise.all([
+    const [profRes, mods, probs, asg, subs, errors, sprofs, logs, sessions, avail] = await Promise.all([
       tuteeIds.length ? sb.from('profiles').select('*').in('id', tuteeIds) : NONE,
       allRows('modules', { order: CREATED_ORDER }),
       allRows('problems'),
@@ -343,7 +382,11 @@
       // Unfiltered rather than .in(tuteeIds): the policy also returns logs this
       // tutor wrote for a tutee since reassigned, and those must not vanish from
       // their own Session Logs screen.
-      allRows('session_logs')
+      allRows('session_logs'),
+      // By tutor rather than by tutee, for the same reason: a session with a
+      // tutee since reassigned still occupies this tutor's time.
+      allRows('sessions', { order: SESSION_ORDER, filter: (q) => q.eq('tutor_id', id) }),
+      allRows('tutor_availability', { filter: (q) => q.eq('tutor_id', id) })
     ]);
 
     rows(profRes, 'profiles').forEach(putUser);
@@ -354,11 +397,13 @@
     errors.forEach(putErrorEntry);
     sprofs.forEach(putStudentProfile);
     logs.forEach(putSessionLog);
+    sessions.forEach(putSession);
+    avail.forEach(putAvailability);
   }
 
   async function loadAdmin() {
     // Every one of these is the whole table, unfiltered.
-    const [profs, links, mods, probs, asg, subs, errors, sprofs, logs] = await Promise.all([
+    const [profs, links, mods, probs, asg, subs, errors, sprofs, logs, sessions, avail] = await Promise.all([
       allRows('profiles', { order: CREATED_ORDER }),
       // No id column on this one: the primary key is (tutor_id, tutee_id), and
       // a tutee has at most one tutor, so tutee_id alone is a total order.
@@ -369,7 +414,9 @@
       allRows('submissions'),
       allRows('error_log_view'),
       allRows('student_profiles', { order: ['tutee_id'] }),
-      allRows('session_logs')
+      allRows('session_logs'),
+      allRows('sessions', { order: SESSION_ORDER }),
+      allRows('tutor_availability')
     ]);
 
     profs.forEach(putUser);
@@ -381,6 +428,8 @@
     errors.forEach(putErrorEntry);
     sprofs.forEach(putStudentProfile);
     logs.forEach(putSessionLog);
+    sessions.forEach(putSession);
+    avail.forEach(putAvailability);
   }
 
   let loading = null;
@@ -1213,7 +1262,7 @@
       tuteeId: patch.tuteeId,
       sessionDate: '', duration: '', tutorInitials: '', topicsCovered: '',
       homeworkAssigned: '', progressRating: null, struggles: '',
-      parentCommunication: '', paymentStatus: '', status: 'draft',
+      parentCommunication: '', paymentStatus: '', status: 'draft', sessionId: '',
       createdAt: new Date().toISOString(), updatedAt: null
     }, before || {}, patch, { id: id });
 
@@ -1225,7 +1274,8 @@
       tutee_id: next.tuteeId,
       // Pinned by the insert policy to the caller anyway; sent explicitly so an
       // admin editing someone else's log does not rewrite its author.
-      tutor_id: next.tutorId || null
+      tutor_id: next.tutorId || null,
+      session_id: next.sessionId || null
     });
     const { error } = before
       ? await sb.from('session_logs').update(row).eq('id', id)
@@ -1270,6 +1320,266 @@
     const midnight = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
     // A log dated in the future reads as zero days rather than negative.
     return Math.max(0, Math.round((midnight - then) / DAY_MS));
+  }
+
+  // ---- calendar sessions --------------------------------------------------
+
+  // Everything here is in the browser's own zone: a tutor types "4:00 PM" and
+  // means 4pm where they are sitting. Postgres keeps UTC, and toISOString() is
+  // the only conversion between the two.
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const localDate = (ms) => { const d = new Date(ms); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); };
+  const localTime = (ms) => { const d = new Date(ms); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); };
+  const minutesOf = (hhmm) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(hhmm || '')); return m ? Number(m[1]) * 60 + Number(m[2]) : NaN; };
+
+  // new Date(y, m, d + n, h, min) rather than adding n * 86400000: across a
+  // daylight-saving change a day is 23 or 25 hours, and a weekly 4pm session
+  // has to stay at 4pm on the wall clock, not drift to 3pm or 5pm.
+  function atLocal(dateISO, hhmm, plusDays) {
+    const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateISO || ''));
+    const t = minutesOf(hhmm);
+    if (!dm || isNaN(t)) return NaN;
+    return new Date(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3]) + (plusDays || 0), Math.floor(t / 60), t % 60).getTime();
+  }
+  const dayDiff = (fromISO, toISO) => Math.round((atLocal(toISO, '12:00') - atLocal(fromISO, '12:00')) / DAY_MS);
+
+  const fmtWhen = (ms) => new Date(ms).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+  const sessionRow = (s) => ({
+    id: s.id,
+    tutor_id: s.tutorId,
+    tutee_id: s.tuteeId,
+    starts_at: new Date(s.start).toISOString(),
+    ends_at: new Date(s.end).toISOString(),
+    location: orNull(s.location),
+    notes: orNull(s.notes),
+    status: s.status,
+    recurrence_id: s.recurrenceId || null
+  });
+
+  // The same test as the sessions_no_overlap constraint, run against the cache
+  // first so the refusal can say which session is in the way. The constraint is
+  // still what decides: an admin may have booked the slot a moment ago, into a
+  // cache this tab has not reloaded.
+  function findClash(tutorId, start, end, ignore) {
+    let hit = null;
+    S.sessions.forEach((s) => {
+      if (hit || s.tutorId !== tutorId || s.status === 'cancelled' || (ignore && ignore.has(s.id))) return;
+      if (s.start < end && start < s.end) hit = s;
+    });
+    return hit;
+  }
+
+  const clashError = (s) => {
+    const who = S.users.get(s.tuteeId);
+    return { message: 'That overlaps ' + (who ? who.name + '\u2019s' : 'another') + ' session on ' + fmtWhen(s.start) + '. A tutor can only be in one session at a time.' };
+  };
+
+  // 23P01 is exclusion_violation. The raw message names the constraint and
+  // dumps two tstzranges, which means nothing to a tutor.
+  function sessionFail(where, error) {
+    if (error && (error.code === '23P01' || /sessions_no_overlap/.test(error.message || ''))) {
+      return fail(where, { message: 'That time overlaps another session this tutor already has. Someone may have just booked it \u2014 reload to see it.' });
+    }
+    return fail(where, error);
+  }
+
+  // One weekly session becomes `weeks` concrete rows sharing a recurrence_id.
+  // All of them go in one insert, so a clash in week 6 leaves weeks 1–5
+  // unwritten rather than half a series on the calendar.
+  //
+  // spec: { tutorId, tuteeId, date, time, minutes, location, notes, weeks }
+  async function createSessions(spec) {
+    const minutes = Math.round(Number(spec.minutes));
+    const weeks = Math.round(Number(spec.weeks) || 1);
+    if (!(minutes >= 5 && minutes <= 720)) throw fail('createSessions', { message: 'A session must last between 5 minutes and 12 hours.' });
+    if (!(weeks >= 1 && weeks <= 26)) throw fail('createSessions', { message: 'A weekly repeat runs for 1 to 26 weeks.' });
+    if (!spec.tutorId || !spec.tuteeId) throw fail('createSessions', { message: 'Pick a tutor and a tutee.' });
+    if (isNaN(atLocal(spec.date, spec.time))) throw fail('createSessions', { message: 'Pick a date and a start time.' });
+
+    const recurrenceId = weeks > 1 ? uuid() : '';
+    const made = [];
+    for (let i = 0; i < weeks; i++) {
+      const start = atLocal(spec.date, spec.time, 7 * i);
+      made.push({
+        id: uuid(), tutorId: spec.tutorId, tuteeId: spec.tuteeId,
+        start: start, end: start + minutes * 60000,
+        location: text(spec.location).trim(), notes: text(spec.notes).trim(),
+        status: 'scheduled', recurrenceId: recurrenceId, createdBy: S.meId
+      });
+    }
+    for (const s of made) {
+      const clash = findClash(s.tutorId, s.start, s.end);
+      if (clash) throw fail('createSessions', clashError(clash));
+    }
+
+    made.forEach((s) => S.sessions.set(s.id, s));
+    notify();
+    const { error } = await sb.from('sessions').insert(made.map(sessionRow));
+    if (error) {
+      made.forEach((s) => S.sessions.delete(s.id));
+      notify();
+      throw sessionFail('createSessions', error);
+    }
+    return made;
+  }
+
+  // The sessions an edit reaches: this one, or this one and every later one in
+  // its series. "Later" is by start time, so a session moved out of order
+  // earlier is still judged by where it is now.
+  function sessionScope(id, scope) {
+    const s = S.sessions.get(id);
+    if (!s) return [];
+    if (scope !== 'future' || !s.recurrenceId) return [s];
+    return Array.from(S.sessions.values())
+      .filter((x) => x.recurrenceId === s.recurrenceId && x.start >= s.start)
+      .sort((a, b) => a.start - b.start);
+  }
+
+  // patch: any of { date, time, minutes, location, notes, tutorId, tuteeId, status }
+  // scope: 'one' | 'future'
+  //
+  // Only what the patch changes relative to the session it was opened on is
+  // carried to the rest of the series. Moving Tuesday's session to Wednesday
+  // moves each later one a day as well; changing only the room leaves the time
+  // of a week that was individually rescheduled where it is.
+  async function updateSessions(id, patch, scope) {
+    const base = S.sessions.get(id);
+    if (!base) return [];
+    const targets = sessionScope(id, scope);
+    const baseDate = localDate(base.start), baseTime = localTime(base.start);
+    const baseMinutes = Math.round((base.end - base.start) / 60000);
+
+    const shift = patch.date && patch.date !== baseDate ? dayDiff(baseDate, patch.date) : 0;
+    const newTime = patch.time && patch.time !== baseTime ? patch.time : null;
+    const newMinutes = patch.minutes != null && Math.round(Number(patch.minutes)) !== baseMinutes ? Math.round(Number(patch.minutes)) : null;
+    if (newMinutes != null && !(newMinutes >= 5 && newMinutes <= 720)) {
+      throw fail('updateSessions', { message: 'A session must last between 5 minutes and 12 hours.' });
+    }
+    const changed = (key) => patch[key] != null && text(patch[key]).trim() !== text(base[key]).trim();
+
+    const before = targets.map((t) => Object.assign({}, t));
+    const next = targets.map((t) => {
+      const n = Object.assign({}, t);
+      if (shift || newTime || newMinutes != null) {
+        const minutes = newMinutes != null ? newMinutes : Math.round((t.end - t.start) / 60000);
+        n.start = atLocal(localDate(t.start), newTime || localTime(t.start), shift);
+        n.end = n.start + minutes * 60000;
+      }
+      if (changed('location')) n.location = text(patch.location).trim();
+      if (changed('notes')) n.notes = text(patch.notes).trim();
+      if (patch.tutorId && patch.tutorId !== base.tutorId) n.tutorId = patch.tutorId;
+      if (patch.tuteeId && patch.tuteeId !== base.tuteeId) n.tuteeId = patch.tuteeId;
+      if (patch.status && SESSION_STATUSES.indexOf(patch.status) >= 0) n.status = patch.status;
+      return n;
+    });
+
+    const moving = new Set(targets.map((t) => t.id));
+    for (const n of next) {
+      if (n.status === 'cancelled') continue;
+      const clash = findClash(n.tutorId, n.start, n.end, moving);
+      if (clash) throw fail('updateSessions', clashError(clash));
+    }
+
+    next.forEach((n) => S.sessions.set(n.id, n));
+    notify();
+    // One statement for the whole series, so the overlap constraint (deferred
+    // to the end of the statement) sees every row in its new place at once.
+    const { error } = await sb.from('sessions').upsert(next.map(sessionRow));
+    if (error) {
+      before.forEach((b) => S.sessions.set(b.id, b));
+      notify();
+      throw sessionFail('updateSessions', error);
+    }
+    return next;
+  }
+
+  // A drag in the week view: same length, new start, this session only.
+  function moveSession(id, start) {
+    return updateSessions(id, { date: localDate(start), time: localTime(start) }, 'one');
+  }
+
+  async function deleteSession(id) {
+    const s = S.sessions.get(id);
+    if (!s) return;
+    S.sessions.delete(id);
+    notify();
+    const { error } = await sb.from('sessions').delete().eq('id', id);
+    if (error) { S.sessions.set(id, s); notify(); throw fail('deleteSession', error); }
+  }
+
+  // Sessions overlapping [from, to), earliest first. Either bound may be
+  // omitted, and tutorId / tuteeId narrow it further.
+  function sessionsIn(q) {
+    const o = q || {};
+    return Array.from(S.sessions.values())
+      .filter((s) => (o.from == null || s.end > o.from) && (o.to == null || s.start < o.to)
+        && (!o.tutorId || s.tutorId === o.tutorId) && (!o.tuteeId || s.tuteeId === o.tuteeId))
+      .sort((a, b) => a.start - b.start || String(a.id).localeCompare(String(b.id)));
+  }
+
+  // The sheet written for this session. A sheet logged from My Students before
+  // the calendar knew about it has no session_id, so one for the same tutee on
+  // the same local day stands in, as long as it is not claimed by another
+  // session. Submitted beats draft.
+  function logForSession(id) {
+    const s = S.sessions.get(id);
+    if (!s) return null;
+    const day = localDate(s.start);
+    const logs = Array.from(S.logs.values()).filter((l) =>
+      l.sessionId === id || (!l.sessionId && l.tuteeId === s.tuteeId && l.sessionDate === day));
+    return logs.find((l) => l.status === 'submitted') || logs[0] || null;
+  }
+
+  // Past sessions still marked scheduled: someone has to say whether they
+  // happened. Scoped to one tutor, or every tutor when tutorId is omitted.
+  const needsStatus = (tutorId) => Array.from(S.sessions.values())
+    .filter((s) => s.status === 'scheduled' && s.end < Date.now() && (!tutorId || s.tutorId === tutorId))
+    .sort((a, b) => a.start - b.start);
+
+  // ---- availability -------------------------------------------------------
+
+  const availabilityOf = (tutorId) => Array.from(S.avail.values())
+    .filter((a) => a.tutorId === tutorId)
+    .sort((a, b) => a.weekday - b.weekday || a.start.localeCompare(b.start));
+
+  async function addAvailability(block) {
+    const b = {
+      id: uuid(), tutorId: block.tutorId, weekday: Number(block.weekday),
+      start: String(block.start).slice(0, 5), end: String(block.end).slice(0, 5)
+    };
+    if (!(b.weekday >= 0 && b.weekday <= 6) || !(minutesOf(b.end) > minutesOf(b.start))) {
+      throw fail('addAvailability', { message: 'The block has to end after it starts.' });
+    }
+    S.avail.set(b.id, b);
+    notify();
+    const { error } = await sb.from('tutor_availability').insert({
+      id: b.id, tutor_id: b.tutorId, weekday: b.weekday, start_time: b.start, end_time: b.end
+    });
+    if (error) { S.avail.delete(b.id); notify(); throw fail('addAvailability', error); }
+    return b;
+  }
+
+  async function removeAvailability(id) {
+    const b = S.avail.get(id);
+    if (!b) return;
+    S.avail.delete(id);
+    notify();
+    const { error } = await sb.from('tutor_availability').delete().eq('id', id);
+    if (error) { S.avail.set(id, b); notify(); throw fail('removeAvailability', error); }
+  }
+
+  // null when the tutor has set no availability at all — nothing to compare
+  // against, which is not the same as "unavailable". Otherwise true only when
+  // one block on that weekday covers the whole session.
+  function isAvailable(tutorId, start, end) {
+    const blocks = availabilityOf(tutorId);
+    if (!blocks.length) return null;
+    if (localDate(start) !== localDate(end - 1)) return false;
+    const day = new Date(start).getDay();
+    const from = minutesOf(localTime(start));
+    const to = from + Math.round((end - start) / 60000);
+    return blocks.some((b) => b.weekday === day && minutesOf(b.start) <= from && minutesOf(b.end) >= to);
   }
 
   // ---- public API (synchronous reads, same shapes as the old mock) --------
@@ -1406,7 +1716,30 @@
     // first across all tutees.
     getAllSessionLogs: () => Array.from(S.logs.values())
       .sort((a, b) => String(b.sessionDate).localeCompare(String(a.sessionDate))
-        || String(b.createdAt).localeCompare(String(a.createdAt)))
+        || String(b.createdAt).localeCompare(String(a.createdAt))),
+    getLogForSession: logForSession,
+
+    getSessions: sessionsIn,
+    getSession: (id) => S.sessions.get(id) || null,
+    // The rest of this session's series from here on, itself included; one
+    // element for a session that is not part of one.
+    getSessionScope: sessionScope,
+    createSessions: createSessions,
+    updateSessions: updateSessions,
+    moveSession: moveSession,
+    deleteSession: deleteSession,
+    sessionsNeedingStatus: needsStatus,
+    // The next session that has not finished and is not cancelled.
+    nextSession: (tuteeId) => sessionsIn({ from: Date.now(), tuteeId: tuteeId })
+      .find((s) => s.status === 'scheduled') || null,
+    localDate: localDate,
+    localTime: localTime,
+    atLocal: atLocal,
+
+    getAvailability: availabilityOf,
+    addAvailability: addAvailability,
+    removeAvailability: removeAvailability,
+    isAvailable: isAvailable
   };
 
   // Start resolving the session now rather than waiting for the component to
