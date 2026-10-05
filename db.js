@@ -88,7 +88,10 @@
       role: uiRole(row.role),
       name: row.display_name || row.username || row.email || '\u2014',
       email: row.email || '',
-      username: row.username || ''
+      username: row.username || '',
+      // Missing on a project that has not run 010 yet, which is the same as
+      // every account being active.
+      active: row.active !== false
     });
   }
 
@@ -134,9 +137,25 @@
         // screen, and an already-assigned problem still has to render.
         flagged: !!row.flagged,
         flagReason: row.flag_reason || '',
+        ...imageFields(row),
         sortOrder: row.sort_order
       }));
     });
+  }
+
+  // The figure and the per-choice pictures. Both problems and problems_public
+  // carry them, and so does error_log_view, so all three caches read them the
+  // same way. choiceImages is null or exactly four entries, each a URL or null.
+  function imageFields(row) {
+    const ci = Array.isArray(row.choice_images) && row.choice_images.length === 4
+      ? row.choice_images.map((u) => (typeof u === 'string' && u ? u : null))
+      : null;
+    return {
+      imageUrl: row.image_url || '',
+      imageAlt: row.image_alt || '',
+      imagePosition: row.image_position === 'below' ? 'below' : 'above',
+      choiceImages: ci && ci.some(Boolean) ? ci : null
+    };
   }
 
   // Fill in the answer key for problems the tutee has already submitted.
@@ -194,7 +213,8 @@
       givenAnswer: row.given_answer == null ? '' : row.given_answer,
       comment: row.comment == null ? '' : row.comment,
       resolved: !!row.resolved,
-      createdAt: row.created_at
+      createdAt: row.created_at,
+      ...imageFields(row)
     });
   }
 
@@ -224,6 +244,9 @@
     S.logs.set(row.id, {
       id: row.id,
       tutorId: row.tutor_id || '',
+      // Kept by a trigger (010), so a sheet whose tutor's account has been
+      // deleted still says who wrote it.
+      tutorName: text(row.tutor_name),
       tuteeId: row.tutee_id,
       sessionDate: text(row.session_date),
       duration: text(row.duration),
@@ -448,6 +471,15 @@
         toast('That account has no profile yet. Ask an admin to create it.');
         return null;
       }
+      // Deactivating bans the account in auth, so this is only reached by a
+      // tab that was already signed in at the time. RLS has stopped returning
+      // it anything else; say why rather than leave it on an empty screen.
+      if (profRes.data.active === false) {
+        clear();
+        await sb.auth.signOut();
+        toast('This account has been deactivated. Ask an admin if you think that is a mistake.');
+        return null;
+      }
 
       clear();
       putUser(profRes.data);
@@ -594,6 +626,26 @@
       ? priorTags.slice()
       : priorTags.filter((t) => !isCalculator(t)).concat(problem.calculator ? [CALC_TAG] : []);
 
+    // Checked here as well as in the editor, with the importer's own rule, so
+    // nothing reaches the table's check constraint as a raw Postgres error.
+    const prior = idx >= 0 ? m.problems[idx] : null;
+    const clean = (u, label) => {
+      const c = window.ppaImport.cleanImageUrl(u);
+      if (c.error) throw fail('saveProblem', { message: label + ' ' + c.error });
+      return c.url;
+    };
+    const imageUrl = clean(problem.imageUrl, 'The image link');
+    const choiceImages = problem.type === 'mc' && Array.isArray(problem.choiceImages)
+      ? problem.choiceImages.slice(0, 4).map((u, i) => clean(u, 'The image link for choice ' + 'ABCD'[i]) || null)
+      : null;
+    while (choiceImages && choiceImages.length < 4) choiceImages.push(null);
+    const hasChoiceImages = !!(choiceImages && choiceImages.some(Boolean));
+
+    // Attaching a figure is the fix for a problem flagged as missing one, so
+    // saving it with an image takes it off the Flagged list. flag_reason stays,
+    // as it does for any unflag, so no later sweep puts it back.
+    const unflag = !!(prior && prior.flagged && imageUrl);
+
     const next = {
       id: id,
       type: problem.type,
@@ -602,12 +654,18 @@
       answer: problem.answer == null ? '' : problem.answer,
       explanation: problem.explanation || '',
       tags: tags,
+      flagged: prior ? prior.flagged && !unflag : false,
+      flagReason: prior ? prior.flagReason : '',
+      imageUrl: imageUrl,
+      imageAlt: imageUrl ? String(problem.imageAlt || '').trim().slice(0, 500) : '',
+      imagePosition: problem.imagePosition === 'below' ? 'below' : 'above',
+      choiceImages: hasChoiceImages ? choiceImages : null,
       sortOrder: sortOrder
     };
     if (idx >= 0) m.problems[idx] = next; else m.problems.push(next);
     notify();
 
-    const { error } = await sb.from('problems').upsert({
+    const row = {
       id: next.id,
       module_id: moduleId,
       question: next.text,
@@ -618,10 +676,52 @@
       // null rather than [], matching what the importer writes, so the two
       // paths cannot leave the same "no tags" state looking like two.
       tags: next.tags.length ? next.tags : null,
+      image_url: next.imageUrl || null,
+      image_alt: next.imageAlt || null,
+      image_position: next.imagePosition,
+      choice_images: next.choiceImages,
       sort_order: next.sortOrder
-    });
+    };
+    if (unflag) row.flagged = false;
+    const { error } = await sb.from('problems').upsert(row);
     if (error) { m.problems = before; notify(); throw fail('saveProblem', error); }
     return next;
+  }
+
+  // ---- images -------------------------------------------------------------
+
+  const IMAGE_BUCKET = window.ppaImport.IMAGE_BUCKET;
+
+  // Copies a hot-linked image into the problem-images bucket through the
+  // cache-image Edge Function, which does the download server-side, and
+  // returns the bucket URL to use in its place.
+  async function cacheImage(url) {
+    const out = await callFn('cache-image', { url: url }, 'Could not save a copy of that image');
+    if (!out.url) throw new Error('The copy was stored but no address came back.');
+    return out.url;
+  }
+
+  // An image from the admin's own disk, straight into the bucket under its
+  // hash. The bytes are checked here because a file's name and type are
+  // whatever the browser guessed from its extension.
+  async function uploadImage(file) {
+    if (!file) throw new Error('No file chosen.');
+    if (file.size > window.ppaImport.MAX_IMAGE_BYTES) throw new Error('That file is larger than 10 MB.');
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const kind = window.ppaImport.sniffImage(bytes);
+    if (!kind) throw new Error('That file is not a PNG, JPEG, GIF or WebP image.');
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+    const hash = Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
+    const path = window.ppaImport.imagePath(hash, kind.ext);
+    const bucket = sb.storage.from(IMAGE_BUCKET);
+    const { error } = await bucket.upload(path, new Blob([bytes], { type: kind.type }), {
+      contentType: kind.type, upsert: false, cacheControl: '31536000'
+    });
+    // Named by content, so "already exists" means this exact picture is there.
+    if (error && !(String(error.statusCode) === '409' || /exists|duplicate/i.test(error.message || ''))) {
+      throw new Error('Upload failed: ' + (error.message || 'unknown error'));
+    }
+    return bucket.getPublicUrl(path).data.publicUrl;
   }
 
   async function deleteProblem(moduleId, problemId) {
@@ -1048,16 +1148,16 @@
     return { correct: !!row.is_correct, explanation: row.explanation, correctAnswer: row.correct_answer };
   }
 
-  // Anything that touches the auth schema goes through the Edge Function:
-  // creating a user and setting a password both need the service role key,
-  // which must never reach the browser. The admin's own access token is what
-  // the function checks the caller against.
-  async function callAdminFn(body, fallbackMsg) {
+  // Anything that touches the auth schema goes through an Edge Function:
+  // creating, editing and deleting a user all need the service role key, which
+  // must never reach the browser. The admin's own access token is what each
+  // function checks the caller against.
+  async function callFn(name, body, fallbackMsg) {
     const { data } = await sb.auth.getSession();
     const session = data && data.session;
     if (!session) throw new Error('Your session expired — sign in again.');
 
-    const res = await fetch(cfg.SUPABASE_URL + '/functions/v1/create-user', {
+    const res = await fetch(cfg.SUPABASE_URL + '/functions/v1/' + name, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1081,7 +1181,7 @@
       if (u.tutorId) body.tutor_id = u.tutorId;
     }
 
-    const out = await callAdminFn(body, 'Could not create the account');
+    const out = await callFn('create-user', body, 'Could not create the account');
     await load();
     notify();
     return out.id;
@@ -1090,7 +1190,73 @@
   // No cache reload afterwards: Supabase keeps only the hash, so there is
   // nothing about the new PIN for the roster to display.
   async function setPin(userId, pin) {
-    await callAdminFn({ action: 'set_pin', user_id: userId, pin: pin }, 'Could not set the PIN');
+    await callFn('create-user', { action: 'set_pin', user_id: userId, pin: pin }, 'Could not set the PIN');
+  }
+
+  // patch: any of { name, email, username, pin, tutorId, tuteeIds }. Only the
+  // keys present are sent, and the function leaves the rest alone. A reload
+  // follows because the change can move links, rename, and readdress at once.
+  async function updateUser(userId, patch) {
+    const body = { user_id: userId };
+    if (patch.name != null) body.display_name = patch.name;
+    if (patch.email != null) body.email = patch.email;
+    if (patch.username != null) body.username = patch.username;
+    if (patch.pin) body.pin = patch.pin;
+    if (patch.tutorId !== undefined) body.tutor_id = patch.tutorId || '';
+    if (patch.tuteeIds !== undefined) body.tutee_ids = patch.tuteeIds;
+    // Reloaded even on failure: the function writes auth, then the profile,
+    // then the links, and a refusal part-way leaves the earlier steps done.
+    try {
+      await callFn('update-user', body, 'Could not save those changes');
+    } finally {
+      await load();
+      notify();
+    }
+  }
+
+  // Deactivating keeps every row and bans the account; reactivating lifts it.
+  async function setUserActive(userId, active) {
+    await callFn('update-user', { user_id: userId, active: !!active }, active ? 'Could not reactivate the account' : 'Could not deactivate the account');
+    const u = S.users.get(userId);
+    if (u) u.active = !!active;
+    notify();
+  }
+
+  // confirmName is the display name, typed by the admin; the function checks
+  // it again before deleting anything.
+  async function deleteUser(userId, confirmName) {
+    await callFn('delete-user', { user_id: userId, confirm_name: confirmName }, 'Could not delete the account');
+    await load();
+    notify();
+  }
+
+  async function userDeleteCounts(userId) {
+    const { data, error } = await sb.rpc('user_delete_counts', { p_user: userId });
+    if (error) throw fail('userDeleteCounts', error);
+    const row = (Array.isArray(data) ? data[0] : data) || {};
+    const n = (k) => Number(row[k]) || 0;
+    return {
+      assignments: n('assignments'), assignmentsMade: n('assignments_made'),
+      submissions: n('submissions'), errors: n('error_log_entries'),
+      logsDeleted: n('session_logs_deleted'), logsKept: n('session_logs_kept'),
+      sessions: n('sessions'), links: n('links'), availability: n('availability'),
+      studentProfile: n('student_profile')
+    };
+  }
+
+  // The one self-service edit there is: a tutor's own display name. The
+  // profiles policy and column grant (010) refuse anything wider.
+  async function updateMyName(name) {
+    const me = S.meId && S.users.get(S.meId);
+    const next = String(name == null ? '' : name).trim();
+    if (!me) return;
+    if (!next) throw fail('updateMyName', { message: 'Your name cannot be blank.' });
+    if (next.length > 80) throw fail('updateMyName', { message: 'Keep your name under 80 characters.' });
+    const before = me.name;
+    me.name = next;
+    notify();
+    const { error } = await sb.from('profiles').update({ display_name: next }).eq('id', S.meId);
+    if (error) { me.name = before; notify(); throw fail('updateMyName', error); }
   }
 
   async function linkStudent(studentId, tutorId) {
@@ -1151,7 +1317,11 @@
       correct_answer: hit ? hit.problem.answer : '',
       explanation: hit ? hit.problem.explanation : '',
       given_answer: sub ? sub.answer : '',
-      is_correct: sub ? sub.correct : false
+      is_correct: sub ? sub.correct : false,
+      image_url: hit ? hit.problem.imageUrl : null,
+      image_alt: hit ? hit.problem.imageAlt : null,
+      image_position: hit ? hit.problem.imagePosition : 'above',
+      choice_images: hit ? hit.problem.choiceImages : null
     });
     notify();
     return S.errors.get(row.id) || null;
@@ -1686,6 +1856,13 @@
     createUser: createUser,
     setPin: setPin,
     linkStudent: linkStudent,
+    updateUser: updateUser,
+    setUserActive: setUserActive,
+    deleteUser: deleteUser,
+    userDeleteCounts: userDeleteCounts,
+    updateMyName: updateMyName,
+    cacheImage: cacheImage,
+    uploadImage: uploadImage,
 
     // Newest first, which is the order both the tutee's tab and the tutor's
     // read-only view show.

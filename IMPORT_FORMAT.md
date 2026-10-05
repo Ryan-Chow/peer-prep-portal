@@ -6,7 +6,8 @@ the same rules.
 
 > Run `migrations/001_import.sql` in the Supabase SQL editor once before using
 > either. It adds the `slug`, `source_id` and `tags` columns the importer
-> relies on.
+> relies on. The image fields need `migrations/010_problem_images_and_user_admin.sql`
+> as well.
 
 ## The shape
 
@@ -56,6 +57,10 @@ An array. Each entry:
 | `difficulty` | no | `"easy"`, `"medium"` or `"hard"`. See [Difficulty](#difficulty). |
 | `calculator` | no | `true` or `false`. See [Calculator](#calculator). |
 | `source_id` | no | Your own identifier for this problem. See [Re-importing](#re-importing). |
+| `image_url` | no | A figure for the question: an `https://` link to a PNG, JPEG, GIF or WebP. See [Images](#images). |
+| `image_alt` | no | What the figure shows, for screen readers and for when it fails to load. |
+| `image_position` | no | `"above"` (default) or `"below"` the question text. |
+| `choice_images` | no | `multiple_choice` only: four links or `null`s, in A–D order, one picture per choice. |
 
 Four choices is a hard requirement, not a default: the rest of the portal —
 the answer buttons, the tutor's problem editor, the stored answer letter — is
@@ -130,10 +135,67 @@ literal dollar sign inside maths is `\\$`:
 "question": "A taxi charges a $\\$3$ flat fee plus $\\$2$ per mile."
 ```
 
+### Images
+
+A question that leans on a graph, table or diagram carries it as a link:
+
+```json
+{
+  "question": "The graph of $y = f(x)$ is shown. What is $f(2)$?",
+  "type": "multiple_choice",
+  "choices": ["$-1$", "$0$", "$3$", "$5$"],
+  "answer": "C",
+  "image_url": "https://example.org/figures/f-of-x.png",
+  "image_alt": "A parabola opening upward with vertex at (1, -1)",
+  "image_position": "above",
+  "choice_images": [null, null, null, null]
+}
+```
+
+…and a problem whose choices are pictures:
+
+```json
+{
+  "question": "Which graph shows a line with a negative slope?",
+  "type": "multiple_choice",
+  "choices": ["Graph A", "Graph B", "Graph C", "Graph D"],
+  "answer": "B",
+  "choice_images": [
+    "https://example.org/figures/slope-a.png",
+    "https://example.org/figures/slope-b.png",
+    "https://example.org/figures/slope-c.png",
+    "https://example.org/figures/slope-d.png"
+  ]
+}
+```
+
+Every link must start with `https://` and be a plain URL: no spaces, quotes or
+angle brackets, and no `user:password@`. A link that breaks any of these makes
+the row an error, like a bad answer letter would. The link is only ever used as
+the `src` of an image, never as HTML. Each choice still needs its text: it is
+what the tutee reads beside the picture, and it is what shows if the picture
+does not load.
+
+Wherever the problem appears, the figure is drawn at most 420px tall and
+fits the column width. Clicking it opens it full size. If the link stops
+working, the tutee sees a small **Image unavailable** box instead of a broken
+icon.
+
+A link to somebody else's site can disappear. To keep a copy of your own, run
+the CLI with [`--cache-images`](#importing-from-the-terminal), or use **Save a
+copy** in the problem editor. Either one stores the image in the
+`problem-images` bucket and swaps the link for the bucket's.
+
+On a re-import, an image field the file leaves out keeps whatever is stored. A
+figure attached in the editor after the first import survives a second import
+of the original file. To remove an image, write `"image_url": null` or
+`"choice_images": null` explicitly.
+
 ### HTML
 
 HTML tags are stripped from every text field on import. Comparison operators
-survive — `$x < 5$` and `$a<b$` are maths, not markup, and are left alone.
+survive — `$x < 5$` and `$a<b$` are maths, not markup, and are left alone. That
+includes `<img>`: a figure goes in `image_url`, not in the question text.
 
 ## Re-importing
 
@@ -257,6 +319,7 @@ Needs Node 18 or newer. Nothing to install.
 | --- | --- |
 | `--dry-run` | Parse, validate and report. Writes nothing. |
 | `--replace` | Replace mode for every module in the run. |
+| `--cache-images` | Download every `image_url` and `choice_images` link, store a copy in the `problem-images` bucket, and import the bucket URLs instead. A link that fails (404, not an image, over 10 MB) keeps its original URL and is listed at the end. With `--dry-run` it only counts the links. |
 | `--batch <n>` | Rows per request. Default 100. |
 | `-h`, `--help` | Usage. |
 

@@ -17,6 +17,9 @@
 
   var LETTERS = 'ABCD';
   var BATCH_SIZE = 100;
+  // What the matcher reads back from a module: enough to recognise a row, and
+  // the image columns a re-import carries over when the file leaves them out.
+  var LIST_COLUMNS = 'id,source_id,question,sort_order,image_url,image_alt,image_position,choice_images';
   // Difficulty is not a column. It is a tag, so that one gin index over
   // problems.tags serves both "hard" and "Information and Ideas", and so a
   // problem can carry it without every other filter growing a column too.
@@ -29,6 +32,14 @@
   // Page size for reads. Comfortably under PostgREST's default row cap, so a
   // short page always means "that was the last one".
   var PAGE = 500;
+
+  // Figures are links, never markup: a URL is only ever the src of an <img>.
+  // The same test as public.is_image_url() in migrations/010, so a URL the
+  // importer accepts is one the table's check constraint accepts too.
+  var IMAGE_URL_RE = /^https:\/\/[^\s"'<>\\]+$/i;
+  var IMAGE_POSITIONS = ['above', 'below'];
+  var IMAGE_BUCKET = 'problem-images';
+  var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
   // The file speaks in long names because it is written by hand; the table
   // stores the short ones the rest of the app already renders.
@@ -94,6 +105,39 @@
   // "calculator" reading as two different tags in a tutor's filter list.
   function calculatorOf(tag) {
     return String(tag == null ? '' : tag).trim().toLowerCase() === CALC_TAG ? CALC_TAG : '';
+  }
+
+  // { url, error }. Blank is not an error — it means "no image" — and comes
+  // back as an empty url.
+  function cleanImageUrl(value) {
+    var raw = String(value == null ? '' : value).trim();
+    if (!raw) return { url: '', error: '' };
+    if (raw.length > 2048) return { url: '', error: 'is longer than 2048 characters.' };
+    if (!/^https:\/\//i.test(raw)) return { url: '', error: 'must start with https://.' };
+    if (!IMAGE_URL_RE.test(raw)) return { url: '', error: 'must be a plain link, with no spaces, quotes or angle brackets.' };
+    var host = raw.slice(8).split(/[\/?#]/)[0];
+    if (!host || host.indexOf('@') >= 0) return { url: '', error: 'needs a host name and no login details.' };
+    return { url: raw, error: '' };
+  }
+
+  // What the bytes are, whatever a server's Content-Type claimed. The bucket
+  // takes these four and nothing else; SVG is left out because, opened from the
+  // bucket directly, it would run its scripts in the storage origin.
+  function sniffImage(bytes) {
+    var b = bytes;
+    if (!b || b.length < 12) return null;
+    if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return { type: 'image/png', ext: 'png' };
+    if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return { type: 'image/jpeg', ext: 'jpg' };
+    if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return { type: 'image/gif', ext: 'gif' };
+    if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+        b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return { type: 'image/webp', ext: 'webp' };
+    return null;
+  }
+
+  // Named by content, so the same picture saved twice — from the editor, by
+  // cache-image, or by the CLI — is one object.
+  function imagePath(hashHex, ext) {
+    return 'img/' + hashHex + '.' + ext;
   }
 
   function slugify(title) {
@@ -204,6 +248,14 @@
       difficulty: '',
       calculator: false,
       sourceId: '',
+      imageUrl: '',
+      imageAlt: '',
+      imagePosition: 'above',
+      choiceImages: null,
+      // Which image fields the file actually wrote. A re-import that leaves
+      // them out keeps whatever is stored — a figure attached in the editor
+      // after the first import must not be wiped by the second.
+      imageKeys: {},
       errors: []
     };
 
@@ -282,6 +334,8 @@
       }
     }
 
+    readImages(value, p);
+
     var answer = sanitizeText(value.answer);
 
     if (p.type === 'mc') {
@@ -311,9 +365,57 @@
       // Only meaningful once the type is known to be free response; a row with
       // a bad type has already been reported and would double up here.
       if (!answer && p.type === 'free') p.errors.push('answer is required.');
+      if (p.type === 'free' && p.choiceImages) p.errors.push('choice_images only applies to multiple_choice.');
     }
 
     return p;
+  }
+
+  function readImages(value, p) {
+    var has = function (k) { return Object.prototype.hasOwnProperty.call(value, k); };
+
+    if (has('image_url')) {
+      p.imageKeys.url = true;
+      if (value.image_url !== null && typeof value.image_url !== 'string') {
+        p.errors.push('image_url must be a string.');
+      } else {
+        var u = cleanImageUrl(value.image_url);
+        if (u.error) p.errors.push('image_url ' + u.error);
+        p.imageUrl = u.url;
+      }
+    }
+
+    if (has('image_alt')) {
+      p.imageKeys.alt = true;
+      p.imageAlt = sanitizeText(value.image_alt).slice(0, 500);
+    }
+
+    if (has('image_position')) {
+      p.imageKeys.position = true;
+      var pos = String(value.image_position == null ? 'above' : value.image_position).trim().toLowerCase();
+      if (IMAGE_POSITIONS.indexOf(pos) < 0) p.errors.push('image_position must be "above" or "below".');
+      else p.imagePosition = pos;
+    }
+
+    if (has('choice_images')) {
+      p.imageKeys.choices = true;
+      var ci = value.choice_images;
+      if (ci === null) {
+        p.choiceImages = null;
+      } else if (!Array.isArray(ci) || ci.length !== LETTERS.length) {
+        p.errors.push('choice_images must be an array of ' + LETTERS.length + ' links or nulls, in A\u2013D order.');
+      } else {
+        var out = [];
+        for (var i = 0; i < ci.length; i++) {
+          if (ci[i] == null || ci[i] === '') { out.push(null); continue; }
+          if (typeof ci[i] !== 'string') { p.errors.push('choice_images[' + i + '] must be a link or null.'); continue; }
+          var c = cleanImageUrl(ci[i]);
+          if (c.error) p.errors.push('choice_images[' + i + '] (' + LETTERS[i] + ') ' + c.error);
+          out.push(c.url || null);
+        }
+        p.choiceImages = out.some(Boolean) ? out : null;
+      }
+    }
   }
 
   function finishDoc(doc) {
@@ -492,6 +594,7 @@
       }
 
       var match = byKey[matchKey(p)];
+      var img = imageColumns(p, match);
       if (match) {
         updates.push({
           id: match.id,
@@ -503,6 +606,10 @@
           explanation: p.explanation,
           tags: p.tags.length ? p.tags : null,
           source_id: p.sourceId || null,
+          image_url: img.image_url,
+          image_alt: img.image_alt,
+          image_position: img.image_position,
+          choice_images: img.choice_images,
           // Keep the order the module already had; the file is being used to
           // correct content, not to reshuffle a module a tutee is part-way
           // through.
@@ -518,6 +625,10 @@
           explanation: p.explanation,
           tags: p.tags.length ? p.tags : null,
           source_id: p.sourceId || null,
+          image_url: img.image_url,
+          image_alt: img.image_alt,
+          image_position: img.image_position,
+          choice_images: img.choice_images,
           sort_order: maxOrder + 1 + appended
         });
         appended += 1;
@@ -537,6 +648,62 @@
       summary.problemsUpdated += upBatches[j].length;
       tick(upBatches[j].length, 'Updating \u201c' + doc.title + '\u201d\u2026');
     }
+  }
+
+  // Every row in a batch carries all four columns, whether or not the file
+  // mentioned them: PostgREST takes a bulk write's columns from the rows, and a
+  // row missing a key would have it written as null. So a field the file left
+  // out is carried over from the stored row instead.
+  function imageColumns(p, match) {
+    var k = p.imageKeys || {};
+    var m = match || {};
+    return {
+      image_url: k.url ? (p.imageUrl || null) : (m.image_url || null),
+      image_alt: k.alt ? (p.imageAlt || null) : (m.image_alt || null),
+      image_position: k.position ? p.imagePosition : (m.image_position || 'above'),
+      choice_images: k.choices ? p.choiceImages : (Array.isArray(m.choice_images) ? m.choice_images : null)
+    };
+  }
+
+  // Swaps every image link in the valid rows of `docs` for the URL `cache`
+  // resolves it to, in place. `cache(url)` returns a promise of the new URL.
+  // Each distinct link is fetched once. A link that fails keeps its original
+  // URL and is reported, so one dead image does not stop the import.
+  async function cacheDocImages(docs, cache, onProgress) {
+    var seen = {};
+    var report = { cached: 0, failed: [] };
+    var jobs = [];
+    docs.forEach(function (d) {
+      if (!d.importable) return;
+      d.problems.forEach(function (p) {
+        if (p.errors.length) return;
+        if (p.imageUrl) jobs.push({ doc: d, p: p, slot: -1, url: p.imageUrl });
+        (p.choiceImages || []).forEach(function (u, i) {
+          if (u) jobs.push({ doc: d, p: p, slot: i, url: u });
+        });
+      });
+    });
+    for (var j = 0; j < jobs.length; j++) {
+      var job = jobs[j];
+      if (!Object.prototype.hasOwnProperty.call(seen, job.url)) {
+        try {
+          seen[job.url] = { url: await cache(job.url) };
+          report.cached += 1;
+        } catch (e) {
+          seen[job.url] = { error: (e && e.message) || String(e) };
+        }
+      }
+      var hit = seen[job.url];
+      if (hit.error) {
+        report.failed.push({ module: job.doc.title, row: job.p.row, url: job.url, message: hit.error });
+      } else if (job.slot < 0) {
+        job.p.imageUrl = hit.url;
+      } else {
+        job.p.choiceImages[job.slot] = hit.url;
+      }
+      if (onProgress) onProgress({ done: j + 1, total: jobs.length, url: job.url });
+    }
+    return report;
   }
 
   // ---- gateways -----------------------------------------------------------
@@ -570,7 +737,7 @@
       async listProblems(moduleId) {
         var out = [];
         for (var from = 0; ; from += PAGE) {
-          var res = await client.from('problems').select('id,source_id,question,sort_order')
+          var res = await client.from('problems').select(LIST_COLUMNS)
             .eq('module_id', moduleId).order('sort_order').order('id').range(from, from + PAGE - 1);
           var page = unwrap(res, 'reading existing problems') || [];
           out = out.concat(page);
@@ -654,7 +821,7 @@
         var out = [];
         for (var from = 0; ; from += PAGE) {
           var page = (await call('problems?module_id=' + eq(moduleId) +
-            '&select=id,source_id,question,sort_order&order=sort_order,id' +
+            '&select=' + LIST_COLUMNS + '&order=sort_order,id' +
             '&offset=' + from + '&limit=' + PAGE, { method: 'GET' },
             'Reading existing problems')) || [];
           out = out.concat(page);
@@ -683,6 +850,21 @@
           headers: Object.assign({}, headers, { Prefer: 'resolution=merge-duplicates' }),
           body: JSON.stringify(rows)
         }, 'Updating problems');
+      },
+      // Storage, not PostgREST, but the same key. x-upsert because the name is
+      // the content's hash: an object already there is this very image.
+      async uploadImage(path, bytes, contentType) {
+        var root = String(url).replace(/\/+$/, '') + '/storage/v1/object/';
+        var res = await fetch(root + IMAGE_BUCKET + '/' + path, {
+          method: 'POST',
+          headers: { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': contentType, 'x-upsert': 'true', 'cache-control': 'max-age=31536000' },
+          body: bytes
+        });
+        if (!res.ok) {
+          var text = await res.text();
+          throw new Error('Storing the image failed (' + res.status + '): ' + text.slice(0, 200));
+        }
+        return root + 'public/' + IMAGE_BUCKET + '/' + path;
       }
     };
   }
@@ -696,6 +878,13 @@
     calculatorOf: calculatorOf,
     parse: parse,
     run: run,
+    IMAGE_BUCKET: IMAGE_BUCKET,
+    MAX_IMAGE_BYTES: MAX_IMAGE_BYTES,
+    IMAGE_POSITIONS: IMAGE_POSITIONS,
+    cleanImageUrl: cleanImageUrl,
+    sniffImage: sniffImage,
+    imagePath: imagePath,
+    cacheDocImages: cacheDocImages,
     slugify: slugify,
     sanitizeText: sanitizeText,
     supabaseGateway: supabaseGateway,

@@ -17,10 +17,10 @@
      ten-minute cache: without this a returning tab can run a new index.html
      against an old db.js and call a function that does not exist yet. They
      move as one version because they are one layer. -->
-<script src="config.js?v=10"></script>
-<script src="supabaseClient.js?v=10"></script>
-<script src="importer.js?v=10"></script>
-<script src="db.js?v=10"></script>
+<script src="config.js?v=11"></script>
+<script src="supabaseClient.js?v=11"></script>
+<script src="importer.js?v=11"></script>
+<script src="db.js?v=11"></script>
 </head>
 <body>
 <x-dc>
@@ -472,13 +472,15 @@ textarea.input { min-height: 90px; resize: vertical; }
        inside a narrower window (100vw - 740px). min() picks whichever
        applies, and max() floors it at 20px for the widths where the card is
        already against the edge, which is where the two agree anyway. */
+    /* The same arithmetic with the sidebar taken out of the window first: the
+       column is centred in what is left of it, so 100vw becomes
+       100vw - var(--sb-w) on both sides of the min(). */
     .calc-launch {
-      position: fixed; z-index: 60; top: 76px;
-      right: max(20px, min(calc(50vw - 210px), calc(100vw - 740px)));
+      position: fixed; z-index: 60; top: 20px;
+      right: max(20px, min(calc((100vw - var(--sb-w)) / 2 - 210px), calc(100vw - var(--sb-w) - 740px)));
     }
-    /* The nav wraps to two rows just below 540px (measured, not guessed), and
-       a fixed top offset that clears one row does not clear two. */
-    @media (max-width: 560px) { .calc-launch { top: 110px; } }
+    /* Below the drawer breakpoint the slim top bar is 48px tall. */
+    @media (max-width: 799px) { .calc-launch { top: 60px; } }
     .calc-panel {
       position: fixed; z-index: 61; flex-direction: column; overflow: hidden;
       background: var(--color-surface); border: 1px solid var(--color-neutral-400);
@@ -507,6 +509,124 @@ textarea.input { min-height: 90px; resize: vertical; }
       .calc-panel.calc-min { height: auto !important; }
       .calc-grip { display: none; }
     }
+
+    /* ---- sidebar ----
+       The classes live on <html> rather than on a wrapper, because the
+       calculator layer is mounted outside the app shell and has to read the
+       same --sb-w. ppa-sb is set while someone is signed in; the login card
+       and the splash keep the full width. */
+    :root { --sb-w: 0px; }
+    html.ppa-sb { --sb-w: 240px; }
+    .app-main { margin-left: var(--sb-w); transition: margin-left 0.18s ease; }
+    .sb {
+      position: fixed; top: 0; left: 0; bottom: 0; width: 240px; z-index: 40;
+      display: flex; flex-direction: column; box-sizing: border-box;
+      background: var(--color-surface); border-right: 1px solid var(--color-divider);
+      transition: width 0.18s ease, transform 0.2s ease;
+    }
+    .sb-head { display: flex; align-items: center; gap: 6px; min-height: 56px; padding: 8px 8px 8px 12px; box-sizing: border-box; }
+    .sb-brand {
+      flex: 1; min-width: 0; font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+      font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; color: inherit; text-decoration: none;
+    }
+    .sb-btn {
+      flex: none; display: inline-flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer;
+    }
+    .sb-btn:hover { background: color-mix(in srgb, var(--color-text) 8%, transparent); }
+    .sb-icon { width: 20px; height: 20px; flex: none; }
+    .sb-nav { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 6px 0; display: flex; flex-direction: column; gap: 2px; }
+    .sb-item {
+      position: relative; display: flex; align-items: center; min-height: 40px; padding: 0 12px 0 18px;
+      color: inherit; text-decoration: none; font-size: 14px; box-sizing: border-box;
+    }
+    .sb-item:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); color: inherit; }
+    .sb-inner { display: inline-flex; align-items: center; gap: 12px; white-space: nowrap; transform-origin: left center; transition: transform 0.15s ease; }
+    .sb-badge {
+      display: inline-block; min-width: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px;
+      background: var(--color-accent); color: var(--color-bg); font-size: 11px; line-height: 18px; text-align: center; font-weight: 600;
+    }
+    /* Only the inner row scales, from its left edge, so the 20% it grows by
+       eats into the empty right-hand side of the item instead of being
+       clipped by the sidebar's edge. */
+    .sb-item[aria-current='page'] { background: var(--color-accent-100); color: var(--color-accent-800); font-weight: 700; }
+    .sb-item[aria-current='page']::before { content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 4px; background: var(--color-accent); }
+    .sb-item[aria-current='page'] .sb-inner { transform: scale(1.2); }
+    .sb-foot { border-top: 1px solid var(--color-divider); padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+    .sb-hello { font-size: 12px; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sb-foot-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .sb-topbar, .sb-backdrop { display: none; }
+
+    /* Collapsed is a desktop state. Inside the drawer breakpoint it would
+       only hide the labels of a menu that is already out of the way. */
+    @media (min-width: 800px) {
+      html.ppa-sb.ppa-sb-collapsed { --sb-w: 56px; }
+      html.ppa-sb-collapsed .sb { width: 56px; }
+      html.ppa-sb-collapsed .sb-head { padding: 8px 10px; }
+      html.ppa-sb-collapsed .sb-brand, html.ppa-sb-collapsed .sb-label, html.ppa-sb-collapsed .sb-hello,
+      html.ppa-sb-collapsed .sb-foot-text { display: none; }
+      html.ppa-sb-collapsed .sb-nav { overflow: visible; }
+      html.ppa-sb-collapsed .sb-item { justify-content: center; padding: 0; }
+      html.ppa-sb-collapsed .sb-foot { padding: 8px 10px; align-items: center; }
+      html.ppa-sb-collapsed .sb-badge { position: absolute; top: 3px; right: 5px; min-width: 15px; line-height: 15px; font-size: 10px; padding: 0 3px; }
+      /* Collapsed, the current tab is told apart by the colour of its icon
+         and nothing else: no fill, no bar, no scale. */
+      html.ppa-sb-collapsed .sb-item[aria-current='page'] { background: transparent; font-weight: 400; color: inherit; }
+      html.ppa-sb-collapsed .sb-item[aria-current='page']::before { display: none; }
+      html.ppa-sb-collapsed .sb-item[aria-current='page'] .sb-inner { transform: none; }
+      html.ppa-sb-collapsed .sb-item[aria-current='page'] .sb-icon { color: var(--color-accent); }
+      /* The rail's tooltips. CSS rather than state, so hovering down the rail
+         does not re-render the screen behind it once per item. */
+      html.ppa-sb-collapsed [data-tip]:hover::after, html.ppa-sb-collapsed [data-tip]:focus-visible::after {
+        content: attr(data-tip); position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%);
+        padding: 4px 8px; background: var(--color-text); color: var(--color-bg); font-size: 12px; font-weight: 400;
+        white-space: nowrap; pointer-events: none; z-index: 70;
+      }
+      html.ppa-sb-collapsed .sb-btn[data-tip], html.ppa-sb-collapsed .sb-item[data-tip] { position: relative; }
+    }
+
+    @media (max-width: 799px) {
+      /* The drawer floats over the page, so it takes no width from it. */
+      html.ppa-sb { --sb-w: 0px; }
+      html.ppa-sb .app-main { padding-top: 48px; }
+      html.ppa-sb .sb-topbar {
+        display: flex; align-items: center; gap: 8px; position: fixed; top: 0; left: 0; right: 0; height: 48px; z-index: 38;
+        padding: 0 8px; box-sizing: border-box; background: var(--color-surface); border-bottom: 1px solid var(--color-divider);
+      }
+      /* Off-canvas until opened. visibility as well as the transform, so the
+         links in a closed drawer drop out of the tab order. */
+      .sb { width: min(280px, 86vw); transform: translateX(-100%); visibility: hidden; transition: transform 0.2s ease, visibility 0s linear 0.2s; }
+      html.ppa-nav-open .sb { transform: none; visibility: visible; box-shadow: var(--shadow-lg); transition: transform 0.2s ease; }
+      html.ppa-nav-open .sb-backdrop { display: block; position: fixed; inset: 0; z-index: 39; background: rgba(24, 26, 30, 0.4); }
+      .sb-collapse { display: none; }
+    }
+    @media (min-width: 800px) { .sb-close { display: none; } }
+    @media (prefers-reduced-motion: reduce) {
+      .app-main, .sb, .sb-inner { transition: none !important; }
+    }
+
+    /* ---- problem images ---- */
+    .pimg { display: inline-block; max-width: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; line-height: 0; vertical-align: top; }
+    .pimg img { display: block; height: auto; background: #fff; }
+    /* The zoom button sits beside a choice's picture, not on it: a click on the
+       picture itself selects the choice, and an overlay would cover most of a
+       small one. */
+    .pimg-thumb { display: inline-flex; align-items: flex-end; gap: 6px; max-width: 100%; line-height: 0; vertical-align: top; }
+    .pimg-thumb img { display: block; min-width: 0; height: auto; background: #fff; }
+    .pimg-zoom {
+      flex: none; width: 26px; height: 26px; padding: 0; border: 1px solid var(--color-neutral-400);
+      background: var(--color-surface); color: inherit; cursor: zoom-in; display: inline-flex; align-items: center; justify-content: center;
+    }
+    .pimg-broken {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12px; line-height: 1.4;
+      border: 1px dashed var(--color-neutral-400); color: color-mix(in srgb, var(--color-text) 65%, transparent); background: var(--color-surface);
+    }
+    /* Above the sidebar (40), the calculator (61) and every dialog (50). */
+    .lb { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 48px 16px 20px; box-sizing: border-box; background: rgba(12, 14, 16, 0.86); }
+    .lb img { display: block; max-width: 100%; max-height: calc(100vh - 110px); object-fit: contain; background: #fff; cursor: zoom-out; }
+    .lb-cap { color: #f2f2f3; font-size: 13px; max-width: 720px; text-align: center; }
+    .lb-close { position: absolute; top: 10px; right: 12px; width: 36px; height: 36px; border: 1px solid rgba(255,255,255,0.4); background: transparent; color: #fff; font-size: 20px; cursor: pointer; }
   </style>
 </helmet>
 
@@ -552,16 +672,8 @@ textarea.input { min-height: 90px; resize: vertical; }
 </sc-if>
 
 <sc-if value="{{isApp}}" hint-placeholder-val="{{false}}">
-  <nav class="nav" style="position:sticky;top:0;z-index:10;flex-wrap:wrap;row-gap:6px">
-    <span class="nav-brand" style="cursor:pointer" sc-camel-on-click="{{goHome}}">Peer Prep Academy</span>
-    <sc-for list="{{navLinks}}" as="l" hint-placeholder-count="2">
-      <a href="#" aria-current="{{l.cur}}" sc-camel-on-click="{{l.go}}">{{l.label}}</a>
-    </sc-for>
-    <span style="margin-left:auto;display:flex;align-items:center;gap:12px">
-      <span style="font-size:12px;opacity:0.6">Hello, {{userName}} · {{roleLabel}}</span>
-      <button type="button" class="btn btn-ghost" sc-camel-on-click="{{logout}}">Log out</button>
-    </span>
-  </nav>
+  <div class="sb-mount">{{sidebarEl}}</div>
+  <div class="app-main">
   <div style="max-width:1060px;margin:0 auto;padding:28px 20px 80px;box-sizing:border-box">
 
     <sc-if value="{{sDash}}" hint-placeholder-val="{{false}}">
@@ -710,7 +822,9 @@ textarea.input { min-height: 90px; resize: vertical; }
       <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55;margin:16px 0 12px">{{posKicker}}</div>
       <div class="card blueprint" style="max-width:720px;padding:24px;box-sizing:border-box">
         <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <sc-if value="{{qImgAbove}}" hint-placeholder-val="{{false}}"><div style="margin-bottom:16px">{{qImgEl}}</div></sc-if>
         <div style="font-size:17px;line-height:1.6">{{qEl}}</div>
+        <sc-if value="{{qImgBelow}}" hint-placeholder-val="{{false}}"><div style="margin-top:16px">{{qImgEl}}</div></sc-if>
         <sc-if value="{{isMC}}" hint-placeholder-val="{{true}}">
           <div style="display:flex;flex-direction:column;gap:8px;margin-top:20px">
             <sc-for list="{{choices}}" as="c" hint-placeholder-count="4">
@@ -718,7 +832,7 @@ textarea.input { min-height: 90px; resize: vertical; }
                 <input type="radio" name="choice" checked="{{c.selected}}" sc-camel-on-change="{{c.pick}}" disabled="{{inputsLocked}}">
                 <span class="dot"></span>
                 <span style="font-family:var(--font-heading);font-size:15px;width:20px;opacity:0.7">{{c.letter}}</span>
-                <span style="flex:1;font-size:15px">{{c.el}}</span>
+                <span style="flex:1;font-size:15px;min-width:0">{{c.el}}<sc-if value="{{c.hasImg}}" hint-placeholder-val="{{false}}"><span style="display:block;margin-top:8px">{{c.imgEl}}</span></sc-if></span>
                 <sc-if value="{{c.isCorrectMark}}" hint-placeholder-val="{{false}}"><span class="tag tag-accent">Correct</span></sc-if>
                 <sc-if value="{{c.isWrongMark}}" hint-placeholder-val="{{false}}"><span class="tag tag-outline">{{c.wrongLabel}}</span></sc-if>
               </label>
@@ -1184,18 +1298,24 @@ textarea.input { min-height: 90px; resize: vertical; }
           <sc-if value="{{hasSMsg}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;border-left:2px solid var(--color-accent);padding-left:10px">{{sMsg}}</p></sc-if>
         </div>
       </div>
+      <sc-if value="{{hasUMsg}}" hint-placeholder-val="{{false}}"><p style="margin:0 0 20px;font-size:13px;border-left:2px solid var(--color-accent);padding-left:10px">{{uMsg}}</p></sc-if>
       <h2 style="margin:0 0 12px">Tutees</h2>
       <div style="overflow-x:auto;margin-bottom:32px">
         <sc-raw-table class="table">
-          <sc-raw-thead><sc-raw-tr><sc-raw-th>Name</sc-raw-th><sc-raw-th>Email</sc-raw-th><sc-raw-th>Tutor</sc-raw-th><sc-raw-th>PIN</sc-raw-th></sc-raw-tr></sc-raw-thead>
+          <sc-raw-thead><sc-raw-tr><sc-raw-th>Name</sc-raw-th><sc-raw-th>Email</sc-raw-th><sc-raw-th>Tutor</sc-raw-th><sc-raw-th></sc-raw-th></sc-raw-tr></sc-raw-thead>
           <sc-raw-tbody>
             <sc-for list="{{studentRows}}" as="r" hint-placeholder-count="4">
               <sc-raw-tr>
-                <sc-raw-td>{{r.name}}</sc-raw-td><sc-raw-td class="text-muted">{{r.email}}</sc-raw-td>
-                <sc-raw-td><sc-raw-select class="input" style="max-width:180px;padding:4px 8px" value="{{r.tutorId}}" sc-camel-on-change="{{r.onLink}}">
+                <sc-raw-td><span style="{{r.nameStyle}}">{{r.name}}</span><sc-if value="{{r.inactive}}" hint-placeholder-val="{{false}}"> <span class="tag tag-neutral" style="margin-left:6px">Deactivated</span></sc-if></sc-raw-td>
+                <sc-raw-td class="text-muted">{{r.email}}</sc-raw-td>
+                <sc-raw-td><sc-raw-select class="input" style="max-width:180px;padding:4px 8px" value="{{r.tutorId}}" aria-label="{{r.tutorAria}}" disabled="{{r.inactive}}" sc-camel-on-change="{{r.onLink}}">
                   <sc-for list="{{r.options}}" as="o"><option value="{{o.id}}">{{o.label}}</option></sc-for>
                 </sc-raw-select></sc-raw-td>
-                <sc-raw-td><button type="button" class="btn btn-ghost" sc-camel-on-click="{{r.onSetPin}}">Set PIN</button></sc-raw-td>
+                <sc-raw-td style="text-align:right;white-space:nowrap">
+                  <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{r.edit}}">Edit</button>
+                  <sc-if value="{{r.inactive}}" hint-placeholder-val="{{false}}"><button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" disabled="{{r.busy}}" sc-camel-on-click="{{r.reactivate}}">Reactivate</button></sc-if>
+                  <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px;color:#8c1d18" sc-camel-on-click="{{r.del}}">Delete</button>
+                </sc-raw-td>
               </sc-raw-tr>
             </sc-for>
           </sc-raw-tbody>
@@ -1204,10 +1324,18 @@ textarea.input { min-height: 90px; resize: vertical; }
       <h2 style="margin:0 0 12px">Tutors</h2>
       <div style="overflow-x:auto">
         <sc-raw-table class="table">
-          <sc-raw-thead><sc-raw-tr><sc-raw-th>Name</sc-raw-th><sc-raw-th>Username</sc-raw-th><sc-raw-th>Tutees</sc-raw-th></sc-raw-tr></sc-raw-thead>
+          <sc-raw-thead><sc-raw-tr><sc-raw-th>Name</sc-raw-th><sc-raw-th>Username</sc-raw-th><sc-raw-th>Tutees</sc-raw-th><sc-raw-th></sc-raw-th></sc-raw-tr></sc-raw-thead>
           <sc-raw-tbody>
             <sc-for list="{{tutorRows}}" as="t" hint-placeholder-count="2">
-              <sc-raw-tr><sc-raw-td>{{t.name}}</sc-raw-td><sc-raw-td>{{t.username}}</sc-raw-td><sc-raw-td>{{t.count}}</sc-raw-td></sc-raw-tr>
+              <sc-raw-tr>
+                <sc-raw-td><span style="{{t.nameStyle}}">{{t.name}}</span><sc-if value="{{t.inactive}}" hint-placeholder-val="{{false}}"> <span class="tag tag-neutral" style="margin-left:6px">Deactivated</span></sc-if></sc-raw-td>
+                <sc-raw-td>{{t.username}}</sc-raw-td><sc-raw-td>{{t.count}}</sc-raw-td>
+                <sc-raw-td style="text-align:right;white-space:nowrap">
+                  <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{t.edit}}">Edit</button>
+                  <sc-if value="{{t.inactive}}" hint-placeholder-val="{{false}}"><button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" disabled="{{t.busy}}" sc-camel-on-click="{{t.reactivate}}">Reactivate</button></sc-if>
+                  <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px;color:#8c1d18" sc-camel-on-click="{{t.del}}">Delete</button>
+                </sc-raw-td>
+              </sc-raw-tr>
             </sc-for>
           </sc-raw-tbody>
         </sc-raw-table>
@@ -1243,7 +1371,7 @@ textarea.input { min-height: 90px; resize: vertical; }
         <h1 style="margin:0">Flagged problems</h1>
         <span class="tag tag-outline">{{flagBadge}}</span>
       </div>
-      <p style="max-width:620px;margin:0 0 16px;font-size:14px;line-height:1.6;opacity:0.75">These questions ask about a graph, table or figure that did not come across with the import, so there is nothing to read the answer off. Unflag any that stand on their own; delete the rest. A problem you unflag stays unflagged: no later scan will pick it up again.</p>
+      <p style="max-width:620px;margin:0 0 16px;font-size:14px;line-height:1.6;opacity:0.75">These questions ask about a graph, table or figure that did not come across with the import, so there is nothing to read the answer off. Attach the missing figure as an image to fix one — saving a problem with an image unflags it. Unflag any that stand on their own; delete the rest. A problem you unflag stays unflagged: no later scan will pick it up again.</p>
       <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:0 0 20px">
         <button type="button" class="btn btn-secondary" disabled="{{flagBusy}}" sc-camel-on-click="{{rescanFigures}}">{{rescanLabel}}</button>
         <span class="text-muted" style="font-size:13px">Importing does not run this check. Press it after a new batch of problems goes in.</span>
@@ -1260,7 +1388,7 @@ textarea.input { min-height: 90px; resize: vertical; }
         </div>
         <div style="overflow-x:auto">
           <sc-raw-table class="table">
-            <sc-raw-thead><sc-raw-tr><sc-raw-th></sc-raw-th><sc-raw-th>Module</sc-raw-th><sc-raw-th>Question</sc-raw-th><sc-raw-th>Why</sc-raw-th></sc-raw-tr></sc-raw-thead>
+            <sc-raw-thead><sc-raw-tr><sc-raw-th></sc-raw-th><sc-raw-th>Module</sc-raw-th><sc-raw-th>Question</sc-raw-th><sc-raw-th>Why</sc-raw-th><sc-raw-th></sc-raw-th></sc-raw-tr></sc-raw-thead>
             <sc-raw-tbody>
               <sc-for list="{{flagRows}}" as="f" hint-placeholder-count="3">
                 <sc-raw-tr>
@@ -1268,6 +1396,7 @@ textarea.input { min-height: 90px; resize: vertical; }
                   <sc-raw-td style="vertical-align:top;white-space:nowrap">{{f.moduleTitle}}</sc-raw-td>
                   <sc-raw-td style="vertical-align:top;min-width:320px;line-height:1.5">{{f.qEl}}</sc-raw-td>
                   <sc-raw-td class="text-muted" style="vertical-align:top;font-size:13px">{{f.reason}}</sc-raw-td>
+                  <sc-raw-td style="vertical-align:top;white-space:nowrap"><button type="button" class="btn btn-secondary" style="padding:3px 10px;font-size:12px" sc-camel-on-click="{{f.attach}}">Attach image</button></sc-raw-td>
                 </sc-raw-tr>
               </sc-for>
             </sc-raw-tbody>
@@ -1280,8 +1409,9 @@ textarea.input { min-height: 90px; resize: vertical; }
     </sc-if>
 
     <sc-if value="{{sEditor}}" hint-placeholder-val="{{false}}">
-      <a href="#" sc-camel-on-click="{{backModules}}" style="font-size:13px;text-decoration:none">← Modules</a>
+      <a href="#" sc-camel-on-click="{{backModules}}" style="font-size:13px;text-decoration:none">{{edBackLabel}}</a>
       <h1 style="margin:16px 0 20px">Edit module</h1>
+      <sc-if value="{{hasEdMsg}}" hint-placeholder-val="{{false}}"><p style="margin:0 0 20px;font-size:13px;border-left:2px solid var(--color-accent);padding-left:10px">{{edMsg}}</p></sc-if>
       <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:28px">
         <div class="field" style="min-width:240px"><label>Title</label><input class="input" value="{{edTitle}}" sc-camel-on-change="{{onEdTitle}}"></div>
         <div class="field" style="min-width:160px"><label>Subject</label><input class="input" value="{{edSubject}}" sc-camel-on-change="{{onEdSubject}}"></div>
@@ -1296,6 +1426,8 @@ textarea.input { min-height: 90px; resize: vertical; }
           <div style="display:flex;align-items:center;gap:12px;padding:12px 6px;border-bottom:1px solid var(--color-neutral-300)">
             <span style="font-family:var(--font-heading);font-size:16px;width:28px;opacity:0.55">{{r.num}}</span>
             <span style="flex:1;font-size:14px;min-width:160px">{{r.snippet}}</span>
+            <sc-if value="{{r.hasImage}}" hint-placeholder-val="{{false}}"><span class="tag tag-accent">Image</span></sc-if>
+            <sc-if value="{{r.flagged}}" hint-placeholder-val="{{false}}"><span class="tag tag-outline">Flagged</span></sc-if>
             <span class="tag tag-neutral">{{r.typeLabel}}</span>
             <button type="button" class="btn btn-ghost" sc-camel-on-click="{{r.edit}}">Edit</button>
             <button type="button" class="btn btn-ghost" sc-camel-on-click="{{r.del}}">Delete</button>
@@ -1310,6 +1442,35 @@ textarea.input { min-height: 90px; resize: vertical; }
           <sc-if value="{{hasPfPreview}}" hint-placeholder-val="{{false}}">
             <div style="font-size:14px;line-height:1.6;border-left:2px solid var(--color-neutral-300);padding-left:10px"><span style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;opacity:0.55">Preview </span>{{pfPreviewEl}}</div>
           </sc-if>
+          <div sc-camel-on-drag-over="{{pfDragOver}}" sc-camel-on-drag-leave="{{pfDragLeave}}" sc-camel-on-drop="{{pfDrop}}" style="display:flex;flex-direction:column;gap:10px;padding:12px;border:1px dashed {{pfDropBorder}};background:{{pfDropBg}}">
+            <div class="field"><label for="pf-image-url">Image URL</label>
+              <input id="pf-image-url" class="input" type="url" sc-camel-input-mode="url" placeholder="https://…" value="{{pfImageUrl}}" sc-camel-on-change="{{onPfImageUrl}}">
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button type="button" class="btn btn-secondary" disabled="{{pfCantCache}}" sc-camel-on-click="{{pfCache}}">{{pfCacheLabel}}</button>
+              <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px">Upload file
+                <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" disabled="{{pfImgBusy}}" sc-camel-on-change="{{pfPickFile}}" style="font-size:12px;max-width:220px">
+              </label>
+              <span style="font-size:12px;opacity:0.6">{{pfDropHint}}</span>
+              <sc-if value="{{pfHasImage}}" hint-placeholder-val="{{false}}">
+                <button type="button" class="btn btn-ghost" style="margin-left:auto" sc-camel-on-click="{{pfClearImage}}">Remove image</button>
+              </sc-if>
+            </div>
+            <sc-if value="{{pfHasImgErr}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;color:#8c1d18;border-left:2px solid #8c1d18;padding-left:10px">{{pfImgErr}}</p></sc-if>
+            <sc-if value="{{pfHasImgMsg}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;border-left:2px solid var(--color-accent);padding-left:10px">{{pfImgMsg}}</p></sc-if>
+            <sc-if value="{{pfHasImage}}" hint-placeholder-val="{{false}}">
+              <div>{{pfImageEl}}</div>
+              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+                <div class="field" style="flex:1;min-width:220px"><label for="pf-image-alt">Alt text</label><input id="pf-image-alt" class="input" placeholder="What the figure shows" value="{{pfImageAlt}}" sc-camel-on-change="{{onPfImageAlt}}"></div>
+                <div class="field"><label>Position</label>
+                  <div class="seg" style="display:inline-flex">
+                    <label class="seg-opt"><input type="radio" name="pfimgpos" checked="{{pfImgAbove}}" sc-camel-on-change="{{pfPickAbove}}">Above question</label>
+                    <label class="seg-opt"><input type="radio" name="pfimgpos" checked="{{pfImgBelow}}" sc-camel-on-change="{{pfPickBelow}}">Below question</label>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+          </div>
           <div class="field"><label>Type</label>
             <div class="seg" style="display:inline-flex">
               <label class="seg-opt"><input type="radio" name="ptype" checked="{{pfIsMC}}" sc-camel-on-change="{{pfPickMC}}">Multiple choice</label>
@@ -1323,6 +1484,19 @@ textarea.input { min-height: 90px; resize: vertical; }
               <div class="field"><label>Choice C</label><input class="input" value="{{pfC2}}" sc-camel-on-change="{{onPfC2}}"></div>
               <div class="field"><label>Choice D</label><input class="input" value="{{pfC3}}" sc-camel-on-change="{{onPfC3}}"></div>
             </div>
+            <div class="field"><label>Choice images (optional)</label>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <sc-for list="{{pfChoiceImgs}}" as="ci" hint-placeholder-count="4">
+                  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span style="font-family:var(--font-heading);width:16px;opacity:0.7">{{ci.letter}}</span>
+                    <input class="input" style="flex:1;min-width:200px" type="url" sc-camel-input-mode="url" placeholder="https://…" aria-label="{{ci.aria}}" value="{{ci.url}}" sc-camel-on-change="{{ci.onUrl}}">
+                    <button type="button" class="btn btn-ghost" style="padding:3px 8px;font-size:12px" disabled="{{ci.cantCache}}" sc-camel-on-click="{{ci.cache}}">{{ci.cacheLabel}}</button>
+                    <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" aria-label="{{ci.uploadAria}}" disabled="{{pfImgBusy}}" sc-camel-on-change="{{ci.pick}}" style="font-size:12px;max-width:200px">
+                    <sc-if value="{{ci.has}}" hint-placeholder-val="{{false}}"><span style="width:100%;padding-left:24px">{{ci.el}}</span></sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
             <div class="field" style="max-width:160px"><label>Correct answer</label>
               <sc-raw-select class="input" value="{{pfAnswer}}" sc-camel-on-change="{{onPfAnswer}}"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></sc-raw-select>
             </div>
@@ -1335,8 +1509,9 @@ textarea.input { min-height: 90px; resize: vertical; }
             <input type="checkbox" checked="{{pfCalc}}" sc-camel-on-change="{{onPfCalc}}">
             <span>{{pfCalcLabel}}</span>
           </label>
+          <sc-if value="{{pfHasSaveErr}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;color:#8c1d18;border-left:2px solid #8c1d18;padding-left:10px">{{pfSaveErr}}</p></sc-if>
           <div style="display:flex;gap:8px">
-            <button type="button" class="btn btn-primary blueprint" sc-camel-on-click="{{pfSave}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Save problem</button>
+            <button type="button" class="btn btn-primary blueprint" disabled="{{pfImgBusy}}" sc-camel-on-click="{{pfSave}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Save problem</button>
             <button type="button" class="btn btn-ghost" sc-camel-on-click="{{pfCancel}}">Cancel</button>
           </div>
         </div>
@@ -1402,7 +1577,15 @@ textarea.input { min-height: 90px; resize: vertical; }
               <sc-for list="{{m.rows}}" as="r" hint-placeholder-count="3">
                 <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 6px;border-bottom:1px solid var(--color-neutral-300);background:{{r.bg}}">
                   <span style="font-family:var(--font-heading);font-size:15px;width:28px;opacity:0.55">{{r.num}}</span>
-                  <span style="flex:1;font-size:14px;line-height:1.6;min-width:180px">{{r.questionEl}}
+                  <span style="flex:1;font-size:14px;line-height:1.6;min-width:180px">
+                    <sc-if value="{{r.imgAbove}}" hint-placeholder-val="{{false}}"><span style="display:block;margin-bottom:8px">{{r.imgEl}}</span></sc-if>
+                    {{r.questionEl}}
+                    <sc-if value="{{r.imgBelow}}" hint-placeholder-val="{{false}}"><span style="display:block;margin-top:8px">{{r.imgEl}}</span></sc-if>
+                    <sc-if value="{{r.hasChoiceImgs}}" hint-placeholder-val="{{false}}">
+                      <span style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+                        <sc-for list="{{r.choiceImgs}}" as="ci" hint-placeholder-count="2"><span style="display:inline-flex;flex-direction:column;gap:2px;font-size:12px"><span style="opacity:0.65">{{ci.letter}}</span>{{ci.el}}</span></sc-for>
+                      </span>
+                    </sc-if>
                     <sc-if value="{{r.bad}}" hint-placeholder-val="{{false}}"><span style="display:block;font-size:12px;color:#8c1d18;margin-top:4px">{{r.errText}}</span></sc-if>
                     <sc-if value="{{r.hasTags}}" hint-placeholder-val="{{false}}"><span style="display:block;font-size:12px;opacity:0.55;margin-top:4px">{{r.tagText}}</span></sc-if>
                   </span>
@@ -1475,7 +1658,16 @@ textarea.input { min-height: 90px; resize: vertical; }
               <span class="{{e.tagClass}}">{{e.statusLabel}}</span>
               <span style="margin-left:auto;font-size:12px;opacity:0.6">{{e.date}}</span>
             </div>
+            <sc-if value="{{e.imgAbove}}" hint-placeholder-val="{{false}}"><div>{{e.imgEl}}</div></sc-if>
             <div style="font-size:16px;line-height:1.6">{{e.qEl}}</div>
+            <sc-if value="{{e.imgBelow}}" hint-placeholder-val="{{false}}"><div>{{e.imgEl}}</div></sc-if>
+            <sc-if value="{{e.hasChoiceImgs}}" hint-placeholder-val="{{false}}">
+              <div style="display:flex;gap:12px;flex-wrap:wrap">
+                <sc-for list="{{e.choiceImgs}}" as="ci" hint-placeholder-count="2">
+                  <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><span style="opacity:0.65">{{ci.letter}}</span>{{ci.el}}</div>
+                </sc-for>
+              </div>
+            </sc-if>
             <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px">
               <span>{{e.givenLabel}} {{e.givenEl}}</span>
               <span>Correct answer: {{e.correctEl}}</span>
@@ -1503,6 +1695,7 @@ textarea.input { min-height: 90px; resize: vertical; }
       </div>
     </sc-if>
 
+  </div>
   </div>
 
   <sc-if value="{{hasCalPop}}" hint-placeholder-val="{{false}}">
@@ -1627,6 +1820,92 @@ textarea.input { min-height: 90px; resize: vertical; }
     </div>
   </sc-if>
 
+  <sc-if value="{{hasUserEdit}}" hint-placeholder-val="{{false}}">
+    <div style="position:fixed;inset:0;background:rgba(24,26,30,0.5);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50" sc-camel-on-click="{{ueClose}}">
+      <div class="card blueprint" role="dialog" aria-modal="true" aria-label="{{ueKicker}}" style="max-width:520px;width:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;background:var(--color-neutral-100);max-height:92vh;overflow:auto" sc-camel-on-click="{{ueStop}}">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div class="card-kicker">{{ueKicker}}</div>
+        <div class="card-title">{{ueTitle}}</div>
+        <div class="field"><label for="ue-name">Display name</label><input id="ue-name" class="input" value="{{ueName}}" sc-camel-on-change="{{onUeName}}"></div>
+        <sc-if value="{{ueIsTutee}}" hint-placeholder-val="{{false}}">
+          <div class="field"><label for="ue-email">Email</label><input id="ue-email" class="input" type="email" value="{{ueEmail}}" sc-camel-on-change="{{onUeEmail}}"></div>
+          <div class="field"><label for="ue-tutor">Tutor</label>
+            <sc-raw-select id="ue-tutor" class="input" value="{{ueTutor}}" sc-camel-on-change="{{onUeTutor}}">
+              <sc-for list="{{ueTutorOpts}}" as="o"><option value="{{o.id}}">{{o.label}}</option></sc-for>
+            </sc-raw-select>
+          </div>
+        </sc-if>
+        <sc-if value="{{ueIsTutor}}" hint-placeholder-val="{{false}}">
+          <div class="field"><label for="ue-username">Username</label><input id="ue-username" class="input" value="{{ueUsername}}" sc-camel-on-change="{{onUeUsername}}">
+            <span style="font-size:12px;opacity:0.6;margin-top:4px">{{ueUsernameHint}}</span>
+          </div>
+          <div class="field"><label>Tutees</label>
+            <sc-if value="{{ueNoTutees}}" hint-placeholder-val="{{false}}"><span style="font-size:13px;opacity:0.65">No active tutees yet.</span></sc-if>
+            <div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto">
+              <sc-for list="{{ueTuteeOpts}}" as="t" hint-placeholder-count="3">
+                <label class="radio" style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="checkbox" checked="{{t.checked}}" sc-camel-on-change="{{t.toggle}}"><span class="dot"></span><span>{{t.name}}</span><span style="font-size:12px;opacity:0.55">{{t.sub}}</span></label>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+        <div class="field" style="max-width:220px"><label for="ue-pin">New PIN</label><input id="ue-pin" class="input" sc-camel-input-mode="numeric" sc-camel-auto-complete="off" placeholder="Leave blank to keep" value="{{uePin}}" sc-camel-on-change="{{onUePin}}"></div>
+        <sc-if value="{{ueHasErr}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;color:#8c1d18;border-left:2px solid #8c1d18;padding-left:10px">{{ueErr}}</p></sc-if>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost" sc-camel-on-click="{{ueClose}}">Cancel</button>
+          <button type="button" class="btn btn-primary blueprint" disabled="{{ueBusy}}" sc-camel-on-click="{{ueSave}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>{{ueSaveLabel}}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{hasUserDel}}" hint-placeholder-val="{{false}}">
+    <div style="position:fixed;inset:0;background:rgba(24,26,30,0.5);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50" sc-camel-on-click="{{udClose}}">
+      <div class="card blueprint" role="dialog" aria-modal="true" aria-label="Remove account" style="max-width:520px;width:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;background:var(--color-neutral-100);max-height:92vh;overflow:auto" sc-camel-on-click="{{udStop}}">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div class="card-kicker">{{udKicker}}</div>
+        <div class="card-title">{{udTitle}}</div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="font-size:13px;font-weight:600">What this account has</div>
+          <sc-for list="{{udLines}}" as="l" hint-placeholder-count="4"><div style="font-size:13px;opacity:0.8">{{l}}</div></sc-for>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:14px">
+          <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer"><input type="radio" name="udmode" checked="{{udIsDeactivate}}" sc-camel-on-change="{{udPickDeactivate}}" style="margin-top:4px">
+            <span><b>Deactivate</b> (recommended)<br><span style="font-size:13px;opacity:0.75">{{udDeactivateText}}</span></span></label>
+          <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer"><input type="radio" name="udmode" checked="{{udIsDelete}}" sc-camel-on-change="{{udPickDelete}}" style="margin-top:4px">
+            <span><b>Delete permanently</b><br><span style="font-size:13px;opacity:0.75">{{udDeleteText}}</span></span></label>
+        </div>
+        <sc-if value="{{udIsDelete}}" hint-placeholder-val="{{false}}">
+          <div style="display:flex;flex-direction:column;gap:2px;border-left:2px solid #8c1d18;padding-left:10px">
+            <sc-for list="{{udGoneLines}}" as="l" hint-placeholder-count="3"><div style="font-size:13px;color:#8c1d18">{{l}}</div></sc-for>
+            <sc-for list="{{udKeptLines}}" as="l" hint-placeholder-count="1"><div style="font-size:13px;opacity:0.75">{{l}}</div></sc-for>
+          </div>
+          <div class="field"><label for="ud-confirm">{{udConfirmLabel}}</label><input id="ud-confirm" class="input" sc-camel-auto-complete="off" value="{{udTyped}}" sc-camel-on-change="{{onUdTyped}}"></div>
+        </sc-if>
+        <sc-if value="{{udHasErr}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;color:#8c1d18;border-left:2px solid #8c1d18;padding-left:10px">{{udErr}}</p></sc-if>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost" sc-camel-on-click="{{udClose}}">Cancel</button>
+          <button type="button" class="btn btn-primary blueprint" style="{{udConfirmStyle}}" disabled="{{udCantConfirm}}" sc-camel-on-click="{{udConfirm}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>{{udConfirmText}}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{hasNameEdit}}" hint-placeholder-val="{{false}}">
+    <div style="position:fixed;inset:0;background:rgba(24,26,30,0.5);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50" sc-camel-on-click="{{neClose}}">
+      <div class="card blueprint" role="dialog" aria-modal="true" aria-label="Edit your name" style="max-width:400px;width:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;background:var(--color-neutral-100)" sc-camel-on-click="{{neStop}}">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div class="card-kicker">Your name</div>
+        <div class="field"><label for="ne-name">Display name</label><input id="ne-name" class="input" value="{{neValue}}" sc-camel-on-change="{{onNeValue}}"></div>
+        <p style="margin:0;font-size:12px;opacity:0.65">This is how your tutees and the coordinator see you. Your username and PIN are changed by an admin.</p>
+        <sc-if value="{{neHasErr}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;color:#8c1d18;border-left:2px solid #8c1d18;padding-left:10px">{{neErr}}</p></sc-if>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost" sc-camel-on-click="{{neClose}}">Cancel</button>
+          <button type="button" class="btn btn-primary blueprint" disabled="{{neBusy}}" sc-camel-on-click="{{neSave}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Save</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
   <sc-if value="{{hasDialog}}" hint-placeholder-val="{{false}}">
     <div style="position:fixed;inset:0;background:rgba(24,26,30,0.5);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50" sc-camel-on-click="{{dlgCancel}}">
       <div class="card blueprint" style="max-width:460px;width:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;background:var(--color-neutral-100)" sc-camel-on-click="{{dlgStop}}">
@@ -1652,9 +1931,49 @@ textarea.input { min-height: 90px; resize: vertical; }
      Desmos iframe would unmount on Next and take the tutee's working with it;
      out here React keeps the same DOM node across every route change. -->
 <div class="calc-mount">{{calcLayer}}</div>
+<div class="lb-mount">{{lightboxLayer}}</div>
 
 </x-dc>
 <script type="text/x-dc" data-dc-script="" data-props="{}">
+// A problem's figure, or one choice's. Its own component because it has one
+// piece of state of its own — whether the link failed — and that must not
+// re-render the screen around it. Callers key it by URL, so a new link starts
+// fresh rather than inheriting the last one's failure.
+//
+// The URL only ever reaches the src of an <img>; nothing here builds markup
+// from it. No referrer goes with the request, because the link points at a
+// site we do not control, and lazy loading keeps a long import preview from
+// fetching every figure in the file at once.
+//
+// props: url, alt, onOpen(url, alt), and at most one of
+//        small  a choice's picture: shorter, and a click selects the choice,
+//               so enlarging has a button of its own
+//        full   the lightbox: as large as the window allows
+class PpaImage extends React.Component {
+  constructor(props) { super(props); this.state = { failed: false }; }
+  render() {
+    const R = React, p = this.props;
+    if (!p.url) return null;
+    if (this.state.failed) {
+      return R.createElement('span', { className: 'pimg-broken', role: 'img', 'aria-label': 'Image unavailable' + (p.alt ? ': ' + p.alt : '') },
+        R.createElement('span', { 'aria-hidden': 'true' }, '\u26a0'), 'Image unavailable');
+    }
+    const img = R.createElement('img', {
+      src: p.url, alt: p.alt || '', loading: 'lazy', referrerPolicy: 'no-referrer', decoding: 'async',
+      style: { maxWidth: '100%', maxHeight: p.full ? 'calc(100vh - 110px)' : (p.small ? 160 : 420) + 'px' },
+      onError: () => this.setState({ failed: true })
+    });
+    const open = (e) => { e.preventDefault(); e.stopPropagation(); if (p.onOpen) p.onOpen(p.url, p.alt); };
+    if (p.small) {
+      return R.createElement('span', { className: 'pimg-thumb' }, img,
+        R.createElement('button', { type: 'button', className: 'pimg-zoom', title: 'Enlarge', 'aria-label': 'Enlarge image' + (p.alt ? ': ' + p.alt : ''), onClick: open },
+          R.createElement('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', 'aria-hidden': 'true', focusable: 'false' },
+            R.createElement('path', { d: 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7' }))));
+    }
+    return R.createElement('button', { type: 'button', className: 'pimg', title: 'Click to enlarge', 'aria-label': 'Enlarge image' + (p.alt ? ': ' + p.alt : ''), onClick: open }, img);
+  }
+}
+
 class Component extends DCLogic {
   state = {
     route: { name: 'login' },
@@ -1662,8 +1981,8 @@ class Component extends DCLogic {
     problem: { choice: '', free: '' },
     lib: { subject: 'All' },
     assign: this.blankAssign(),
-    admin: { tName: '', tUsername: '', tPin: '', tMsg: '', sName: '', sEmail: '', sPin: '', sMsg: '', mTitle: '', mSubject: '' },
-    editor: { title: '', subject: '', editing: null },
+    admin: { tName: '', tUsername: '', tPin: '', tMsg: '', sName: '', sEmail: '', sPin: '', sMsg: '', mTitle: '', mSubject: '', uMsg: '', busy: {} },
+    editor: { title: '', subject: '', editing: null, msg: '' },
     imp: this.blankImport(),
     // One confirmation dialog serves every destructive action; the object in
     // here says which one and carries the work to run on confirm.
@@ -1694,7 +2013,18 @@ class Component extends DCLogic {
     // screen opened them, so they live beside the route rather than in it.
     calForm: null,
     calPop: null,
-    calAvail: this.blankAvailForm()
+    calAvail: this.blankAvailForm(),
+    // { url, alt } while a figure is open full size.
+    lightbox: null,
+    // The desktop rail, remembered across visits; the phone drawer is always
+    // full width and is open or shut per visit.
+    sbCollapsed: this.sbSaved(),
+    navOpen: false,
+    // The Users tab's two dialogs and a tutor's own-name dialog. Edit buffers,
+    // like the session sheets: nothing reaches db until Save.
+    userEdit: null,
+    userDel: null,
+    nameEdit: null
   };
 
   // Seeded from the same saved read as state.calc, so the window opens where it
@@ -1730,10 +2060,20 @@ class Component extends DCLogic {
       window.db.init();
     };
     boot();
+    // Escape shuts the topmost thing that is open: the full-size figure first,
+    // then the phone drawer.
+    this._onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      if (this.state.lightbox) { e.preventDefault(); this.closeLightbox(); }
+      else if (this.state.navOpen) { e.preventDefault(); this.setNavOpen(false); }
+    };
+    document.addEventListener('keydown', this._onKey);
   }
   componentWillUnmount() {
     if (this._kt) clearInterval(this._kt);
     if (this._off) this._off();
+    if (this._onKey) document.removeEventListener('keydown', this._onKey);
+    this.syncShell(false);
   }
 
   // Admin is named explicitly so an unrecognised role can never fall through
@@ -1971,6 +2311,60 @@ class Component extends DCLogic {
   }
   setEd(patch) { const E = this.state.editor; this.setState({ editor: Object.assign({}, E, { editing: Object.assign({}, E.editing, patch) }) }); }
 
+  // The problem form's buffer: a copy of the problem, or a blank one for a new
+  // problem. ci holds the four choice-picture links as typed.
+  //   imgBusy   '' or which image is uploading or being copied: 'main' or '0'–'3'
+  //   imgErr / imgMsg / saveErr   what the last image action or save said
+  editBuffer(p) {
+    const db = window.db;
+    const ch = (p && p.choices) || [], ci = (p && p.choiceImages) || [];
+    return {
+      id: p ? p.id : null, text: p ? p.text : '', type: p ? p.type : 'mc',
+      c0: ch[0] || '', c1: ch[1] || '', c2: ch[2] || '', c3: ch[3] || '',
+      answer: p ? p.answer : 'A', explanation: (p && p.explanation) || '',
+      calculator: p ? db.problemHasCalculator(p) : false,
+      imageUrl: (p && p.imageUrl) || '', imageAlt: (p && p.imageAlt) || '',
+      imagePosition: p && p.imagePosition === 'below' ? 'below' : 'above',
+      ci: [0, 1, 2, 3].map((i) => ci[i] || ''),
+      imgBusy: '', imgErr: '', imgMsg: '', saveErr: '', dragging: false
+    };
+  }
+
+  // ---- Users tab dialogs -------------------------------------------------------
+
+  // The Edit dialog's buffer. tutees is id -> true for a tutor's whole list,
+  // so ticking and unticking never has to scan.
+  blankUserEdit(id) {
+    const db = window.db, u = db.getUser(id);
+    const tutor = u && u.role === 'student' ? db.tutorOf(id) : null;
+    const tutees = {};
+    if (u && u.role === 'tutor') db.getStudentsOf(id).forEach((s) => { tutees[s.id] = true; });
+    return {
+      id: id, role: u ? u.role : '', name: u ? u.name : '', email: u ? u.email : '', username: u ? u.username : '',
+      pin: '', tutorId: tutor ? tutor.id : '', tutees: tutees, busy: false, err: ''
+    };
+  }
+
+  // Deactivate is the default, so the destructive choice is always the one
+  // somebody had to move to. counts is null while Postgres is counting, false
+  // if it could not.
+  openUserDelete(id) {
+    this.setState({ userDel: { id: id, mode: 'deactivate', typed: '', counts: null, busy: false, err: '' } });
+    window.db.userDeleteCounts(id).then(
+      (c) => { const cur = this.state.userDel; if (cur && cur.id === id) this.setState({ userDel: Object.assign({}, cur, { counts: c }) }); },
+      () => { const cur = this.state.userDel; if (cur && cur.id === id) this.setState({ userDel: Object.assign({}, cur, { counts: false }) }); }
+    );
+  }
+
+  // Puts the cursor in the image field. Used when Flagged problems sends an
+  // admin here to attach the missing figure.
+  focusImageField() {
+    const el = document.getElementById('pf-image-url');
+    if (!el) return;
+    if (el.scrollIntoView) el.scrollIntoView({ block: 'center' });
+    el.focus();
+  }
+
   // KaTeX defines \textdollar, \textdegree and \textbackslash in text mode
   // only, so "$\textdollar 5$" — the shape the College Board exports arrive
   // in — is an undefined control sequence and renders as red source.
@@ -2164,14 +2558,19 @@ class Component extends DCLogic {
   // panel remembered at x=1500 on a desktop must not open off-screen on a
   // laptop. When minimised the clamp uses the collapsed height, or the bar
   // could not be dragged into the bottom two thirds of the screen.
+  //
+  // The left edge stops at the sidebar rather than the window, so the panel is
+  // never dragged underneath it — nor left there when the rail is expanded
+  // over a panel that was placed beside it collapsed.
   calcGeom() {
     const g = this._calc, W = window.innerWidth, H = window.innerHeight;
-    const w = Math.min(Math.max(g.w, Component.CALC_MIN_W), Math.max(Component.CALC_MIN_W, W));
+    const left = Math.min(this.sbWidth(), Math.max(0, W - Component.CALC_MIN_W));
+    const w = Math.min(Math.max(g.w, Component.CALC_MIN_W), Math.max(Component.CALC_MIN_W, W - left));
     const h = Math.min(Math.max(g.h, Component.CALC_MIN_H), Math.max(Component.CALC_MIN_H, H));
     const tall = (this.state.calc.min && this._calcEl) ? this._calcEl.offsetHeight : h;
-    const maxX = Math.max(0, W - w), maxY = Math.max(0, H - tall);
+    const maxX = Math.max(left, W - w), maxY = Math.max(0, H - tall);
     return {
-      x: g.x == null ? Math.max(0, maxX - 20) : Math.min(Math.max(g.x, 0), maxX),
+      x: g.x == null ? Math.max(left, maxX - 20) : Math.min(Math.max(g.x, left), maxX),
       y: g.y == null ? Math.max(0, maxY - 20) : Math.min(Math.max(g.y, 0), maxY),
       w: w, h: h
     };
@@ -2283,6 +2682,151 @@ class Component extends DCLogic {
     return R.createElement(R.Fragment, null, launch, panel);
   }
 
+  // ---- sidebar ---------------------------------------------------------------
+  //
+  // Built with createElement for the same reason as the calculator: inline SVG
+  // icons and per-item tooltips are more than the template can say. Its state
+  // is mirrored onto <html> as classes (see syncShell), which is what the CSS
+  // and the calculator's offsets read.
+
+  static SB_KEY = 'ppa-sidebar-v1';
+
+  sbSaved() {
+    try { return window.localStorage.getItem(Component.SB_KEY) === 'collapsed'; } catch (e) { return false; }
+  }
+
+  setSbCollapsed(collapsed) {
+    this.setState({ sbCollapsed: !!collapsed });
+    try { window.localStorage.setItem(Component.SB_KEY, collapsed ? 'collapsed' : 'expanded'); } catch (e) { /* private mode */ }
+  }
+
+  // Opening moves focus into the drawer and closing hands it back to the
+  // hamburger, so a keyboard user is never left on a control that has just
+  // slid off screen.
+  setNavOpen(open) {
+    this.setState({ navOpen: !!open }, () => {
+      const el = open ? document.querySelector('.sb .sb-item') : document.querySelector('.sb-topbar .sb-btn');
+      if (el && el.focus) el.focus();
+    });
+  }
+
+  // The rendered width of the sidebar: 240, 56, or 0 under the drawer
+  // breakpoint and while signed out.
+  sbWidth() {
+    try { return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sb-w')) || 0; } catch (e) { return 0; }
+  }
+
+  syncShell(isApp) {
+    const h = document.documentElement.classList;
+    h.toggle('ppa-sb', !!isApp);
+    h.toggle('ppa-sb-collapsed', !!isApp && this.state.sbCollapsed);
+    h.toggle('ppa-nav-open', !!isApp && this.state.navOpen);
+  }
+
+  // 24×24 stroke icons, drawn for this file. One string per <path>.
+  static ICONS = {
+    dash: ['M3 11l9-8 9 8', 'M5 9.5V21h14V9.5', 'M10 21v-6h4v6'],
+    calendar: ['M4 5h16v16H4z', 'M4 10h16', 'M8 3v4', 'M16 3v4'],
+    errors: ['M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z', 'M12 7.5v6', 'M12 16.5v.5'],
+    students: ['M9 11a4 4 0 1 0 0-8a4 4 0 1 0 0 8z', 'M2 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1', 'M16 3.3a4 4 0 0 1 0 7.4', 'M22 21v-1a6 6 0 0 0-4-5.6'],
+    library: ['M4 19.5V5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2a2 2 0 0 0 2 2h14', 'M8 7h8', 'M8 11h6'],
+    assign: ['M22 2L11 13', 'M22 2l-7 20-4-9-9-4z'],
+    results: ['M3 21h18', 'M6 17v-5', 'M11 17V6', 'M16 17V9', 'M21 17v-8'],
+    users: ['M12 12a4.5 4.5 0 1 0 0-9a4.5 4.5 0 1 0 0 9z', 'M4 21v-1a7 7 0 0 1 7-7h2a7 7 0 0 1 7 7v1'],
+    modules: ['M12 3l9 5-9 5-9-5z', 'M3 12.5l9 5 9-5', 'M3 17l9 5 9-5'],
+    import: ['M12 15V3', 'M7 8l5-5 5 5', 'M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4'],
+    flag: ['M5 22V4', 'M5 4h12l-2.5 4.5L17 13H5'],
+    logs: ['M9 3h6v3H9z', 'M7 4.5H5v17h14v-17h-2', 'M8.5 11h7', 'M8.5 15h5'],
+    collapse: ['M15 6l-6 6 6 6'],
+    expand: ['M9 6l6 6-6 6'],
+    menu: ['M4 6h16', 'M4 12h16', 'M4 18h16'],
+    close: ['M6 6l12 12', 'M18 6L6 18'],
+    logout: ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'M16 17l5-5-5-5', 'M21 12H9'],
+    edit: ['M4 20h4L19 9l-4-4L4 16z', 'M13.5 6.5l4 4']
+  };
+
+  icon(name) {
+    const R = React;
+    return R.createElement('svg', {
+      className: 'sb-icon', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8,
+      strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true', focusable: 'false'
+    }, (Component.ICONS[name] || []).map((d, i) => R.createElement('path', { key: i, d: d })));
+  }
+
+  // links: [{ name, label, icon, badge }]; active: the route name to light.
+  renderSidebar(me, links, active, go, roleLabel, onEditName) {
+    const R = React, collapsed = this.state.sbCollapsed;
+    const items = links.map((l) => {
+      const cur = l.name === active;
+      const aria = l.label + (l.badge ? ', ' + l.badge + ' to deal with' : '');
+      return R.createElement('a', {
+        key: l.name, href: '#', className: 'sb-item', 'data-tip': l.label + (l.badge ? ' (' + l.badge + ')' : ''),
+        'aria-current': cur ? 'page' : undefined, 'aria-label': aria,
+        onClick: (e) => { e.preventDefault(); if (this.state.navOpen) this.setState({ navOpen: false }); go(l.name); }
+      }, R.createElement('span', { className: 'sb-inner' }, this.icon(l.icon),
+        R.createElement('span', { className: 'sb-label' }, l.label),
+        l.badge ? R.createElement('span', { className: 'sb-badge', 'aria-hidden': 'true' }, String(l.badge)) : null));
+    });
+    const home = (e) => { e.preventDefault(); if (this.state.navOpen) this.setState({ navOpen: false }); go(null); };
+    const brand = R.createElement('a', { href: '#', className: 'sb-brand', onClick: home }, 'Peer Prep Academy');
+    const aside = R.createElement('aside', { key: 'sb', className: 'sb', 'aria-label': 'Main' },
+      R.createElement('div', { className: 'sb-head' },
+        R.createElement('button', {
+          type: 'button', className: 'sb-btn sb-collapse', 'data-tip': collapsed ? 'Expand menu' : 'Collapse menu',
+          'aria-label': collapsed ? 'Expand menu' : 'Collapse menu', 'aria-expanded': collapsed ? 'false' : 'true',
+          onClick: () => this.setSbCollapsed(!collapsed)
+        }, this.icon(collapsed ? 'expand' : 'collapse')),
+        brand,
+        R.createElement('button', { type: 'button', className: 'sb-btn sb-close', 'aria-label': 'Close menu', onClick: () => this.setNavOpen(false) }, this.icon('close'))),
+      R.createElement('nav', { className: 'sb-nav', 'aria-label': 'Sections' }, items),
+      R.createElement('div', { className: 'sb-foot' },
+        R.createElement('div', { className: 'sb-hello', title: me.name }, 'Hello, ' + me.name + ' \u00b7 ' + roleLabel),
+        R.createElement('div', { className: 'sb-foot-row' },
+          onEditName ? R.createElement('button', {
+            type: 'button', className: 'btn btn-ghost', 'data-tip': 'Edit name', 'aria-label': 'Edit your name',
+            style: { padding: '4px 8px', fontSize: '12px', position: 'relative', display: 'inline-flex', alignItems: 'center', gap: '6px' }, onClick: onEditName
+          }, this.icon('edit'), R.createElement('span', { className: 'sb-foot-text' }, 'Edit name')) : null,
+          R.createElement('button', {
+            type: 'button', className: 'btn btn-ghost', 'data-tip': 'Log out', 'aria-label': 'Log out',
+            style: { padding: '4px 8px', fontSize: '12px', position: 'relative', display: 'inline-flex', alignItems: 'center', gap: '6px' },
+            onClick: () => { this.setState({ navOpen: false }); window.db.auth.signOut(); }
+          }, this.icon('logout'), R.createElement('span', { className: 'sb-foot-text' }, 'Log out')))));
+    const topbar = R.createElement('div', { key: 'top', className: 'sb-topbar' },
+      R.createElement('button', {
+        type: 'button', className: 'sb-btn', 'aria-label': 'Open menu', 'aria-expanded': this.state.navOpen ? 'true' : 'false',
+        onClick: () => this.setNavOpen(!this.state.navOpen)
+      }, this.icon('menu')),
+      R.createElement('a', { href: '#', className: 'sb-brand', onClick: home }, 'Peer Prep Academy'));
+    const backdrop = R.createElement('div', { key: 'bd', className: 'sb-backdrop', onClick: () => this.setNavOpen(false) });
+    return R.createElement(R.Fragment, null, topbar, backdrop, aside);
+  }
+
+  // ---- full-size figure ------------------------------------------------------
+
+  openLightbox(url, alt) {
+    this._lbReturn = document.activeElement;
+    this.setState({ lightbox: { url: url, alt: alt || '' } }, () => {
+      const b = document.querySelector('.lb-close');
+      if (b) b.focus();
+    });
+  }
+
+  closeLightbox() {
+    const back = this._lbReturn;
+    this._lbReturn = null;
+    this.setState({ lightbox: null }, () => { if (back && back.focus) back.focus(); });
+  }
+
+  renderLightbox() {
+    const R = React, L = this.state.lightbox;
+    if (!L) return null;
+    const close = () => this.closeLightbox();
+    return R.createElement('div', { className: 'lb', role: 'dialog', 'aria-modal': 'true', 'aria-label': L.alt || 'Image', onClick: close },
+      R.createElement('button', { type: 'button', className: 'lb-close', 'aria-label': 'Close', onClick: close }, '\u00d7'),
+      R.createElement(PpaImage, { key: L.url, url: L.url, alt: L.alt, full: true, onOpen: close }),
+      L.alt ? R.createElement('div', { className: 'lb-cap' }, L.alt) : null);
+  }
+
   // ---- session calendar -----------------------------------------------------
   //
   // Everything on screen is in the browser's zone; db.js converts to UTC on the
@@ -2327,7 +2871,7 @@ class Component extends DCLogic {
       };
     }
     const tutorId = me.role === 'tutor' ? me.id : ((init && init.tutorId) || '');
-    const tutees = tutorId ? db.getStudentsOf(tutorId) : [];
+    const tutees = tutorId ? db.getStudentsOf(tutorId).filter((u) => u.active) : [];
     const tuteeId = (init && init.tuteeId) || (tutees.length === 1 ? tutees[0].id : '');
     return {
       id: '', tutorId: tutorId, tuteeId: tuteeId,
@@ -2596,6 +3140,14 @@ class Component extends DCLogic {
     const goE = (name, extra) => (e) => { if (e && e.preventDefault) e.preventDefault(); go(name, extra)(); };
     const F = (sec, key) => (e) => this.setState({ [sec]: Object.assign({}, this.state[sec], { [key]: e.target.value }) });
     const math = this.renderMath.bind(this);
+    // Every figure on every screen comes through here, so the lightbox and the
+    // "Image unavailable" box behave the same on all of them.
+    const openLb = (url, alt) => this.openLightbox(url, alt);
+    const pic = (url, alt, small) => (url ? React.createElement(PpaImage, { key: url, url: url, alt: alt || '', small: !!small, onOpen: openLb }) : null);
+    const choiceAlt = (letter) => 'Figure for choice ' + letter;
+    // The choices that have a picture, for the screens that list them beside
+    // the answers rather than inside answer buttons.
+    const choicePics = (images) => (images || []).map((u, i) => (u ? { letter: 'ABCD'[i], el: pic(u, choiceAlt('ABCD'[i]), true) } : null)).filter(Boolean);
     const fmtDate = (iso) => { try { return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); } catch (e) { return iso; } };
     const todayISO = new Date().toISOString().slice(0, 10);
     // Three exclusive top-level screens. While the stored session is still
@@ -2638,6 +3190,9 @@ class Component extends DCLogic {
         // account. The message stays as vague as the check is.
         err: /invalid login|invalid credentials/i.test(errText(err))
           ? 'Wrong email or PIN. Ask your tutor if you are not sure.'
+          // Deactivation bans the account in auth, and that is the message
+          // Supabase gives back for it.
+          : /banned/i.test(errText(err)) ? 'This account has been deactivated. Ask your tutor or an admin.'
           : (errText(err) || 'Could not sign in.')
       }));
     };
@@ -2657,17 +3212,21 @@ class Component extends DCLogic {
         busy: false,
         err: /invalid login|invalid credentials/i.test(errText(err))
           ? (adminMode ? 'Wrong email or password.' : 'Wrong username or PIN.')
+          : /banned/i.test(errText(err)) ? 'This account has been deactivated. Ask an admin.'
           : (errText(err) || 'Could not sign in.')
       }));
     };
     v.loginErr = L.err; v.hasErr = !!L.err;
+    // Both overlays sit outside every screen, and the sidebar's classes have to
+    // come off <html> on the way back to the login card, so all three are
+    // settled before the early return.
+    this.syncShell(v.isApp);
+    v.lightboxLayer = this.renderLightbox();
+    v.sidebarEl = null;
     if (!me) return v;
 
     // ---- app shell ----
-    v.userName = me.name;
     v.roleLabel = me.role === 'student' ? 'Student' : me.role === 'tutor' ? 'Tutor' : 'Admin';
-    v.logout = () => { db.auth.signOut(); };
-    v.goHome = () => this.setState({ route: this.homeRoute(me.role) });
     // A tutor reaches session logs through a tutee on My Students rather than
     // through a tab of their own — there is nothing useful on such a tab that
     // is not already per-student.
@@ -2675,17 +3234,18 @@ class Component extends DCLogic {
     // The count rides in the tab's own label because a nav link renders its
     // label as text and has nowhere to hang a badge; the screen itself carries
     // the badge proper.
+    //
+    // The counts ride as a badge on the item: the rail has no room for
+    // "Flagged (12)", and the badge still shows on a collapsed icon.
     const flaggedNow = me.role === 'admin' ? db.getFlaggedCount() : 0;
-    const flaggedTab = flaggedNow ? 'Flagged (' + flaggedNow + ')' : 'Flagged';
     // Admin has Assign and Results too: they are how an admin previews and
     // reviews any tutee's work, which a tutor does from My Students.
     // Past sessions a tutor has not yet marked completed or no-show.
     const unmarked = me.role === 'tutor' ? db.sessionsNeedingStatus(me.id).length : 0;
-    const calendarTab = unmarked ? 'Calendar (' + unmarked + ')' : 'Calendar';
-    const linkDefs = me.role === 'student' ? [['Dashboard', 'dash'], ['Calendar', 'calendar'], ['Error Log', 'errorLog']]
-      : me.role === 'tutor' ? [['My Students', 'students'], [calendarTab, 'calendar'], ['Module Library', 'library'], ['Assign', 'assign'], ['Results', 'results'], ['Error Logs', 'errorLogs']]
-      : [['Users', 'users'], ['Calendar', 'calendar'], ['Modules', 'modules'], ['Assign', 'assign'], ['Results', 'results'], ['Import', 'import'], [flaggedTab, 'flagged'], ['Session Logs', 'adminLogs'], ['Error Logs', 'errorLogs']];
-    const activeOf = { calendar: 'calendar', dash: 'dash', students: 'students', profile: 'students', logs: 'students', library: 'library', assign: 'assign', results: 'results', users: 'users', modules: 'modules', editor: 'modules', import: 'import', flagged: 'flagged', errorLog: 'errorLog', errorLogs: 'errorLogs', adminLogs: 'adminLogs' };
+    const linkDefs = me.role === 'student' ? [['Dashboard', 'dash', 'dash'], ['Calendar', 'calendar', 'calendar'], ['Error Log', 'errorLog', 'errors']]
+      : me.role === 'tutor' ? [['My Students', 'students', 'students'], ['Calendar', 'calendar', 'calendar', unmarked], ['Module Library', 'library', 'library'], ['Assign', 'assign', 'assign'], ['Results', 'results', 'results'], ['Error Logs', 'errorLogs', 'errors']]
+      : [['Users', 'users', 'users'], ['Calendar', 'calendar', 'calendar'], ['Modules', 'modules', 'modules'], ['Assign', 'assign', 'assign'], ['Results', 'results', 'results'], ['Import', 'import', 'import'], ['Flagged', 'flagged', 'flag', flaggedNow], ['Session Logs', 'adminLogs', 'logs'], ['Error Logs', 'errorLogs', 'errors']];
+    const activeOf = { calendar: 'calendar', dash: 'dash', students: 'students', profile: 'students', logs: 'students', library: 'library', assign: 'assign', results: 'results', users: 'users', modules: 'modules', editor: route.from === 'flagged' ? 'flagged' : 'modules', import: 'import', flagged: 'flagged', errorLog: 'errorLog', errorLogs: 'errorLogs', adminLogs: 'adminLogs' };
     // Resolved up here because the nav needs to know where the viewer was
     // opened from; the screens below read the same object.
     const inViewer = route.name === 'module' || route.name === 'problem';
@@ -2696,7 +3256,12 @@ class Component extends DCLogic {
     const activeTab = route.name === 'logForm' ? (route.from === 'adminLogs' ? 'adminLogs' : route.from === 'calendar' ? 'calendar' : 'students')
       : inViewer ? (ctx ? ctx.from : 'dash')
       : activeOf[route.name];
-    v.navLinks = linkDefs.map(([label, name]) => ({ label: label, cur: activeTab === name ? 'page' : undefined, go: goE(name) }));
+    v.sidebarEl = this.renderSidebar(me,
+      linkDefs.map(([label, name, icon, badge]) => ({ label: label, name: name, icon: icon, badge: badge || 0 })),
+      activeTab,
+      (name) => (name ? go(name)() : this.setState({ route: this.homeRoute(me.role) })),
+      v.roleLabel,
+      me.role === 'tutor' ? () => this.setState({ nameEdit: { value: me.name, busy: false, err: '' } }) : null);
 
     // Both viewer screens need a context; a route the caller may not see, or
     // one whose data has gone, shows nothing rather than half a screen.
@@ -2745,6 +3310,169 @@ class Component extends DCLogic {
         () => { const now = this.state.dialog; if (now) this.setState({ dialog: Object.assign({}, now, { busy: false }) }); }
       );
     };
+
+    const stopProp = (e) => { if (e && e.stopPropagation) e.stopPropagation(); };
+    const byName = (a, b) => String(a.name).localeCompare(String(b.name));
+    const setAdminMsg = (msg) => this.setState({ admin: Object.assign({}, this.state.admin, { uMsg: msg }) });
+
+    // ---- Users tab: edit an account ----
+    const UE = st.userEdit;
+    const ueUser = UE && me.role === 'admin' ? db.getUser(UE.id) : null;
+    v.hasUserEdit = !!ueUser;
+    if (ueUser) {
+      const setUE = (patch) => this.setState({ userEdit: Object.assign({}, this.state.userEdit, patch) });
+      const fu = (k) => (e) => setUE({ [k]: e.target.value, err: '' });
+      v.ueKicker = UE.role === 'tutor' ? 'Edit tutor' : UE.role === 'student' ? 'Edit tutee' : 'Edit account';
+      v.ueTitle = ueUser.name + (ueUser.active ? '' : ' (deactivated)');
+      v.ueName = UE.name; v.onUeName = fu('name');
+      v.ueIsTutee = UE.role === 'student'; v.ueIsTutor = UE.role === 'tutor';
+      v.ueEmail = UE.email; v.onUeEmail = fu('email');
+      const curTutor = v.ueIsTutee ? db.tutorOf(UE.id) : null;
+      const activeTutors = db.getUsers().filter((u) => u.role === 'tutor' && u.active).sort(byName);
+      v.ueTutor = UE.tutorId; v.onUeTutor = fu('tutorId');
+      v.ueTutorOpts = [{ id: '', label: 'Unassigned' }].concat(activeTutors.map((t) => ({ id: t.id, label: t.name })),
+        curTutor && !curTutor.active ? [{ id: curTutor.id, label: curTutor.name + ' (deactivated)' }] : []);
+      v.ueUsername = UE.username; v.onUeUsername = fu('username');
+      v.ueUsernameHint = 'They sign in with \u201c' + (String(UE.username).trim().toLowerCase() || '\u2026') + '\u201d. Changing it changes their login.';
+      // Deactivated tutees are offered only if already linked, so saving
+      // without touching them does not quietly drop them.
+      const pool = db.getUsers().filter((u) => u.role === 'student' && (u.active || UE.tutees[u.id])).sort(byName);
+      v.ueNoTutees = pool.length === 0;
+      v.ueTuteeOpts = pool.map((t) => {
+        const cur = db.tutorOf(t.id);
+        return {
+          name: t.name + (t.active ? '' : ' (deactivated)'),
+          sub: cur && cur.id !== UE.id ? 'now with ' + cur.name : '',
+          checked: !!UE.tutees[t.id],
+          toggle: () => { const T = Object.assign({}, this.state.userEdit.tutees); if (T[t.id]) delete T[t.id]; else T[t.id] = true; setUE({ tutees: T, err: '' }); }
+        };
+      });
+      v.uePin = UE.pin; v.onUePin = fu('pin');
+      v.ueErr = UE.err; v.ueHasErr = !!UE.err;
+      v.ueBusy = UE.busy;
+      v.ueSaveLabel = UE.busy ? 'Saving\u2026' : 'Save changes';
+      v.ueClose = () => { if (!(this.state.userEdit && this.state.userEdit.busy)) this.setState({ userEdit: null }); };
+      v.ueStop = stopProp;
+      // Only what changed is sent; the function leaves everything else alone.
+      v.ueSave = () => {
+        const cur = this.state.userEdit;
+        const u = cur && db.getUser(cur.id);
+        if (!cur || cur.busy || !u) return;
+        const patch = {};
+        const name = cur.name.trim();
+        if (!name) { setUE({ err: 'A display name is required.' }); return; }
+        if (name !== u.name) patch.name = name;
+        if (cur.role === 'student') {
+          const email = cur.email.trim().toLowerCase();
+          if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setUE({ err: 'Enter a valid email address.' }); return; }
+          if (email !== String(u.email || '').toLowerCase()) patch.email = email;
+          const was = db.tutorOf(cur.id);
+          if ((cur.tutorId || '') !== (was ? was.id : '')) patch.tutorId = cur.tutorId || '';
+        }
+        if (cur.role === 'tutor') {
+          const un = cur.username.trim().toLowerCase();
+          if (!/^[a-z0-9._-]{2,32}$/.test(un)) { setUE({ err: 'Username must be 2\u201332 characters: letters, digits, dot, dash or underscore.' }); return; }
+          if (un !== (u.username || '')) patch.username = un;
+          const want = Object.keys(cur.tutees).filter((k) => cur.tutees[k]).sort();
+          const had = db.getStudentsOf(cur.id).map((x) => x.id).sort();
+          if (want.join() !== had.join()) patch.tuteeIds = want;
+        }
+        const pin = cur.pin.trim();
+        if (pin && pin.length < 4) { setUE({ err: 'A PIN needs at least 4 characters.' }); return; }
+        if (pin) patch.pin = pin;
+        if (!Object.keys(patch).length) { this.setState({ userEdit: null }); return; }
+        setUE({ busy: true, err: '' });
+        db.updateUser(cur.id, patch).then(
+          () => {
+            this.setState({ userEdit: null });
+            setAdminMsg('Saved changes to \u201c' + name + '\u201d.'
+              + (patch.username ? ' They now sign in as \u201c' + patch.username + '\u201d.' : '')
+              + (pin ? ' Their PIN is now ' + pin + ' \u2014 note it now, it cannot be shown again.' : ''));
+          },
+          (err) => setUE({ busy: false, err: (err && err.message) || 'Could not save those changes.' })
+        );
+      };
+    }
+
+    // ---- Users tab: deactivate or delete ----
+    const UD = st.userDel;
+    const udUser = UD && me.role === 'admin' ? db.getUser(UD.id) : null;
+    v.hasUserDel = !!udUser;
+    if (udUser) {
+      const setUD = (patch) => this.setState({ userDel: Object.assign({}, this.state.userDel, patch) });
+      const c = UD.counts, isTutee = udUser.role === 'student', isTutor = udUser.role === 'tutor';
+      v.udKicker = isTutor ? 'Remove tutor' : isTutee ? 'Remove tutee' : 'Remove account';
+      v.udTitle = udUser.name + (udUser.active ? '' : ' (deactivated)');
+      v.udLines = c === null ? ['Counting\u2026'] : c === false ? ['Could not count what this account has.']
+        : isTutee ? [
+          plural(c.assignments, 'assignment'), plural(c.submissions, 'submitted answer'),
+          plural(c.errors, 'error log entry', 'error log entries'), plural(c.logsDeleted, 'session log'),
+          plural(c.sessions, 'calendar session'), c.studentProfile ? 'An intake profile' : 'No intake profile',
+          c.links ? 'A tutor link' : 'No tutor linked'
+        ] : [
+          plural(c.links, 'linked tutee'), plural(c.sessions, 'calendar session'),
+          plural(c.availability, 'availability block'), plural(c.logsKept, 'session log') + ' written',
+          plural(c.assignmentsMade, 'assignment') + ' made'
+        ];
+      v.udGoneLines = isTutee
+        ? ['Deleted with the account: their assignments, answers, error log, session logs, calendar sessions, intake profile and tutor link.']
+        : ['Deleted with the account: their calendar sessions, availability and tutee links. Those tutees become unassigned.'];
+      v.udKeptLines = isTutor ? ['Kept: the session logs they wrote, still under their name, and the assignments they made.'] : [];
+      v.udIsDelete = UD.mode === 'delete'; v.udIsDeactivate = !v.udIsDelete;
+      v.udPickDeactivate = () => setUD({ mode: 'deactivate', err: '' });
+      v.udPickDelete = () => setUD({ mode: 'delete', err: '' });
+      v.udDeactivateText = udUser.active
+        ? 'Stops them signing in straight away and keeps every record. Reactivate them from this list at any time.'
+        : 'Already deactivated.';
+      v.udDeleteText = 'Removes the account and the records listed above. This cannot be undone.';
+      v.udConfirmLabel = 'Type \u201c' + udUser.name + '\u201d to confirm';
+      v.udTyped = UD.typed; v.onUdTyped = (e) => setUD({ typed: e.target.value, err: '' });
+      const typedOk = UD.typed.trim().toLowerCase() === String(udUser.name).trim().toLowerCase();
+      v.udCantConfirm = UD.busy || (v.udIsDelete ? !typedOk : !udUser.active);
+      v.udConfirmText = UD.busy ? 'Working\u2026' : v.udIsDelete ? 'Delete permanently' : 'Deactivate';
+      v.udConfirmStyle = v.udIsDelete ? 'background:#8c1d18;border-color:#8c1d18;color:#fff' : '';
+      v.udErr = UD.err; v.udHasErr = !!UD.err;
+      v.udClose = () => { if (!(this.state.userDel && this.state.userDel.busy)) this.setState({ userDel: null }); };
+      v.udStop = stopProp;
+      v.udConfirm = () => {
+        const cur = this.state.userDel;
+        if (!cur || cur.busy || v.udCantConfirm) return;
+        const name = udUser.name, del = cur.mode === 'delete';
+        setUD({ busy: true, err: '' });
+        (del ? db.deleteUser(cur.id, cur.typed.trim()) : db.setUserActive(cur.id, false)).then(
+          () => {
+            this.setState({ userDel: null });
+            setAdminMsg(del ? '\u201c' + name + '\u201d has been deleted.'
+              : '\u201c' + name + '\u201d is deactivated. Everything of theirs is kept; Reactivate undoes it.');
+          },
+          (err) => setUD({ busy: false, err: (err && err.message) || 'That did not work.' })
+        );
+      };
+    }
+
+    // ---- a tutor's own name ----
+    const NE = st.nameEdit;
+    v.hasNameEdit = !!NE && me.role === 'tutor';
+    if (v.hasNameEdit) {
+      const setNE = (patch) => this.setState({ nameEdit: Object.assign({}, this.state.nameEdit, patch) });
+      v.neValue = NE.value; v.onNeValue = (e) => setNE({ value: e.target.value, err: '' });
+      v.neErr = NE.err; v.neHasErr = !!NE.err; v.neBusy = NE.busy;
+      v.neClose = () => { if (!(this.state.nameEdit && this.state.nameEdit.busy)) this.setState({ nameEdit: null }); };
+      v.neStop = stopProp;
+      v.neSave = () => {
+        const cur = this.state.nameEdit;
+        if (!cur || cur.busy) return;
+        const next = cur.value.trim();
+        if (!next) { setNE({ err: 'Your name cannot be blank.' }); return; }
+        if (next.length > 80) { setNE({ err: 'Keep it under 80 characters.' }); return; }
+        if (next === me.name) { this.setState({ nameEdit: null }); return; }
+        setNE({ busy: true, err: '' });
+        db.updateMyName(next).then(
+          () => this.setState({ nameEdit: null }),
+          (err) => setNE({ busy: false, err: (err && err.message) || 'That did not save.' })
+        );
+      };
+    }
 
     // Unassigning is offered from two places, and says the same thing in both.
     const confirmUnassign = (a) => {
@@ -2866,13 +3594,18 @@ class Component extends DCLogic {
         v.posKicker = ctx.label + ' \u00b7 Problem ' + (i + 1) + ' of ' + probs.length;
         v.backModule = stepE('module');
         v.qEl = math(p.text);
+        v.qImgEl = pic(p.imageUrl, p.imageAlt);
+        v.qImgAbove = !!p.imageUrl && p.imagePosition !== 'below';
+        v.qImgBelow = !!p.imageUrl && p.imagePosition === 'below';
         calcOK = db.calculatorAllowed(m, p);
         v.isMC = p.type === 'mc'; v.isFree = p.type === 'free';
         v.inputsLocked = answered || review;
         if (v.isMC) v.choices = p.choices.map((c, ci) => {
           const letter = letters[ci];
+          const img = p.choiceImages ? p.choiceImages[ci] : null;
           return {
             letter: letter + '.', el: math(c),
+            hasImg: !!img, imgEl: pic(img, choiceAlt(letter), true),
             selected: answered ? sub.answer === letter : (!review && P.choice === letter),
             pick: () => this.setState({ problem: Object.assign({}, this.state.problem, { choice: letter }) }),
             isCorrectMark: showKey && p.answer === letter,
@@ -3001,10 +3734,14 @@ class Component extends DCLogic {
     };
 
     if (v.sStudents) {
-      const behind = db.getStudentsOf(me.id).filter((s) => logAge(s.id).stale).length;
+      // A deactivated tutee has no sessions to log, so they are out of both
+      // the cards and the "behind on logs" count. Their history is still on
+      // Results and in the error logs.
+      const mine = db.getStudentsOf(me.id).filter((s) => s.active);
+      const behind = mine.filter((s) => logAge(s.id).stale).length;
       v.hasLogBanner = behind > 0;
       v.logBannerText = 'You have ' + plural(behind, 'student') + ' without a log this week.';
-      v.students = db.getStudentsOf(me.id).map((s) => {
+      v.students = mine.map((s) => {
         const as = db.getAssignments(s.id);
         let answered = 0, total = 0, correct = 0;
         as.forEach((a) => { const pr = db.getProgress(a.id); answered += pr.answered; total += pr.total; correct += pr.correct; });
@@ -3181,6 +3918,8 @@ class Component extends DCLogic {
       const A = st.alogs, all = db.getAllSessionLogs(), users = db.getUsers();
       const setA = (patch) => this.setState({ alogs: Object.assign({}, this.state.alogs, patch) });
       const nameOf = (id) => { const u = id && db.getUser(id); return u ? u.name : '\u2014'; };
+      // A sheet whose tutor's account was deleted keeps their name (010).
+      const tutorOfLog = (l) => { const u = l.tutorId && db.getUser(l.tutorId); return u ? u.name : (l.tutorName ? l.tutorName + ' (deleted)' : '\u2014'); };
       const named = (role) => users.filter((u) => u.role === role).sort((a, b) => a.name.localeCompare(b.name));
       v.alTutor = A.tutor; v.onAlTutor = (e) => setA({ tutor: e.target.value });
       v.alTutorOpts = [{ id: '', label: 'All tutors' }].concat(named('tutor').map((u) => ({ id: u.id, label: u.name })));
@@ -3206,14 +3945,14 @@ class Component extends DCLogic {
       // field of the sheet rather than only the columns the table has room for.
       v.alExport = () => {
         const header = ['Tutee', 'Tutor'].concat(SESSION_FIELDS.map((f) => f.short), ['Status']);
-        const body = rows.map((l) => [nameOf(l.tuteeId), nameOf(l.tutorId)]
+        const body = rows.map((l) => [nameOf(l.tuteeId), tutorOfLog(l)]
           .concat(SESSION_FIELDS.map((f) => (f.key === 'sessionDate' ? l.sessionDate : logValue(l, f.key))), [statusLabel(l)]));
         this.downloadCsv('session-logs-' + this.todayLocal() + '.csv', [header].concat(body));
       };
 
       v.alRows = rows.map((l) => ({
         dateText: fmtLogDate(l.sessionDate),
-        tuteeName: nameOf(l.tuteeId), tutorName: nameOf(l.tutorId),
+        tuteeName: nameOf(l.tuteeId), tutorName: tutorOfLog(l),
         duration: l.duration || '\u2014',
         progress: l.progressRating ? l.progressRating + ' / 5' : '\u2014',
         payment: paymentLabel(l.paymentStatus) || '\u2014',
@@ -3257,9 +3996,10 @@ class Component extends DCLogic {
       v.moduleOptions = db.getModules().map((m) => ({ id: m.id, label: m.title + ' (' + m.subject + ', ' + m.problems.length + ' problems)' }));
       // A tutor assigns to their own tutees; an admin to anyone, with the
       // tutee's tutor named so the list can be read.
+      // Deactivated tutees are left out: nobody is going to do the work.
       const assignees = me.role === 'admin'
-        ? db.getUsers().filter((u) => u.role === 'student').slice().sort((x, y) => String(x.name).localeCompare(String(y.name)))
-        : db.getStudentsOf(me.id);
+        ? db.getUsers().filter((u) => u.role === 'student' && u.active).slice().sort((x, y) => String(x.name).localeCompare(String(y.name)))
+        : db.getStudentsOf(me.id).filter((u) => u.active);
       v.tutees = assignees.map((s) => {
         const t = me.role === 'admin' ? db.tutorOf(s.id) : null;
         return {
@@ -3328,7 +4068,7 @@ class Component extends DCLogic {
         num: String(i + 1).padStart(2, '0'),
         qEl: math(p.text),
         meta: [(p.tags || []).filter((t) => DIFFS.indexOf(String(t).toLowerCase()) >= 0)[0] || '',
-          p.type === 'mc' ? 'MC' : 'FR'].filter(Boolean).join(' \u00b7 '),
+          p.type === 'mc' ? 'MC' : 'FR', p.imageUrl || p.choiceImages ? 'figure' : ''].filter(Boolean).join(' \u00b7 '),
         checked: !!A.picks[p.id],
         toggle: () => {
           const P = this.state.assign.picks;
@@ -3432,29 +4172,47 @@ class Component extends DCLogic {
         );
       };
       v.sMsg = AD.sMsg; v.hasSMsg = !!AD.sMsg;
+      v.uMsg = AD.uMsg; v.hasUMsg = !!AD.uMsg;
       const tutors = db.getUsers().filter((u) => u.role === 'tutor');
+      const activeTutors = tutors.filter((t) => t.active);
+      const busyRow = (id) => !!(this.state.admin.busy || {})[id];
+      const setBusy = (id, on) => {
+        const b = Object.assign({}, this.state.admin.busy || {});
+        if (on) b[id] = true; else delete b[id];
+        setAdmin({ busy: b });
+      };
+      // The same three actions on every kind of row, so a parent row added
+      // later gets them by being listed, not by being written again.
+      const rowActions = (u) => ({
+        inactive: !u.active,
+        nameStyle: u.active ? '' : 'opacity:0.55',
+        busy: busyRow(u.id),
+        edit: () => this.setState({ userEdit: this.blankUserEdit(u.id) }),
+        del: () => this.openUserDelete(u.id),
+        reactivate: () => {
+          setBusy(u.id, true);
+          db.setUserActive(u.id, true).then(
+            () => { setBusy(u.id, false); setAdmin({ uMsg: '“' + u.name + '” is active again and can sign in.' }); },
+            (err) => { setBusy(u.id, false); setAdmin({ uMsg: (err && err.message) || 'Could not reactivate that account.' }); }
+          );
+        }
+      });
       // username is nullable in profiles (admins created by hand have none),
       // so render a dash rather than an empty cell.
-      v.tutorRows = tutors.map((t) => ({ name: t.name || '\u2014', username: t.username || '\u2014', count: db.getStudentsOf(t.id).length }));
-      const opts = [{ id: '', label: 'Unassigned' }].concat(tutors.map((t) => ({ id: t.id, label: t.name })));
+      v.tutorRows = tutors.map((t) => Object.assign({
+        name: t.name || '—', username: t.username || '—', count: db.getStudentsOf(t.id).length
+      }, rowActions(t)));
+      // A deactivated tutor is not offered as a new link; one already linked
+      // stays visible in that tutee's select, named as deactivated.
       v.studentRows = db.getUsers().filter((u) => u.role === 'student').map((s) => {
         const cur = db.tutorOf(s.id);
-        return {
+        const opts = [{ id: '', label: 'Unassigned' }].concat(activeTutors.map((t) => ({ id: t.id, label: t.name })));
+        if (cur && !cur.active) opts.push({ id: cur.id, label: cur.name + ' (deactivated)' });
+        return Object.assign({
           name: s.name, email: s.email, tutorId: cur ? cur.id : '', options: opts,
-          onLink: (e) => { db.linkStudent(s.id, e.target.value).catch(() => {}); },
-          // Tutees created under the old magic-link flow have a random
-          // password nobody knows, so this is how they get a way in.
-          onSetPin: () => {
-            const pin = window.prompt('New PIN for ' + s.name + ' (at least 4 characters):', '');
-            if (pin === null) return;
-            if (pin.trim().length < 4) { setAdmin({ sMsg: 'A PIN of at least 4 characters is required.' }); return; }
-            setAdmin({ sMsg: 'Setting the PIN for \u201c' + s.name + '\u201d\u2026' });
-            db.setPin(s.id, pin.trim()).then(
-              () => setAdmin({ sMsg: 'PIN for \u201c' + s.name + '\u201d is now ' + pin.trim() + ' \u2014 note it now, it cannot be shown again.' }),
-              (err) => setAdmin({ sMsg: err.message || 'Could not set that PIN.' })
-            );
-          }
-        };
+          tutorAria: 'Tutor for ' + s.name,
+          onLink: (e) => { db.linkStudent(s.id, e.target.value).catch(() => {}); }
+        }, rowActions(s));
       });
     }
 
@@ -3466,13 +4224,13 @@ class Component extends DCLogic {
         const A2 = this.state.admin;
         if (!A2.mTitle.trim()) return;
         db.createModule({ title: A2.mTitle.trim(), subject: A2.mSubject.trim() || 'General' }).then((m) => {
-          this.setState({ admin: Object.assign({}, this.state.admin, { mTitle: '', mSubject: '' }), route: { name: 'editor', moduleId: m.id }, editor: { title: m.title, subject: m.subject, editing: null } });
+          this.setState({ admin: Object.assign({}, this.state.admin, { mTitle: '', mSubject: '' }), route: { name: 'editor', moduleId: m.id }, editor: { title: m.title, subject: m.subject, editing: null, msg: '' } });
         }, () => {});
       };
       v.adminModRows = db.getModules().map((m) => ({
         title: m.title, subject: m.subject, count: m.problems.length,
         preview: this.openViewer({ name: 'module', mode: 'preview', moduleId: m.id, from: 'modules' }),
-        edit: () => this.setState({ route: { name: 'editor', moduleId: m.id }, editor: { title: m.title, subject: m.subject, editing: null } }),
+        edit: () => this.setState({ route: { name: 'editor', moduleId: m.id }, editor: { title: m.title, subject: m.subject, editing: null, msg: '' } }),
         del: () => {
           openDialog({
             moduleId: m.id,
@@ -3551,6 +4309,16 @@ class Component extends DCLogic {
       v.flagRows = rows.map((f) => ({
         moduleTitle: f.moduleTitle,
         qEl: math(f.text),
+        // Straight to this problem in the editor, with the cursor in the image
+        // field: pasting the figure's link is the usual fix for these.
+        attach: () => {
+          const mod = db.getModule(f.moduleId);
+          if (!mod) return;
+          this.setState({
+            route: { name: 'editor', moduleId: mod.id, from: 'flagged' },
+            editor: { title: mod.title, subject: mod.subject, editing: this.editBuffer(f), msg: '' }
+          }, () => this.focusImageField());
+        },
         reason: f.flagReason || '\u2014',
         checked: !!FL.picked[f.id],
         toggle: () => {
@@ -3594,25 +4362,32 @@ class Component extends DCLogic {
     if (v.sEditor) {
       const m = db.getModule(route.moduleId), E = st.editor;
       if (m) {
-        v.backModules = goE('modules');
+        const fromFlagged = route.from === 'flagged';
+        v.backModules = goE(fromFlagged ? 'flagged' : 'modules');
+        v.edBackLabel = fromFlagged ? '← Flagged problems' : '← Modules';
+        v.edMsg = E.msg || ''; v.hasEdMsg = !!E.msg;
         v.edTitle = E.title; v.onEdTitle = F('editor', 'title');
         v.edSubject = E.subject; v.onEdSubject = F('editor', 'subject');
         v.saveModuleMeta = () => { const E2 = this.state.editor; db.updateModule(m.id, { title: E2.title.trim() || m.title, subject: E2.subject.trim() || m.subject }).catch(() => {}); };
         v.edCount = m.problems.length;
         const strip = (t) => String(t).replace(/\$/g, '');
+        const openEd = (p) => this.setState({ editor: Object.assign({}, this.state.editor, { editing: this.editBuffer(p), msg: '' }) });
         v.edRows = m.problems.map((p, i) => ({
           num: String(i + 1).padStart(2, '0'),
-          snippet: strip(p.text).slice(0, 90) + (p.text.length > 90 ? '\u2026' : ''),
+          snippet: strip(p.text).slice(0, 90) + (p.text.length > 90 ? '…' : ''),
           typeLabel: p.type === 'mc' ? 'MC' : 'Free',
-          edit: () => this.setState({ editor: Object.assign({}, this.state.editor, { editing: { id: p.id, text: p.text, type: p.type, c0: (p.choices || [])[0] || '', c1: (p.choices || [])[1] || '', c2: (p.choices || [])[2] || '', c3: (p.choices || [])[3] || '', answer: p.answer, explanation: p.explanation || '', calculator: db.problemHasCalculator(p) } }) }),
+          hasImage: !!(p.imageUrl || p.choiceImages),
+          flagged: !!p.flagged,
+          edit: () => openEd(p),
           del: () => { db.deleteProblem(m.id, p.id).catch(() => {}); }
         }));
-        v.addProblem = () => this.setState({ editor: Object.assign({}, this.state.editor, { editing: { id: null, text: '', type: 'mc', c0: '', c1: '', c2: '', c3: '', answer: 'A', explanation: '', calculator: false } }) });
+        v.addProblem = () => openEd(null);
         const ed = E.editing;
         v.editing = !!ed;
         if (ed) {
+          const IMP = window.ppaImport;
           v.pfTitle = ed.id ? 'Edit problem' : 'New problem';
-          v.pfText = ed.text; v.onPfText = (e) => this.setEd({ text: e.target.value });
+          v.pfText = ed.text; v.onPfText = (e) => this.setEd({ text: e.target.value, saveErr: '' });
           v.hasPfPreview = !!ed.text.trim() && ed.text.indexOf('$') >= 0;
           v.pfPreviewEl = v.hasPfPreview ? math(ed.text) : null;
           v.pfIsMC = ed.type === 'mc'; v.pfIsFree = ed.type === 'free';
@@ -3628,21 +4403,118 @@ class Component extends DCLogic {
           // The label asks db the same two questions the tutee's screen asks,
           // rather than restating the rule, so a checkbox that cannot change
           // the outcome says so instead of looking broken.
-          const CALC = window.ppaImport.CALC_TAG;
+          const CALC = IMP.CALC_TAG;
           v.pfCalcLabel = db.calculatorAllowed(m, { tags: [] })
-            ? 'Calculator allowed \u2014 already on for every problem in an ' + m.subject + ' module'
+            ? 'Calculator allowed — already on for every problem in an ' + m.subject + ' module'
             : !db.calculatorAllowed(m, { tags: [CALC] })
-              ? 'Calculator allowed \u2014 ignored on a reading or writing module'
+              ? 'Calculator allowed — ignored on a reading or writing module'
               : 'Calculator allowed on this problem';
+
+          // ---- images ----
+          // The preview follows the field as it is typed, but only once the
+          // text is a link the table would accept: a half-typed URL would
+          // otherwise flash "Image unavailable" at every keystroke.
+          const ours = (u) => u.indexOf('/storage/v1/object/public/' + IMP.IMAGE_BUCKET + '/') >= 0;
+          const main = IMP.cleanImageUrl(ed.imageUrl);
+          const busy = ed.imgBusy;
+          v.pfImgBusy = !!busy;
+          v.pfImageUrl = ed.imageUrl;
+          v.onPfImageUrl = (e) => this.setEd({ imageUrl: e.target.value, imgErr: '', imgMsg: '', saveErr: '' });
+          v.pfHasImage = !!main.url;
+          v.pfImageEl = main.url ? pic(main.url, ed.imageAlt) : null;
+          v.pfImageAlt = ed.imageAlt; v.onPfImageAlt = (e) => this.setEd({ imageAlt: e.target.value });
+          v.pfImgAbove = ed.imagePosition !== 'below'; v.pfImgBelow = ed.imagePosition === 'below';
+          v.pfPickAbove = () => this.setEd({ imagePosition: 'above' });
+          v.pfPickBelow = () => this.setEd({ imagePosition: 'below' });
+          v.pfClearImage = () => this.setEd({ imageUrl: '', imageAlt: '', imagePosition: 'above', imgErr: '', imgMsg: '' });
+          const typedErr = ed.imageUrl.trim() && main.error ? 'The image link ' + main.error : '';
+          v.pfImgErr = ed.imgErr || typedErr; v.pfHasImgErr = !!v.pfImgErr;
+          v.pfImgMsg = ed.imgMsg; v.pfHasImgMsg = !!ed.imgMsg;
+
+          // slot is 'main' or the choice index as a string. Both actions only
+          // fill the field; the problem itself is written by Save, like every
+          // other field on this form.
+          const putUrl = (slot, url) => {
+            if (slot === 'main') return { imageUrl: url };
+            const ci = this.state.editor.editing.ci.slice();
+            ci[Number(slot)] = url;
+            return { ci: ci };
+          };
+          const run = (slot, work, done) => {
+            if (this.state.editor.editing.imgBusy) return;
+            this.setEd({ imgBusy: slot, imgErr: '', imgMsg: '' });
+            work().then(
+              (url) => { if (this.state.editor.editing) this.setEd(Object.assign(putUrl(slot, url), { imgBusy: '', imgMsg: done })); },
+              (err) => { if (this.state.editor.editing) this.setEd({ imgBusy: '', imgErr: (err && err.message) || 'That did not work.' }); }
+            );
+          };
+          const cacheSlot = (slot, url) => () => run(slot, () => db.cacheImage(url),
+            'Saved a copy in our storage and switched the link to it. Save the problem to keep the change.');
+          const uploadSlot = (slot, file) => run(slot, () => db.uploadImage(file),
+            'Uploaded. Save the problem to keep it.');
+          v.pfCantCache = !main.url || !!busy || ours(main.url);
+          v.pfCacheLabel = busy === 'main' ? 'Saving a copy…' : main.url && ours(main.url) ? 'Copy saved' : 'Save a copy';
+          v.pfCache = cacheSlot('main', main.url);
+          v.pfPickFile = (e) => {
+            const f = e.target.files && e.target.files[0];
+            e.target.value = '';
+            if (f) uploadSlot('main', f);
+          };
+          // A file dropped from the desktop is uploaded. An image dragged in
+          // from another tab arrives as a link instead, and goes in the field.
+          v.pfDropBorder = ed.dragging ? 'var(--color-accent)' : 'var(--color-neutral-300)';
+          v.pfDropBg = ed.dragging ? 'var(--color-accent-100)' : 'transparent';
+          v.pfDropHint = busy === 'main' ? 'Working…' : 'or drop an image here';
+          v.pfDragOver = (e) => { e.preventDefault(); if (!this.state.editor.editing.dragging) this.setEd({ dragging: true }); };
+          v.pfDragLeave = () => { if (this.state.editor.editing.dragging) this.setEd({ dragging: false }); };
+          v.pfDrop = (e) => {
+            e.preventDefault();
+            this.setEd({ dragging: false });
+            const dt = e.dataTransfer;
+            const f = dt && dt.files && dt.files[0];
+            if (f) { uploadSlot('main', f); return; }
+            const link = dt && (dt.getData('text/uri-list') || dt.getData('text/plain'));
+            if (link) this.setEd({ imageUrl: String(link).split(/\r?\n/)[0].trim(), imgErr: '', imgMsg: '' });
+          };
+
+          v.pfChoiceImgs = [0, 1, 2, 3].map((i) => {
+            const letter = 'ABCD'[i], raw = ed.ci[i] || '', c = IMP.cleanImageUrl(raw), slot = String(i);
+            return {
+              letter: letter, url: raw,
+              aria: 'Image link for choice ' + letter,
+              uploadAria: 'Upload an image for choice ' + letter,
+              onUrl: (e) => { const ci = this.state.editor.editing.ci.slice(); ci[i] = e.target.value; this.setEd({ ci: ci, imgErr: '', imgMsg: '', saveErr: '' }); },
+              cantCache: !c.url || !!busy || ours(c.url),
+              cacheLabel: busy === slot ? 'Saving…' : c.url && ours(c.url) ? 'Copy saved' : 'Save a copy',
+              cache: cacheSlot(slot, c.url),
+              pick: (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) uploadSlot(slot, f); },
+              has: !!c.url,
+              el: c.url ? pic(c.url, choiceAlt(letter), true) : null
+            };
+          });
+
+          v.pfSaveErr = ed.saveErr; v.pfHasSaveErr = !!ed.saveErr;
           v.pfCancel = () => this.setState({ editor: Object.assign({}, this.state.editor, { editing: null }) });
           v.pfSave = () => {
             const e2 = this.state.editor.editing;
-            if (!e2.text.trim()) return;
+            if (!e2.text.trim()) { this.setEd({ saveErr: 'The question needs some text.' }); return; }
+            if (e2.imgBusy) return;
+            const images = {
+              imageUrl: e2.imageUrl, imageAlt: e2.imageAlt, imagePosition: e2.imagePosition,
+              choiceImages: e2.type === 'mc' ? e2.ci : null
+            };
             const problem = e2.type === 'mc'
-              ? { id: e2.id || undefined, type: 'mc', text: e2.text, choices: [e2.c0, e2.c1, e2.c2, e2.c3], answer: e2.answer || 'A', explanation: e2.explanation, calculator: !!e2.calculator }
-              : { id: e2.id || undefined, type: 'free', text: e2.text, answer: e2.answer, explanation: e2.explanation, calculator: !!e2.calculator };
-            db.saveProblem(m.id, problem).catch(() => {});
-            this.setState({ editor: Object.assign({}, this.state.editor, { editing: null }) });
+              ? Object.assign({ id: e2.id || undefined, type: 'mc', text: e2.text, choices: [e2.c0, e2.c1, e2.c2, e2.c3], answer: e2.answer || 'A', explanation: e2.explanation, calculator: !!e2.calculator }, images)
+              : Object.assign({ id: e2.id || undefined, type: 'free', text: e2.text, answer: e2.answer, explanation: e2.explanation, calculator: !!e2.calculator }, images);
+            const prior = e2.id ? m.problems.find((x) => x.id === e2.id) : null;
+            const wasFlagged = !!(prior && prior.flagged);
+            db.saveProblem(m.id, problem).then(
+              (saved) => {
+                const msg = wasFlagged && saved && !saved.flagged ? 'Saved. It has an image now, so it is off the Flagged problems list.' : '';
+                this.setState({ editor: Object.assign({}, this.state.editor, { editing: null, msg: msg }) });
+              },
+              (err) => { if (this.state.editor.editing) this.setEd({ saveErr: (err && err.message) || 'That did not save.' }); }
+            );
           };
         }
       }
@@ -3730,6 +4602,11 @@ class Component extends DCLogic {
           rows: shown.map((p) => ({
             num: String(p.row).padStart(2, '0'),
             questionEl: math(p.question || '(no question text)'),
+            imgEl: pic(p.imageUrl, p.imageAlt),
+            imgAbove: !!p.imageUrl && p.imagePosition !== 'below',
+            imgBelow: !!p.imageUrl && p.imagePosition === 'below',
+            choiceImgs: choicePics(p.choiceImages),
+            hasChoiceImgs: !!p.choiceImages,
             typeLabel: p.type === 'mc' ? 'MC' : p.type === 'free' ? 'Free' : '?',
             answerEl: p.errors.length ? null : math(p.type === 'mc'
               ? p.answer + '. ' + (p.choices[window.ppaImport.LETTERS.indexOf(p.answer)] || '')
@@ -3811,7 +4688,7 @@ class Component extends DCLogic {
         v.elTuteeOpts = [{ id: '', label: tutees.length ? 'Choose a tutee\u2026' : 'No tutees yet' }]
           .concat(tutees.map((s) => {
             const n = db.unresolvedCount(s.id);
-            return { id: s.id, label: s.name + (n ? ' (' + n + ' unresolved)' : '') };
+            return { id: s.id, label: s.name + (s.active ? '' : ' (deactivated)') + (n ? ' (' + n + ' unresolved)' : '') };
           }));
         // A tutee who has since been unlinked must not stay selected.
         tuteeId = tutees.some((s) => s.id === EL.picked) ? EL.picked : '';
@@ -3844,6 +4721,11 @@ class Component extends DCLogic {
           statusLabel: en.resolved ? 'Resolved' : 'Unresolved',
           tagClass: en.resolved ? 'tag tag-accent' : 'tag tag-outline',
           qEl: math(en.question),
+          imgEl: pic(en.imageUrl, en.imageAlt),
+          imgAbove: !!en.imageUrl && en.imagePosition !== 'below',
+          imgBelow: !!en.imageUrl && en.imagePosition === 'below',
+          choiceImgs: isMC ? choicePics(en.choiceImages) : [],
+          hasChoiceImgs: isMC && !!en.choiceImages,
           givenLabel: mine ? 'Your answer:' : 'Their answer:',
           givenEl: math(en.givenAnswer ? spell(en.givenAnswer) : '\u2014'),
           correctEl: math(spell(en.correctAnswer)),
@@ -4110,13 +4992,13 @@ class Component extends DCLogic {
       // An admin picks the tutor first, and the tutee list follows from it.
       v.fmPickTutor = me.role === 'admin';
       v.fmTutor = FM.tutorId;
-      v.fmTutorOpts = [{ id: '', label: 'Choose a tutor\u2026' }].concat(tutorsSorted.map((t) => ({ id: t.id, label: t.name })));
+      v.fmTutorOpts = [{ id: '', label: 'Choose a tutor\u2026' }].concat(tutorsSorted.filter((t) => t.active || t.id === FM.tutorId).map((t) => ({ id: t.id, label: t.name + (t.active ? '' : ' (deactivated)') })));
       v.onFmTutor = (e) => {
         const tid = e.target.value;
         const keep = db.getStudentsOf(tid).some((x) => x.id === this.state.calForm.tuteeId);
         setFM({ tutorId: tid, tuteeId: keep ? this.state.calForm.tuteeId : '', err: '' });
       };
-      const tutees = FM.tutorId ? db.getStudentsOf(FM.tutorId).slice() : [];
+      const tutees = FM.tutorId ? db.getStudentsOf(FM.tutorId).filter((x) => x.active) : [];
       if (FM.tuteeId && !tutees.some((x) => x.id === FM.tuteeId)) {
         const cur = db.getUser(FM.tuteeId);
         if (cur) tutees.push(cur);

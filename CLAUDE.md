@@ -39,6 +39,74 @@ not there yet.
 - `importer.js` — shared JSON import engine (browser + Node CLI).
 - `supabaseClient.js` — the single Supabase client. Guard against double
   evaluation: dc-runtime re-injects `<helmet>` scripts into `<head>`.
+- `supabase/functions/` — Edge Functions, each holding the service-role key
+  the browser must never see: `create-user` (create, PIN reset),
+  `update-user` (edit, deactivate, reactivate), `delete-user`, `cache-image`.
+  The three newer ones share the admin check in `_shared/admin.ts`. Every one
+  refuses a non-admin, a deactivated admin, the caller's own account, and any
+  admin account. Deploy each with `supabase functions deploy <name>`.
+
+## Sidebar
+
+The left sidebar replaced the top nav for every role. `renderSidebar()` builds
+it with `createElement` (inline SVG icons from `Component.ICONS`, CSS
+tooltips from `data-tip`), into the `{{sidebarEl}}` hole. Its state is mirrored
+onto `<html>` by `syncShell()` as `ppa-sb` (signed in), `ppa-sb-collapsed`, and
+`ppa-nav-open` (phone drawer). The CSS turns those into `--sb-w`: 240, 56, or 0
+below 800px and while signed out. `.app-main`, `.calc-launch` and `calcGeom()`
+all read `--sb-w`, so the calculator never sits under the sidebar. Collapsed
+is saved in `localStorage` (`ppa-sidebar-v1`). The active item scales only
+its inner row, from the left, so it cannot clip. A new tab is one entry in
+`linkDefs`: `[label, route, icon, badgeCount]`.
+
+## Problem images
+
+`problems.image_url` / `image_alt` / `image_position` (`above` | `below`) and
+`choice_images` (null, or exactly four URLs-or-nulls), from migration 010.
+`problems_public` and `error_log_view` carry them too.
+
+- **Links only, never markup.** A URL reaches nothing but an `<img src>`.
+  `ppaImport.cleanImageUrl()` and SQL `is_image_url()` are the same rule
+  (plain `https://`, no spaces, quotes, angle brackets or credentials). Keep
+  them in step.
+- **Rendering:** every figure goes through `PpaImage` (defined above
+  `Component`) via `pic()` in `renderVals()`. It handles lazy loading, no
+  referrer, the 420px cap (160px for a choice), click-to-enlarge, and the
+  "Image unavailable" box on error. The lightbox is the `{{lightboxLayer}}`
+  hole, outside every screen.
+- **Storage:** public bucket `problem-images`, objects named
+  `img/<sha256>.<ext>`. The editor's Upload, the `cache-image` function and
+  `scripts/import.js --cache-images` all use that name, so the same picture
+  is stored once. PNG, JPEG, GIF and WebP only; SVG is refused because, opened
+  directly from the bucket, it would run script in the storage origin.
+- **Re-imports** carry an image field the file leaves out over from the stored
+  row (`imageColumns()` in `importer.js`), so a figure attached in the editor
+  survives. An explicit `null` clears it.
+- Saving a flagged problem with an image unflags it. `flag_missing_figures()`
+  skips rows that have one.
+
+## Accounts: deactivate, edit, delete
+
+- `profiles.active` (010). Deactivating goes through `update-user`, which bans
+  the account in auth (no sign-in, no refresh) and sets the flag. For the
+  access token still alive, every table has a RESTRICTIVE `<table>_active_only`
+  policy on `am_active()`. The views and the tutee RPCs check `am_active()`
+  themselves, because they run as owner and bypass RLS. **A new table needs
+  its own `_active_only` policy, and a new SECURITY DEFINER function a tutee
+  can call needs the check.**
+- Deactivated users get a grey badge, are left out of every picker that
+  creates work (assign, calendar form, tutor links), and stay in the filters
+  and history views.
+- Permanent delete is `delete-user` → `auth.admin.deleteUser`, which cascades.
+  `session_logs.tutor_id` is SET NULL and `tutor_name` (a trigger keeps it
+  current, and `delete-user` refreshes it first) keeps the author's name.
+  `user_delete_counts()` feeds the confirmation dialog.
+- Self-service is a tutor's own `display_name` and nothing else. The
+  `profiles` UPDATE policy is tutor-only, and `authenticated` has a column
+  grant on `display_name` alone. Admins write other columns through the Edge
+  Functions.
+- No parent role exists yet. The Users-tab row actions and both functions are
+  role-generic, so one is a listing away.
 
 ## Module / problem viewer modes
 
@@ -108,6 +176,8 @@ the one place local wall-clock times become instants, so a weekly 4pm stays
 - Events are `sc-camel-on-click`, loops `<sc-for list as>`, conditionals
   `<sc-if value>`. HTML tags inside the template need the `sc-raw-` prefix
   (`sc-raw-table`, `sc-raw-td`, `sc-raw-select`, …).
+- Every RLS-enabled table gets a RESTRICTIVE `_active_only` policy (see
+  Accounts above).
 - Answer keys never reach a tutee's browser before they answer. Tutees read
   `problems_public` (no key) and get the key back through `revealed_answers`
   or the `submit_answer()` RPC.

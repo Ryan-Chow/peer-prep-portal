@@ -17,6 +17,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const ppaImport = require(path.join(__dirname, '..', 'importer.js'));
 
 const USAGE = `
@@ -27,6 +28,10 @@ Options:
                  instead of adding to it. This deletes tutee submissions
                  for the problems it removes.
   --dry-run      Parse, validate and report. Writes nothing.
+  --cache-images Download every image link in the file and store a copy in
+                 the problem-images bucket, then import with the bucket URLs
+                 in place of the originals. A link that cannot be fetched
+                 keeps its original URL and is listed at the end.
   --batch <n>    Rows per request (default ${ppaImport.BATCH_SIZE}).
   -h, --help     This text.
 
@@ -37,12 +42,13 @@ Environment:
 `.trim();
 
 function parseArgs(argv) {
-  const opts = { files: [], replace: false, dryRun: false, batch: ppaImport.BATCH_SIZE };
+  const opts = { files: [], replace: false, dryRun: false, cacheImages: false, batch: ppaImport.BATCH_SIZE };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '-h' || a === '--help') opts.help = true;
     else if (a === '--replace') opts.replace = true;
     else if (a === '--dry-run') opts.dryRun = true;
+    else if (a === '--cache-images') opts.cacheImages = true;
     else if (a === '--batch') {
       const n = parseInt(argv[++i], 10);
       if (!n || n < 1) fail('--batch needs a positive number.');
@@ -60,6 +66,36 @@ function fail(msg) {
 
 function plural(n, word) {
   return n + ' ' + word + (n === 1 ? '' : 's');
+}
+
+// The cache-image Edge Function's job, done from this machine: download, check
+// the bytes really are an image, and store them under their own hash. Same
+// bucket, same names, so a figure the editor already copied is not stored
+// twice. A link already in the bucket is left as it is.
+function imageCacher(url, gateway) {
+  const ours = String(url).replace(/\/+$/, '') + '/storage/v1/object/public/' + ppaImport.IMAGE_BUCKET + '/';
+  return async (link) => {
+    if (link.startsWith(ours)) return link;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    let res;
+    try {
+      res = await fetch(link, { signal: ctrl.signal, redirect: 'follow' });
+    } catch (e) {
+      throw new Error(e.name === 'AbortError' ? 'timed out' : 'could not be downloaded (' + e.message + ')');
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const declared = Number(res.headers.get('content-length') || 0);
+    if (declared > ppaImport.MAX_IMAGE_BYTES) throw new Error('larger than 10 MB');
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.length > ppaImport.MAX_IMAGE_BYTES) throw new Error('larger than 10 MB');
+    const kind = ppaImport.sniffImage(bytes);
+    if (!kind) throw new Error('not a PNG, JPEG, GIF or WebP image');
+    const hash = crypto.createHash('sha256').update(bytes).digest('hex');
+    return gateway.uploadImage(ppaImport.imagePath(hash, kind.ext), bytes, kind.type);
+  };
 }
 
 async function main() {
@@ -118,6 +154,8 @@ async function main() {
       // calculator, or finds one they should not have had.
       const calc = d.problems.filter((p) => !p.errors.length && p.calculator).length;
       if (calc) console.log('      calculator: ' + calc + ' of ' + d.validCount);
+      const pics = d.problems.filter((p) => !p.errors.length && (p.imageUrl || p.choiceImages)).length;
+      if (pics) console.log('      images: ' + pics + ' of ' + d.validCount);
     }
     d.problems.forEach((p) => {
       if (p.errors.length) console.log('      row ' + p.row + ': ' + p.errors.join(' '));
@@ -129,6 +167,15 @@ async function main() {
   if (!runnable.length) fail('Nothing importable.');
 
   if (opts.dryRun) {
+    if (opts.cacheImages) {
+      const links = new Set();
+      runnable.forEach((d) => d.problems.forEach((p) => {
+        if (p.errors.length) return;
+        if (p.imageUrl) links.add(p.imageUrl);
+        (p.choiceImages || []).forEach((u) => { if (u) links.add(u); });
+      }));
+      console.log('--cache-images would copy ' + plural(links.size, 'image link') + '.');
+    }
     console.log('Dry run — nothing written. ' + plural(runnable.length, 'module') + ' would be imported.');
     return;
   }
@@ -145,11 +192,25 @@ async function main() {
     fail('That looks like a publishable key. Writes need a secret key.');
   }
 
+  const gateway = ppaImport.restGateway(url, key);
+
+  let imageReport = null;
+  if (opts.cacheImages) {
+    imageReport = await ppaImport.cacheDocImages(docs, imageCacher(url, gateway), (p) => {
+      const line = '  images ' + p.done + '/' + p.total;
+      if (process.stdout.isTTY) process.stdout.write('\r\u001b[2K' + line);
+      else console.log(line);
+    });
+    if (process.stdout.isTTY) process.stdout.write('\r\u001b[2K');
+    console.log('  ' + plural(imageReport.cached, 'image') + ' copied to storage' +
+      (imageReport.failed.length ? ', ' + imageReport.failed.length + ' kept as links (see below)' : ''));
+  }
+
   const modes = {};
   if (opts.replace) runnable.forEach((d) => { modes[d.slug] = 'replace'; });
 
   let lastLine = '';
-  const summary = await ppaImport.run(docs, ppaImport.restGateway(url, key), {
+  const summary = await ppaImport.run(docs, gateway, {
     modes: modes,
     batchSize: opts.batch,
     onProgress: (p) => {
@@ -170,6 +231,14 @@ async function main() {
   console.log('  ' + plural(summary.problemsUpdated, 'problem') + ' updated');
   console.log('  ' + plural(summary.problemsDeleted, 'problem') + ' deleted');
   console.log('  ' + plural(summary.problemsSkipped, 'problem') + ' skipped');
+
+  if (imageReport && imageReport.failed.length) {
+    console.log('');
+    console.log('Images not copied (imported with their original link):');
+    imageReport.failed.forEach((f) => {
+      console.log('  ' + f.module + ' row ' + f.row + ': ' + f.url + ' \u2014 ' + f.message);
+    });
+  }
 
   if (summary.errors.length) {
     console.log('');
