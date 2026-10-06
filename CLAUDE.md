@@ -24,9 +24,9 @@ Write migrations to be re-runnable: `if not exists`, `create or replace`,
 
 ## Script cache versions
 
-`index.html` loads the local scripts with `?v=N`. Bump **all four together**
-(`config.js`, `supabaseClient.js`, `importer.js`, `db.js`) whenever any one of
-them changes. There is no build step to fingerprint them, and a returning tab
+`index.html` loads the local scripts with `?v=N`. Bump **all five together**
+(`config.js`, `supabaseClient.js`, `importer.js`, `db.js`, `finance.js`)
+whenever any one of them changes. There is no build step to fingerprint them, and a returning tab
 that pairs a fresh `index.html` with a cached `db.js` calls functions that are
 not there yet.
 
@@ -37,6 +37,9 @@ not there yet.
 - `db.js` — Supabase data layer. Presents a **synchronous** cache to the UI
   (the UI was written against a mock); mutations are optimistic and roll back.
 - `importer.js` — shared JSON import engine (browser + Node CLI).
+- `finance.js` — the admin Finance tab: one React component, `PpaFinance`,
+  built with `createElement` and rendered into the `{{financeEl}}` hole. Its
+  view state lives in hooks; its data is `db.finance`.
 - `supabaseClient.js` — the single Supabase client. Guard against double
   evaluation: dc-runtime re-injects `<helmet>` scripts into `<head>`.
 - `supabase/functions/` — Edge Functions, each holding the service-role key
@@ -176,6 +179,38 @@ the one place local wall-clock times become instants, so a weekly 4pm stays
   (`state.calForm`) are overlays outside any screen, because My Students opens
   them too. The grid is built with `createElement` in `renderCalGrid()`, the
   same way the calculator layer is.
+
+## Finance (admin only)
+
+Migration 012. Money is **integer cents** everywhere; `db.finance.parseMoney()`
+("45", "45.00", "$45", "$1,234.56") and `fmtMoney()` are the only conversions.
+
+- **Tables:** `tutee_rates` / `tutor_rates` (hourly, `effective_from`; a change
+  is a new row, never an edit of history), `session_finance` (one row per
+  completed session row), `ledger` (income/expense not tied to a session),
+  `finance_settings` (`timezone`, `quick_categories`). Every one is admin-only
+  plus `_active_only`. No view reads them; the pricing helpers
+  (`finance_rate`, `finance_tutor_share`, …) are revoked from every client
+  role, and `finance_recalculate()` checks admin itself.
+- **Trigger** `sessions_finance_sync` (SECURITY DEFINER, so a tutor marking a
+  session completed still creates the row): prices a newly completed session
+  at the rates in effect on its local day (`finance_settings.timezone`).
+  Leaving completed deletes the row only if it is still unpaid and owed. A
+  group pays the tutor once, split across the tutees who came, re-split as
+  that set changes, except rows paid out or typed by hand
+  (`tutor_pay_locked`). No rate → $0 with `rate_missing`; the Rates tab's
+  "Recalculate" reprices those.
+- `session_finance.id` is its own key, with `session_id` unique and SET NULL,
+  so deleting a calendar entry or an account keeps the money record.
+- **Revenue** = billed on unpaid + paid sessions + ledger income, except a
+  "Package prepayment" (the sessions it covers are billed and marked paid, so
+  counting both would double it). Costs = tutor pay + session extra costs +
+  ledger expenses. "Overdue" = unpaid and more than 14 days old; that count is
+  the Finance badge.
+- Admin session writes call `financeTouched()`, which rereads
+  `session_finance`; the tab also reloads on entry, for sessions tutors
+  completed elsewhere.
+- No tutee, tutor or parent visibility yet.
 
 ## Conventions
 

@@ -57,12 +57,24 @@
     logs: new Map(),        // id -> UI session log
     sessions: new Map(),    // id -> UI calendar session
     avail: new Map(),       // id -> UI availability block
+    // Admin only. `loaded` stays false (with `error`) on a project without
+    // migration 012, so the Finance tab can say why it is empty.
+    fin: newFin(),
     loaded: false,
     // True until the first getSession() (and any profile load it triggers)
     // settles. The UI shows a neutral splash rather than flashing the login
     // card at someone who is already signed in.
     booting: true
   };
+
+  function newFin() {
+    return {
+      loaded: false, error: '',
+      rows: new Map(), ledger: new Map(),
+      rates: { tutee: new Map(), tutor: new Map() },
+      settings: { timezone: 'UTC', quickCategories: [] }
+    };
+  }
 
   const uiRole = (r) => (r === 'tutee' ? 'student' : r);
   const dbRole = (r) => (r === 'student' ? 'tutee' : r);
@@ -78,6 +90,7 @@
     S.users.clear(); S.modules.clear(); S.assignments.clear(); S.subs.clear();
     S.errors.clear(); S.sprofiles.clear(); S.logs.clear();
     S.sessions.clear(); S.avail.clear();
+    S.fin = newFin();
     S.links = [];
     S.loaded = false;
   }
@@ -489,7 +502,7 @@
 
       if (profRes.data.role === 'tutee') await loadTutee(user.id);
       else if (profRes.data.role === 'tutor') await loadTutor(user.id);
-      else await loadAdmin();
+      else { await loadAdmin(); await loadFinance(); }
 
       S.loaded = true;
       return S.users.get(S.meId);
@@ -1643,6 +1656,7 @@
       notify();
       throw sessionFail('createSessions', error);
     }
+    financeTouched();
     return made;
   }
 
@@ -1778,6 +1792,7 @@
       const { error } = await sb.from('sessions').upsert(next.filter((n) => ungroup.has(n.id)).map(sessionRow));
       if (error) console.warn('[ppa] updateSessions: could not clear group_id', error);
     }
+    financeTouched();
     return next;
   }
 
@@ -1804,6 +1819,7 @@
       notify();
       throw sessionFail('setSessionStatus', error);
     }
+    financeTouched();
     return next;
   }
 
@@ -1821,6 +1837,7 @@
     notify();
     const { error } = await sb.from('sessions').delete().in('id', rows.map((r) => r.id));
     if (error) { rows.forEach((r) => S.sessions.set(r.id, r)); notify(); throw fail('deleteSession', error); }
+    financeTouched();
   }
 
   // Sessions overlapping [from, to), earliest first. Either bound may be
@@ -1895,6 +1912,362 @@
     const from = minutesOf(localTime(start));
     const to = from + Math.round((end - start) / 60000);
     return blocks.some((b) => b.weekday === day && minutesOf(b.start) <= from && minutesOf(b.end) >= to);
+  }
+
+  // ---- finance (admin only) -----------------------------------------------
+
+  // Money is integer cents end to end. These two are the only places a dollar
+  // string becomes cents or cents become one.
+  //
+  // Accepts "45", "45.5", "45.00", "$45", "$1,234.56" and " 45 ". Anything else,
+  // a negative, or more than two decimals is NaN, which every caller refuses.
+  function parseMoney(input) {
+    const s = String(input == null ? '' : input).trim().replace(/^\$\s*/, '').replace(/,/g, '');
+    if (!/^\d+(\.\d{0,2})?$|^\.\d{1,2}$/.test(s)) return NaN;
+    const [whole, frac] = s.split('.');
+    return Number(whole || '0') * 100 + Number(((frac || '') + '00').slice(0, 2));
+  }
+  function fmtMoney(cents, opts) {
+    if (cents == null || isNaN(cents)) return '—';
+    const neg = cents < 0, abs = Math.abs(Math.round(cents));
+    const dollars = Math.floor(abs / 100).toLocaleString('en-US');
+    const out = '$' + dollars + (opts && opts.whole ? '' : '.' + String(abs % 100).padStart(2, '0'));
+    return neg ? '−' + out : out;
+  }
+
+  const PAYMENT_STATUSES = ['unpaid', 'paid', 'waived', 'comped'];
+  const PAYOUT_STATUSES = ['owed', 'paid'];
+  const DEFAULT_QUICK = ['Ads', 'Software', 'Materials', 'Referral bonus', 'Refund', 'Package prepayment'];
+
+  function putFinRow(r) {
+    S.fin.rows.set(r.id, {
+      id: r.id,
+      sessionId: r.session_id || '',
+      tuteeId: r.tutee_id || '',
+      tutorId: r.tutor_id || '',
+      date: text(r.session_date),
+      minutes: Number(r.duration_min) || 0,
+      billed: Number(r.billed_cents) || 0,
+      tutorPay: Number(r.paid_to_tutor_cents) || 0,
+      extra: Number(r.extra_cost_cents) || 0,
+      extraNote: text(r.extra_cost_note),
+      payment: PAYMENT_STATUSES.indexOf(r.payment_status) >= 0 ? r.payment_status : 'unpaid',
+      paidOn: text(r.paid_on),
+      payout: PAYOUT_STATUSES.indexOf(r.payout_status) >= 0 ? r.payout_status : 'owed',
+      payoutOn: text(r.payout_on),
+      notes: text(r.notes),
+      rateMissing: !!r.rate_missing,
+      payLocked: !!r.tutor_pay_locked
+    });
+  }
+  const finRowColumns = (f) => ({
+    id: f.id,
+    session_id: f.sessionId || null,
+    tutee_id: f.tuteeId || null,
+    tutor_id: f.tutorId || null,
+    session_date: f.date,
+    duration_min: f.minutes,
+    billed_cents: f.billed,
+    paid_to_tutor_cents: f.tutorPay,
+    extra_cost_cents: f.extra,
+    extra_cost_note: orNull(f.extraNote),
+    payment_status: f.payment,
+    paid_on: f.paidOn || null,
+    payout_status: f.payout,
+    payout_on: f.payoutOn || null,
+    notes: orNull(f.notes),
+    rate_missing: f.rateMissing,
+    tutor_pay_locked: f.payLocked
+  });
+
+  function putLedger(r) {
+    S.fin.ledger.set(r.id, {
+      id: r.id,
+      date: text(r.date),
+      kind: r.kind === 'income' ? 'income' : 'expense',
+      category: text(r.category),
+      amount: Number(r.amount_cents) || 0,
+      counterparty: text(r.counterparty),
+      tuteeId: r.tutee_id || '',
+      tutorId: r.tutor_id || '',
+      note: text(r.note),
+      receiptUrl: text(r.receipt_url),
+      createdAt: r.created_at || ''
+    });
+  }
+  const ledgerColumns = (e) => ({
+    id: e.id,
+    date: e.date,
+    kind: e.kind,
+    category: e.category.trim(),
+    amount_cents: e.amount,
+    counterparty: orNull(e.counterparty),
+    tutee_id: e.tuteeId || null,
+    tutor_id: e.tutorId || null,
+    note: orNull(e.note),
+    receipt_url: orNull(e.receiptUrl)
+  });
+
+  const putRate = (kind) => (r) => {
+    S.fin.rates[kind].set(r.id, {
+      id: r.id, kind: kind,
+      personId: kind === 'tutee' ? r.tutee_id : r.tutor_id,
+      cents: Number(r.hourly_rate_cents) || 0,
+      from: text(r.effective_from)
+    });
+  };
+
+  // A project that has not run 012 yet answers 42P01 (or PGRST205 through
+  // PostgREST) for these tables. Finance then says so on its own tab rather
+  // than failing the admin's whole load.
+  async function loadFinance() {
+    try {
+      const [rowsF, ledger, tr, pr, settings] = await Promise.all([
+        allRows('session_finance'),
+        allRows('ledger'),
+        allRows('tutee_rates'),
+        allRows('tutor_rates'),
+        allRows('finance_settings', { order: ['key'] })
+      ]);
+      S.fin.rows.clear(); S.fin.ledger.clear(); S.fin.rates.tutee.clear(); S.fin.rates.tutor.clear();
+      rowsF.forEach(putFinRow);
+      ledger.forEach(putLedger);
+      tr.forEach(putRate('tutee'));
+      pr.forEach(putRate('tutor'));
+      const set = {};
+      settings.forEach((s) => { set[s.key] = s.value; });
+      S.fin.settings = {
+        timezone: typeof set.timezone === 'string' ? set.timezone : 'UTC',
+        quickCategories: Array.isArray(set.quick_categories) ? set.quick_categories.map(String) : DEFAULT_QUICK.slice()
+      };
+      S.fin.error = '';
+      S.fin.loaded = true;
+    } catch (err) {
+      S.fin.error = (err && err.message) || 'Finance data could not be loaded.';
+      S.fin.loaded = false;
+    }
+    notify();
+  }
+
+  // Finance rows are written by a trigger when a session is completed, so any
+  // session change an admin makes may have changed them server-side.
+  let finTimer = null;
+  function financeTouched() {
+    if (!S.fin.loaded) return;
+    const me = S.users.get(S.meId);
+    if (!me || me.role !== 'admin') return;
+    clearTimeout(finTimer);
+    finTimer = setTimeout(async () => {
+      try {
+        const rowsF = await allRows('session_finance');
+        S.fin.rows.clear();
+        rowsF.forEach(putFinRow);
+        notify();
+      } catch (e) { /* the next Finance visit reloads */ }
+    }, 300);
+  }
+
+  // patch: any of the UI row fields. One update for every id, which is what
+  // the bulk "Mark selected paid" needs; a single edit is the same with one id.
+  async function updateFinanceRows(ids, patch) {
+    const targets = uniqIds(ids).map((id) => S.fin.rows.get(id)).filter(Boolean);
+    if (!targets.length) return [];
+    const p = Object.assign({}, patch);
+    for (const k of ['billed', 'tutorPay', 'extra']) {
+      if (p[k] != null && !(Number.isInteger(p[k]) && p[k] >= 0 && p[k] <= 100000000)) {
+        throw fail('updateFinanceRows', { message: 'Enter an amount like 45 or 45.00.' });
+      }
+    }
+    if (p.minutes != null && !(Number.isInteger(p.minutes) && p.minutes >= 0 && p.minutes <= 1440)) {
+      throw fail('updateFinanceRows', { message: 'A duration is 0 to 1440 minutes.' });
+    }
+    if (p.tutorPay != null) p.payLocked = true;
+    if (p.payment === 'paid' && p.paidOn == null) p.paidOn = localDate(Date.now());
+    if (p.payment && p.payment !== 'paid' && p.paidOn == null) p.paidOn = '';
+    if (p.payout === 'paid' && p.payoutOn == null) p.payoutOn = localDate(Date.now());
+    if (p.payout === 'owed' && p.payoutOn == null) p.payoutOn = '';
+
+    const before = targets.map((t) => Object.assign({}, t));
+    const next = targets.map((t) => Object.assign({}, t, p));
+    next.forEach((n) => S.fin.rows.set(n.id, n));
+    notify();
+    // Only the columns the patch touched, so a bulk status change cannot
+    // overwrite an amount another tab just edited.
+    const full = finRowColumns(next[0]);
+    const map = {
+      date: 'session_date', minutes: 'duration_min', billed: 'billed_cents', tutorPay: 'paid_to_tutor_cents',
+      extra: 'extra_cost_cents', extraNote: 'extra_cost_note', payment: 'payment_status', paidOn: 'paid_on',
+      payout: 'payout_status', payoutOn: 'payout_on', notes: 'notes', payLocked: 'tutor_pay_locked', rateMissing: 'rate_missing'
+    };
+    const body = {};
+    Object.keys(p).forEach((k) => { if (map[k]) body[map[k]] = full[map[k]]; });
+    if (p.billed != null || p.tutorPay != null) body.rate_missing = false;
+    const { error } = await sb.from('session_finance').update(body).in('id', next.map((n) => n.id));
+    if (error) {
+      before.forEach((b) => S.fin.rows.set(b.id, b));
+      notify();
+      throw fail('updateFinanceRows', error);
+    }
+    if (body.rate_missing === false) next.forEach((n) => { n.rateMissing = false; });
+    return next;
+  }
+
+  async function deleteFinanceRow(id) {
+    const f = S.fin.rows.get(id);
+    if (!f) return;
+    S.fin.rows.delete(id);
+    notify();
+    const { error } = await sb.from('session_finance').delete().eq('id', id);
+    if (error) { S.fin.rows.set(id, f); notify(); throw fail('deleteFinanceRow', error); }
+  }
+
+  // Re-prices rows from the rate tables (server side, so the rule is the
+  // trigger's own), then reads them back.
+  async function recalcFinance(ids) {
+    const list = uniqIds(ids);
+    if (!list.length) return 0;
+    const { data, error } = await sb.rpc('finance_recalculate', { p_ids: list });
+    if (error) throw fail('recalcFinance', error);
+    const res = await sb.from('session_finance').select('*').in('id', list);
+    rows(res, 'session_finance').forEach(putFinRow);
+    notify();
+    return Number(data) || 0;
+  }
+
+  // A session that was never on the calendar: a sessions row already marked
+  // completed, which the trigger prices like any other.
+  async function logManualSession(spec) {
+    const minutes = Math.round(Number(spec.minutes));
+    if (!spec.tutorId || !spec.tuteeId) throw fail('logManualSession', { message: 'Pick a tutor and a tutee.' });
+    if (!(minutes >= 5 && minutes <= 720)) throw fail('logManualSession', { message: 'A session must last between 5 minutes and 12 hours.' });
+    const start = atLocal(spec.date, spec.time);
+    if (isNaN(start)) throw fail('logManualSession', { message: 'Pick a date and a start time.' });
+    const s = {
+      id: uuid(), tutorId: spec.tutorId, tuteeId: spec.tuteeId, start: start, end: start + minutes * 60000,
+      location: text(spec.location).trim(), notes: text(spec.notes).trim(), status: 'completed',
+      recurrenceId: '', repeatWeeks: 0, groupId: '', createdBy: S.meId
+    };
+    const clash = findClash(s.tutorId, s.start, s.end);
+    if (clash) throw fail('logManualSession', clashError(clash));
+    S.sessions.set(s.id, s);
+    notify();
+    const { error } = await sb.from('sessions').insert(sessionRow(s));
+    if (error) { S.sessions.delete(s.id); notify(); throw sessionFail('logManualSession', error); }
+    const res = await sb.from('session_finance').select('*').eq('session_id', s.id);
+    rows(res, 'session_finance').forEach(putFinRow);
+    notify();
+    return Array.from(S.fin.rows.values()).find((f) => f.sessionId === s.id) || null;
+  }
+
+  // entry: { date, kind, category, amount (cents), counterparty, tuteeId, tutorId, note, receiptUrl }
+  function checkLedger(e) {
+    if (e.kind !== 'income' && e.kind !== 'expense') return 'Choose income or expense.';
+    if (!(Number.isInteger(e.amount) && e.amount >= 1 && e.amount <= 100000000)) return 'Enter an amount like 45 or 45.00.';
+    if (!e.category.trim() || e.category.trim().length > 60) return 'Give it a category.';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date)) return 'Pick a date.';
+    if (e.receiptUrl && !/^https:\/\/[^\s"'<>\\@]+$/.test(e.receiptUrl)) return 'A receipt link has to be a plain https:// address.';
+    return '';
+  }
+
+  async function addLedger(entry) {
+    const e = Object.assign({
+      date: localDate(Date.now()), kind: 'expense', category: '', amount: NaN,
+      counterparty: '', tuteeId: '', tutorId: '', note: '', receiptUrl: ''
+    }, entry, { id: uuid(), createdAt: new Date().toISOString() });
+    e.category = text(e.category); e.receiptUrl = text(e.receiptUrl).trim();
+    const bad = checkLedger(e);
+    if (bad) throw fail('addLedger', { message: bad });
+    S.fin.ledger.set(e.id, e);
+    notify();
+    const { error } = await sb.from('ledger').insert(ledgerColumns(e));
+    if (error) { S.fin.ledger.delete(e.id); notify(); throw fail('addLedger', error); }
+    return e;
+  }
+
+  async function updateLedger(id, patch) {
+    const before = S.fin.ledger.get(id);
+    if (!before) return null;
+    const e = Object.assign({}, before, patch, { id: id });
+    e.category = text(e.category); e.receiptUrl = text(e.receiptUrl).trim();
+    const bad = checkLedger(e);
+    if (bad) throw fail('updateLedger', { message: bad });
+    S.fin.ledger.set(id, e);
+    notify();
+    const { error } = await sb.from('ledger').update(ledgerColumns(e)).eq('id', id);
+    if (error) { S.fin.ledger.set(id, before); notify(); throw fail('updateLedger', error); }
+    return e;
+  }
+
+  async function deleteLedger(id) {
+    const e = S.fin.ledger.get(id);
+    if (!e) return;
+    S.fin.ledger.delete(id);
+    notify();
+    const { error } = await sb.from('ledger').delete().eq('id', id);
+    if (error) { S.fin.ledger.set(id, e); notify(); throw fail('deleteLedger', error); }
+  }
+
+  // A new rate on the same effective date replaces that row rather than
+  // failing the unique constraint: that is what correcting a typo looks like.
+  async function setRate(kind, personId, cents, from) {
+    if (kind !== 'tutee' && kind !== 'tutor') return null;
+    if (!(Number.isInteger(cents) && cents >= 0 && cents <= 10000000)) throw fail('setRate', { message: 'Enter an hourly rate like 45 or 45.00.' });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(from))) throw fail('setRate', { message: 'Pick the date the rate starts.' });
+    const map = S.fin.rates[kind];
+    const same = Array.from(map.values()).find((r) => r.personId === personId && r.from === from);
+    const r = { id: same ? same.id : uuid(), kind: kind, personId: personId, cents: cents, from: from };
+    map.set(r.id, r);
+    notify();
+    const col = kind === 'tutee' ? 'tutee_id' : 'tutor_id';
+    const { error } = await sb.from(kind + '_rates')
+      .upsert({ id: r.id, [col]: personId, hourly_rate_cents: cents, effective_from: from }, { onConflict: col + ',effective_from' });
+    if (error) {
+      if (same) map.set(same.id, same); else map.delete(r.id);
+      notify();
+      throw fail('setRate', error);
+    }
+    return r;
+  }
+
+  async function deleteRate(kind, id) {
+    const map = S.fin.rates[kind];
+    const r = map && map.get(id);
+    if (!r) return;
+    map.delete(id);
+    notify();
+    const { error } = await sb.from(kind + '_rates').delete().eq('id', id);
+    if (error) { map.set(id, r); notify(); throw fail('deleteRate', error); }
+  }
+
+  // Newest first: the rate on a date is the first one that started by then.
+  const ratesOf = (kind, personId) => Array.from(S.fin.rates[kind].values())
+    .filter((r) => r.personId === personId)
+    .sort((a, b) => b.from.localeCompare(a.from));
+  function rateOn(kind, personId, date) {
+    const r = ratesOf(kind, personId).find((x) => x.from <= date);
+    return r ? r.cents : null;
+  }
+
+  async function saveFinanceSetting(key, value) {
+    if (key !== 'timezone' && key !== 'quick_categories') return;
+    const prop = key === 'timezone' ? 'timezone' : 'quickCategories';
+    const before = S.fin.settings[prop];
+    S.fin.settings = Object.assign({}, S.fin.settings, { [prop]: value });
+    notify();
+    const { error } = await sb.from('finance_settings').upsert({ key: key, value: value, updated_at: new Date().toISOString() });
+    if (error) {
+      S.fin.settings = Object.assign({}, S.fin.settings, { [prop]: before });
+      notify();
+      throw fail('saveFinanceSetting', error);
+    }
+  }
+
+  // Unpaid sessions older than 14 days: the Finance badge and the red tag.
+  const OVERDUE_DAYS = 14;
+  function overdueFinance() {
+    if (!S.fin.loaded) return [];
+    const cutoff = localDate(atLocal(localDate(Date.now()), '12:00', -OVERDUE_DAYS));
+    return Array.from(S.fin.rows.values()).filter((f) => f.payment === 'unpaid' && f.date && f.date < cutoff);
   }
 
   // ---- public API (synchronous reads, same shapes as the old mock) --------
@@ -2061,6 +2434,34 @@
     localDate: localDate,
     localTime: localTime,
     atLocal: atLocal,
+
+    finance: {
+      ready: () => S.fin.loaded,
+      error: () => S.fin.error,
+      reload: loadFinance,
+      rows: () => Array.from(S.fin.rows.values()),
+      row: (id) => S.fin.rows.get(id) || null,
+      ledger: () => Array.from(S.fin.ledger.values()),
+      rates: (kind, personId) => ratesOf(kind, personId),
+      rateOn: rateOn,
+      settings: () => S.fin.settings,
+      overdue: overdueFinance,
+      overdueDays: OVERDUE_DAYS,
+      updateRows: updateFinanceRows,
+      deleteRow: deleteFinanceRow,
+      recalc: recalcFinance,
+      logManualSession: logManualSession,
+      addLedger: addLedger,
+      updateLedger: updateLedger,
+      deleteLedger: deleteLedger,
+      setRate: setRate,
+      deleteRate: deleteRate,
+      saveSetting: saveFinanceSetting,
+      parseMoney: parseMoney,
+      fmtMoney: fmtMoney,
+      paymentStatuses: PAYMENT_STATUSES,
+      payoutStatuses: PAYOUT_STATUSES
+    },
 
     getAvailability: availabilityOf,
     addAvailability: addAvailability,

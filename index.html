@@ -12,15 +12,16 @@
      runs twice. Two Supabase clients in one tab race over the same session. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
-<!-- ?v=N is bumped, on all four together, whenever any of them changes. There
+<!-- ?v=N is bumped, on all five together, whenever any of them changes. There
      is no build step to fingerprint them, and GitHub Pages serves a .js with a
      ten-minute cache: without this a returning tab can run a new index.html
      against an old db.js and call a function that does not exist yet. They
      move as one version because they are one layer. -->
-<script src="config.js?v=12"></script>
-<script src="supabaseClient.js?v=12"></script>
-<script src="importer.js?v=12"></script>
-<script src="db.js?v=12"></script>
+<script src="config.js?v=13"></script>
+<script src="supabaseClient.js?v=13"></script>
+<script src="importer.js?v=13"></script>
+<script src="db.js?v=13"></script>
+<script src="finance.js?v=13"></script>
 </head>
 <body>
 <x-dc>
@@ -627,6 +628,73 @@ textarea.input { min-height: 90px; resize: vertical; }
     .lb img { display: block; max-width: 100%; max-height: calc(100vh - 110px); object-fit: contain; background: #fff; cursor: zoom-out; }
     .lb-cap { color: #f2f2f3; font-size: 13px; max-width: 720px; text-align: center; }
     .lb-close { position: absolute; top: 10px; right: 12px; width: 36px; height: 36px; border: 1px solid rgba(255,255,255,0.4); background: transparent; color: #fff; font-size: 20px; cursor: pointer; }
+
+    /* ---- finance (admin) ---- */
+    .fin { display: flex; flex-direction: column; gap: 16px; }
+    .fin-head { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+    .fin-range { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+    .fin-seg { padding: 4px 10px; font-size: 13px; border: 1px solid var(--color-divider); }
+    .fin-seg.on { background: var(--color-accent); color: var(--color-bg); border-color: var(--color-accent); }
+    .fin-custom { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+    .fin-custom .input { width: auto; }
+    .fin-btn { padding: 4px 10px; font-size: 13px; }
+    .fin-banner { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; padding: 10px 14px; font-size: 14px; border: 1px solid #8c1d18; border-left-width: 4px; background: #fdf3f2; color: #5a1410; }
+    .fin-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+    .fin-kpi { padding: 10px 12px; background: var(--color-neutral-100); border: 1px solid var(--color-divider); }
+    .fin-kpi-label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 60%, transparent); }
+    .fin-kpi-value { font-size: 20px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+    .fin-tabs { display: flex; gap: 2px; flex-wrap: wrap; border-bottom: 1px solid var(--color-divider); }
+    .fin-tab { position: relative; padding: 8px 14px; font: inherit; font-size: 14px; background: transparent; border: 0; border-bottom: 2px solid transparent; color: inherit; cursor: pointer; margin-bottom: -1px; }
+    .fin-tab.on { border-bottom-color: var(--color-accent); color: var(--color-accent-700); font-weight: 600; }
+    .fin-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #8c1d18; margin-left: 6px; vertical-align: middle; }
+    .fin-card { display: flex; flex-direction: column; gap: 12px; }
+    .fin-card-head { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+    .fin-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .fin-toolbar .input, .fin-table .input { width: auto; }
+    .fin-muted { font-size: 13px; color: color-mix(in srgb, var(--color-text) 62%, transparent); }
+    .fin-err { margin: 0; font-size: 13px; color: #8c1d18; }
+    .fin-ok { margin: 0; font-size: 13px; color: #1f7a44; }
+    .fin-table-wrap { overflow-x: auto; }
+    .fin-table td, .fin-table th { white-space: nowrap; }
+    .fin-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .fin-table td.neg { color: #8c1d18; }
+    .fin-table td.warn { color: #8a5a00; font-weight: 600; }
+    .fin-table tr.sel td { background: var(--color-accent-100); }
+    .fin-table tr.click { cursor: pointer; }
+    .fin-table tr.click:hover td { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
+    .fin-table tr.missing td { background: #fdf3f2; }
+    .fin-table tr.hist td { font-size: 13px; padding-top: 2px; padding-bottom: 2px; }
+    .fin-table tfoot td { font-weight: 600; border-top: 1px solid var(--color-divider); }
+    .fin-table .input { min-height: 30px; padding: 3px 8px; font-size: 13px; }
+    .fin-money { width: 92px !important; text-align: right; font-variant-numeric: tabular-nums; }
+    .fin-sub { font-size: 11px; opacity: 0.6; }
+    .fin-tag { margin-left: 6px; font-size: 10px; padding: 1px 6px; }
+    .fin-tag-bad { background: #8c1d18; color: #fff; }
+    .fin-tag-warn { border: 1px solid #8a5a00; color: #8a5a00; }
+    .fin-tag-good { background: #e3f2e8; color: #1f5c36; }
+    .fin-tag-muted { background: var(--color-neutral-200); color: var(--color-neutral-800); }
+    .fin-form { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px dashed var(--color-divider); }
+    form.fin-form { border-style: solid; }
+    .fin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+    .fin-field { display: flex; flex-direction: column; gap: 4px; }
+    .fin-label { font-size: 12px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+    .fin-toggle { display: flex; gap: 4px; }
+    .fin-quick { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+    .fin-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+    .fin-inline { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
+    .fin-inline .input[type=date] { width: 150px; }
+    .fin-totals { display: flex; flex-direction: column; gap: 4px; align-self: flex-end; min-width: 240px; font-size: 14px; }
+    .fin-totals div { display: flex; justify-content: space-between; gap: 20px; font-variant-numeric: tabular-nums; }
+    .fin-totals div:last-child { border-top: 1px solid var(--color-divider); padding-top: 4px; font-size: 15px; }
+    .fin-chart svg { display: block; overflow: visible; }
+    .fin-chart svg rect:focus { outline: none; }
+    .fin-legend { display: flex; gap: 16px; font-size: 13px; margin-bottom: 6px; }
+    .fin-legend span, .fin-tip div { display: inline-flex; align-items: center; gap: 6px; }
+    .fin-legend i, .fin-tip i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+    .fin-legend i.line, .fin-tip i.line { height: 2px; width: 14px; background: var(--color-text); border-radius: 0; }
+    .fin-tip { position: absolute; top: 8px; transform: translateX(-50%); pointer-events: none; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; font-size: 12px; background: var(--color-bg); border: 1px solid var(--color-divider); box-shadow: var(--shadow-lg); white-space: nowrap; }
+    .fin-tip-title { font-weight: 600; }
+    .fin-tip b { font-variant-numeric: tabular-nums; margin-left: auto; padding-left: 8px; }
   </style>
 </helmet>
 
@@ -1091,6 +1159,13 @@ textarea.input { min-height: 90px; resize: vertical; }
           </div>
         </sc-for>
       </div>
+    </sc-if>
+
+    <sc-if value="{{sFinance}}" hint-placeholder-val="{{false}}">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">Admin</div>
+      <h1 style="margin:4px 0 6px">Finance</h1>
+      <p style="margin:0 0 20px;font-size:14px;opacity:0.65">Revenue, tutor payouts and costs. Only admins can see this tab or the numbers behind it.</p>
+      <div class="fin-root">{{financeEl}}</div>
     </sc-if>
 
     <sc-if value="{{sAdminLogs}}" hint-placeholder-val="{{false}}">
@@ -2788,7 +2863,8 @@ class Component extends DCLogic {
     menu: ['M4 6h16', 'M4 12h16', 'M4 18h16'],
     close: ['M6 6l12 12', 'M18 6L6 18'],
     logout: ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'M16 17l5-5-5-5', 'M21 12H9'],
-    edit: ['M4 20h4L19 9l-4-4L4 16z', 'M13.5 6.5l4 4']
+    edit: ['M4 20h4L19 9l-4-4L4 16z', 'M13.5 6.5l4 4'],
+    finance: ['M12 2v20', 'M16.5 6.5C16 5 14.3 4 12 4c-2.8 0-4.5 1.4-4.5 3.3 0 4.4 9 2.4 9 7.2C16.5 16.6 14.6 18 12 18c-2.5 0-4.3-1.1-4.8-2.8']
   };
 
   icon(name) {
@@ -3285,14 +3361,16 @@ class Component extends DCLogic {
     // The counts ride as a badge on the item: the rail has no room for
     // "Flagged (12)", and the badge still shows on a collapsed icon.
     const flaggedNow = me.role === 'admin' ? db.getFlaggedCount() : 0;
+    // Unpaid sessions more than two weeks old.
+    const overdueNow = me.role === 'admin' && db.finance ? db.finance.overdue().length : 0;
     // Admin has Assign and Results too: they are how an admin previews and
     // reviews any tutee's work, which a tutor does from My Students.
     // Past sessions a tutor has not yet marked completed or no-show.
     const unmarked = me.role === 'tutor' ? db.collapseSessions(db.sessionsNeedingStatus(me.id)).length : 0;
     const linkDefs = me.role === 'student' ? [['Dashboard', 'dash', 'dash'], ['Calendar', 'calendar', 'calendar'], ['Error Log', 'errorLog', 'errors']]
       : me.role === 'tutor' ? [['My Students', 'students', 'students'], ['Calendar', 'calendar', 'calendar', unmarked], ['Module Library', 'library', 'library'], ['Assign', 'assign', 'assign'], ['Results', 'results', 'results'], ['Error Logs', 'errorLogs', 'errors']]
-      : [['Users', 'users', 'users'], ['Calendar', 'calendar', 'calendar'], ['Modules', 'modules', 'modules'], ['Assign', 'assign', 'assign'], ['Results', 'results', 'results'], ['Import', 'import', 'import'], ['Flagged', 'flagged', 'flag', flaggedNow], ['Session Logs', 'adminLogs', 'logs'], ['Error Logs', 'errorLogs', 'errors']];
-    const activeOf = { calendar: 'calendar', dash: 'dash', students: 'students', profile: 'students', logs: 'students', library: 'library', assign: 'assign', results: 'results', users: 'users', modules: 'modules', editor: route.from === 'flagged' ? 'flagged' : 'modules', import: 'import', flagged: 'flagged', errorLog: 'errorLog', errorLogs: 'errorLogs', adminLogs: 'adminLogs' };
+      : [['Users', 'users', 'users'], ['Calendar', 'calendar', 'calendar'], ['Modules', 'modules', 'modules'], ['Assign', 'assign', 'assign'], ['Results', 'results', 'results'], ['Import', 'import', 'import'], ['Flagged', 'flagged', 'flag', flaggedNow], ['Session Logs', 'adminLogs', 'logs'], ['Finance', 'finance', 'finance', overdueNow], ['Error Logs', 'errorLogs', 'errors']];
+    const activeOf = { calendar: 'calendar', dash: 'dash', students: 'students', profile: 'students', logs: 'students', library: 'library', assign: 'assign', results: 'results', users: 'users', modules: 'modules', editor: route.from === 'flagged' ? 'flagged' : 'modules', import: 'import', flagged: 'flagged', errorLog: 'errorLog', errorLogs: 'errorLogs', adminLogs: 'adminLogs', finance: 'finance' };
     // Resolved up here because the nav needs to know where the viewer was
     // opened from; the screens below read the same object.
     const inViewer = route.name === 'module' || route.name === 'problem';
@@ -3328,6 +3406,10 @@ class Component extends DCLogic {
     // Session logs are staff-only: a tutee has no screen for them, and RLS
     // does not return them to one either.
     v.sLogs = route.name === 'logs'; v.sAdminLogs = route.name === 'adminLogs';
+    // Admin only. The tables refuse everyone else anyway; this keeps the
+    // screen from rendering an empty shell for a route typed by hand.
+    v.sFinance = route.name === 'finance' && me.role === 'admin' && !!window.PpaFinance;
+    v.financeEl = v.sFinance ? React.createElement(window.PpaFinance, { key: 'finance' }) : null;
 
     const scorePct = (correct, answered) => answered ? Math.round(100 * correct / answered) + '%' : '\u2014';
     const plural = (n, one, many) => n + ' ' + (n === 1 ? one : (many || one + 's'));
