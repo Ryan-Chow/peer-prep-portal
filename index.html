@@ -17,10 +17,10 @@
      ten-minute cache: without this a returning tab can run a new index.html
      against an old db.js and call a function that does not exist yet. They
      move as one version because they are one layer. -->
-<script src="config.js?v=11"></script>
-<script src="supabaseClient.js?v=11"></script>
-<script src="importer.js?v=11"></script>
-<script src="db.js?v=11"></script>
+<script src="config.js?v=12"></script>
+<script src="supabaseClient.js?v=12"></script>
+<script src="importer.js?v=12"></script>
+<script src="db.js?v=12"></script>
 </head>
 <body>
 <x-dc>
@@ -908,8 +908,13 @@ textarea.input { min-height: 90px; resize: vertical; }
             <sc-if value="{{w.logDone}}" hint-placeholder-val="{{false}}"><span style="color:#1f7a44;font-weight:700" title="Session log submitted">&#10003;</span></sc-if>
             <sc-if value="{{w.logNeeded}}" hint-placeholder-val="{{false}}"><span class="tag" style="border:1px solid #8c1d18;color:#8c1d18">Log needed</span></sc-if>
             <sc-if value="{{w.canMark}}" hint-placeholder-val="{{false}}">
-              <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.complete}}">Completed</button>
-              <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.noShow}}">No-show</button>
+              <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.complete}}">{{w.completeLabel}}</button>
+              <sc-if value="{{w.isSolo}}" hint-placeholder-val="{{true}}">
+                <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.noShow}}">No-show</button>
+              </sc-if>
+            </sc-if>
+            <sc-if value="{{w.isGroup}}" hint-placeholder-val="{{false}}">
+              <button type="button" class="btn btn-secondary" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.open}}">Open</button>
             </sc-if>
             <sc-if value="{{w.canLog}}" hint-placeholder-val="{{false}}">
               <button type="button" class="btn btn-secondary" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.log}}">{{w.logLabel}}</button>
@@ -922,9 +927,14 @@ textarea.input { min-height: 90px; resize: vertical; }
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--color-neutral-300);font-size:13px">
               <a href="#" style="min-width:210px;text-decoration:none" sc-camel-on-click="{{w.open}}">{{w.when}}</a>
               <span style="flex:1;min-width:120px">{{w.who}}</span>
-              <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.complete}}">Completed</button>
-              <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.noShow}}">No-show</button>
-              <button type="button" class="btn btn-secondary" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.log}}">{{w.logLabel}}</button>
+              <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.complete}}">{{w.completeLabel}}</button>
+              <sc-if value="{{w.isSolo}}" hint-placeholder-val="{{true}}">
+                <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.noShow}}">No-show</button>
+                <button type="button" class="btn btn-secondary" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.log}}">{{w.logLabel}}</button>
+              </sc-if>
+              <sc-if value="{{w.isGroup}}" hint-placeholder-val="{{false}}">
+                <button type="button" class="btn btn-secondary" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{w.open}}">Open</button>
+              </sc-if>
             </div>
           </sc-for>
         </sc-if>
@@ -1710,6 +1720,31 @@ textarea.input { min-height: 90px; resize: vertical; }
         <div class="card-title">{{popTitle}}</div>
         <div style="font-size:14px;line-height:1.6">{{popWhen}}<br>{{popTime}}</div>
         <sc-if value="{{popHasTutorLine}}" hint-placeholder-val="{{false}}"><div style="font-size:13px">{{popTutorLine}}</div></sc-if>
+        <sc-if value="{{popIsGroup}}" hint-placeholder-val="{{false}}">
+          <div class="cal-pop-roster" style="display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--color-neutral-300);padding-top:8px">
+            <sc-for list="{{popMembers}}" as="m" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px">
+                <span style="flex:1;min-width:110px">{{m.name}}</span>
+                <span class="tag" style="{{m.statusStyle}}">{{m.statusLabel}}</span>
+                <sc-if value="{{m.logDone}}" hint-placeholder-val="{{false}}"><span style="color:#1f7a44;font-weight:700" title="Session log submitted">&#10003;</span></sc-if>
+                <sc-if value="{{m.logNeeded}}" hint-placeholder-val="{{false}}"><span class="tag" style="border:1px solid #8c1d18;color:#8c1d18">Log needed</span></sc-if>
+                <sc-if value="{{m.canMark}}" hint-placeholder-val="{{false}}">
+                  <button type="button" class="btn btn-ghost" style="padding:1px 8px;font-size:12px" disabled="{{m.busy}}" sc-camel-on-click="{{m.complete}}">Completed</button>
+                  <button type="button" class="btn btn-ghost" style="padding:1px 8px;font-size:12px" disabled="{{m.busy}}" sc-camel-on-click="{{m.noShow}}">No-show</button>
+                </sc-if>
+                <sc-if value="{{m.canCancel}}" hint-placeholder-val="{{false}}">
+                  <button type="button" class="btn btn-ghost" style="padding:1px 8px;font-size:12px" disabled="{{m.busy}}" sc-camel-on-click="{{m.cancel}}">Can&#8217;t make it</button>
+                </sc-if>
+                <sc-if value="{{m.canReopen}}" hint-placeholder-val="{{false}}">
+                  <button type="button" class="btn btn-ghost" style="padding:1px 8px;font-size:12px" disabled="{{m.busy}}" sc-camel-on-click="{{m.reopen}}">Undo</button>
+                </sc-if>
+                <sc-if value="{{m.canLog}}" hint-placeholder-val="{{false}}">
+                  <button type="button" class="btn btn-secondary" style="padding:1px 8px;font-size:12px" disabled="{{m.busy}}" sc-camel-on-click="{{m.log}}">{{m.logLabel}}</button>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
         <sc-if value="{{popHasLoc}}" hint-placeholder-val="{{false}}">
           <div style="font-size:13px">Where:
             <sc-if value="{{popLocIsLink}}" hint-placeholder-val="{{false}}"><a href="{{popLoc}}" target="_blank" rel="noopener noreferrer" style="word-break:break-all">{{popLoc}}</a></sc-if>
@@ -1728,8 +1763,10 @@ textarea.input { min-height: 90px; resize: vertical; }
             <button type="button" class="btn btn-secondary" style="padding:3px 10px;font-size:12px" disabled="{{popBusy}}" sc-camel-on-click="{{popEdit}}">Edit</button>
           </sc-if>
           <sc-if value="{{popIsScheduled}}" hint-placeholder-val="{{false}}">
-            <button type="button" class="btn btn-secondary" style="padding:3px 10px;font-size:12px" disabled="{{popBusy}}" sc-camel-on-click="{{popComplete}}">Mark completed</button>
-            <button type="button" class="btn btn-secondary" style="padding:3px 10px;font-size:12px" disabled="{{popBusy}}" sc-camel-on-click="{{popNoShow}}">Mark no-show</button>
+            <button type="button" class="btn btn-secondary" style="padding:3px 10px;font-size:12px" disabled="{{popBusy}}" sc-camel-on-click="{{popComplete}}">{{popCompleteLabel}}</button>
+            <sc-if value="{{popCanNoShow}}" hint-placeholder-val="{{false}}">
+              <button type="button" class="btn btn-secondary" style="padding:3px 10px;font-size:12px" disabled="{{popBusy}}" sc-camel-on-click="{{popNoShow}}">Mark no-show</button>
+            </sc-if>
             <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:12px" disabled="{{popBusy}}" sc-camel-on-click="{{popCancel}}">Cancel session</button>
           </sc-if>
           <sc-if value="{{popCanCancelFuture}}" hint-placeholder-val="{{false}}">
@@ -1762,10 +1799,14 @@ textarea.input { min-height: 90px; resize: vertical; }
             </sc-raw-select>
           </div>
         </sc-if>
-        <div class="field"><label>Tutee</label>
-          <sc-raw-select class="input" name="fmTutee" value="{{fmTutee}}" disabled="{{fmNoTutor}}" sc-camel-on-change="{{onFmTutee}}">
-            <sc-for list="{{fmTuteeOpts}}" as="o"><option value="{{o.id}}">{{o.label}}</option></sc-for>
-          </sc-raw-select>
+        <div class="field"><label>Tutees</label>
+          <sc-if value="{{fmRosterEmpty}}" hint-placeholder-val="{{false}}"><div style="font-size:13px;opacity:0.65">{{fmRosterEmptyText}}</div></sc-if>
+          <div class="cal-roster" style="display:flex;flex-direction:column;gap:4px;max-height:180px;overflow:auto;font-size:14px">
+            <sc-for list="{{fmTuteeOpts}}" as="o" hint-placeholder-count="2">
+              <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="fmTutee" value="{{o.id}}" checked="{{o.on}}" sc-camel-on-change="{{o.toggle}}">{{o.label}}</label>
+            </sc-for>
+          </div>
+          <sc-if value="{{fmHasRosterHint}}" hint-placeholder-val="{{false}}"><div style="font-size:12px;opacity:0.65;margin-top:4px">{{fmRosterHint}}</div></sc-if>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <div class="field" style="flex:1;min-width:150px"><label>Date</label><input class="input" name="fmDate" type="date" value="{{fmDate}}" sc-camel-on-change="{{onFmDate}}"></div>
@@ -1798,10 +1839,15 @@ textarea.input { min-height: 90px; resize: vertical; }
         <div class="field"><label>Notes</label><textarea class="input" name="fmNotes" rows="2" value="{{fmNotes}}" sc-camel-on-change="{{onFmNotes}}"></textarea></div>
         <sc-if value="{{fmIsNew}}" hint-placeholder-val="{{true}}">
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:14px">
-            <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="fmRepeat" checked="{{fmRepeat}}" sc-camel-on-change="{{onFmRepeat}}">Repeat weekly for</label>
+            <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="fmRepeat" checked="{{fmRepeat}}" sc-camel-on-change="{{onFmRepeat}}">Repeat</label>
+            <sc-raw-select class="input" name="fmEvery" style="width:auto" value="{{fmEvery}}" disabled="{{fmNoRepeat}}" sc-camel-on-change="{{onFmEvery}}">
+              <sc-for list="{{fmEveryOpts}}" as="o"><option value="{{o.id}}">{{o.label}}</option></sc-for>
+            </sc-raw-select>
+            <span>for</span>
             <input class="input" name="fmWeeks" type="number" min="2" max="26" style="width:80px" disabled="{{fmNoRepeat}}" value="{{fmWeeks}}" sc-camel-on-change="{{onFmWeeks}}">
-            <span>weeks</span>
+            <span>sessions</span>
           </div>
+          <sc-if value="{{fmHasRepeatEnd}}" hint-placeholder-val="{{false}}"><div style="font-size:12px;opacity:0.65">{{fmRepeatEnd}}</div></sc-if>
         </sc-if>
         <sc-if value="{{fmHasScope}}" hint-placeholder-val="{{false}}">
           <div class="field"><label>Apply changes to</label>
@@ -2855,7 +2901,8 @@ class Component extends DCLogic {
   blankAvailForm() { return { weekday: '2', start: '15:00', end: '18:00' }; }
 
   // The create/edit form. `init` is { id } to edit a session, or any of
-  // { date, time, tutorId, tuteeId } to prefill a new one.
+  // { date, time, tutorId, tuteeId } to prefill a new one. `tuteeIds` is the
+  // roster: more than one makes a group session.
   blankCalForm(init) {
     const db = window.db, me = db.me();
     const s = init && init.id ? db.getSession(init.id) : null;
@@ -2863,10 +2910,10 @@ class Component extends DCLogic {
       const minutes = Math.round((s.end - s.start) / 60000);
       const preset = ['30', '45', '60', '90'].indexOf(String(minutes)) >= 0;
       return {
-        id: s.id, tutorId: s.tutorId, tuteeId: s.tuteeId,
+        id: s.id, tutorId: s.tutorId, tuteeIds: db.getSessionGroup(s.id).map((r) => r.tuteeId),
         date: db.localDate(s.start), time: db.localTime(s.start),
         duration: preset ? String(minutes) : 'custom', custom: preset ? '' : String(minutes),
-        location: s.location, notes: s.notes, repeat: false, weeks: '8',
+        location: s.location, notes: s.notes, repeat: false, weeks: '8', every: '1',
         scope: 'one', err: '', busy: false
       };
     }
@@ -2874,9 +2921,9 @@ class Component extends DCLogic {
     const tutees = tutorId ? db.getStudentsOf(tutorId).filter((u) => u.active) : [];
     const tuteeId = (init && init.tuteeId) || (tutees.length === 1 ? tutees[0].id : '');
     return {
-      id: '', tutorId: tutorId, tuteeId: tuteeId,
+      id: '', tutorId: tutorId, tuteeIds: tuteeId ? [tuteeId] : [],
       date: (init && init.date) || this.todayLocal(), time: (init && init.time) || '16:00',
-      duration: '60', custom: '', location: '', notes: '', repeat: false, weeks: '8',
+      duration: '60', custom: '', location: '', notes: '', repeat: false, weeks: '8', every: '1',
       scope: 'one', err: '', busy: false
     };
   }
@@ -3241,7 +3288,7 @@ class Component extends DCLogic {
     // Admin has Assign and Results too: they are how an admin previews and
     // reviews any tutee's work, which a tutor does from My Students.
     // Past sessions a tutor has not yet marked completed or no-show.
-    const unmarked = me.role === 'tutor' ? db.sessionsNeedingStatus(me.id).length : 0;
+    const unmarked = me.role === 'tutor' ? db.collapseSessions(db.sessionsNeedingStatus(me.id)).length : 0;
     const linkDefs = me.role === 'student' ? [['Dashboard', 'dash', 'dash'], ['Calendar', 'calendar', 'calendar'], ['Error Log', 'errorLog', 'errors']]
       : me.role === 'tutor' ? [['My Students', 'students', 'students'], ['Calendar', 'calendar', 'calendar', unmarked], ['Module Library', 'library', 'library'], ['Assign', 'assign', 'assign'], ['Results', 'results', 'results'], ['Error Logs', 'errorLogs', 'errors']]
       : [['Users', 'users', 'users'], ['Calendar', 'calendar', 'calendar'], ['Modules', 'modules', 'modules'], ['Assign', 'assign', 'assign'], ['Results', 'results', 'results'], ['Import', 'import', 'import'], ['Flagged', 'flagged', 'flag', flaggedNow], ['Session Logs', 'adminLogs', 'logs'], ['Error Logs', 'errorLogs', 'errors']];
@@ -4766,19 +4813,36 @@ class Component extends DCLogic {
     // A tutee's session with a tutor they have since moved on from: RLS no
     // longer returns that tutor's profile, so there is no name to show.
     const tutorName = (id) => { const u = id && db.getUser(id); return u ? u.name : (me.role === 'student' ? 'a previous tutor' : '\u2014'); };
-    const labelOf = (s) => (me.role === 'student' ? tutorName(s.tutorId) : personName(s.tuteeId));
+    // `s` is a row or a collapsed occurrence (db.collapseSessions), whose
+    // `members` are one row per tutee. A tutee's cache holds only their own row
+    // of a group, so they see the tutor, never the other tutees.
+    const membersOf = (s) => s.members || db.getSessionGroup(s.id);
+    const isGroupOf = (s) => membersOf(s).length > 1;
+    const labelOf = (s) => {
+      if (me.role === 'student') return tutorName(s.tutorId) + (s.groupId ? ' (group)' : '');
+      const rows = membersOf(s);
+      return rows.length > 1 ? 'Group: ' + rows.map((r) => personName(r.tuteeId)).join(', ') : personName(s.tuteeId);
+    };
     const nowMs = Date.now();
-    // Past, not cancelled or a no-show: a session that happened needs a sheet.
+    // Past, not cancelled or a no-show: a session that happened needs a sheet,
+    // one per tutee who came. A group is done when every one of them has one.
+    const rowLogState = (r) => {
+      if (!staff || r.end > nowMs || (r.status !== 'scheduled' && r.status !== 'completed')) return null;
+      const log = db.getLogForSession(r.id);
+      return { done: !!(log && log.status === 'submitted') };
+    };
     const logState = (s) => {
-      if (!staff || s.end > nowMs || (s.status !== 'scheduled' && s.status !== 'completed')) return null;
-      const log = db.getLogForSession(s.id);
-      return { done: !!(log && log.status === 'submitted'), log: log };
+      const states = membersOf(s).map(rowLogState).filter(Boolean);
+      if (!states.length) return null;
+      const done = states.filter((x) => x.done).length;
+      return { done: done === states.length, count: done, of: states.length };
     };
     const whenText = (s) => new Date(s.start).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + ' \u00b7 ' + this.fmtSpan(s);
     const icsEvent = (s) => ({
-      uid: s.id + '@peerprepacademy',
+      uid: (s.groupId || s.id) + '@peerprepacademy',
       start: s.start, end: s.end, cancelled: s.status === 'cancelled',
-      summary: me.role === 'student' ? 'Tutoring with ' + tutorName(s.tutorId) : 'Tutoring: ' + personName(s.tuteeId),
+      summary: me.role === 'student' ? (s.groupId ? 'Group tutoring with ' : 'Tutoring with ') + tutorName(s.tutorId)
+        : isGroupOf(s) ? 'Group tutoring: ' + membersOf(s).map((r) => personName(r.tuteeId)).join(', ') : 'Tutoring: ' + personName(s.tuteeId),
       location: s.location,
       description: [me.role === 'admin' ? 'Tutor: ' + personName(s.tutorId) : '', s.notes].filter(Boolean).join('\n')
     });
@@ -4805,11 +4869,14 @@ class Component extends DCLogic {
       return !log ? 'Log session' : log.status === 'submitted' ? 'View log' : 'Finish log';
     };
     const quickStatus = (s, status) => () => { db.updateSessions(s.id, { status: status }, 'one').catch(() => {}); };
+    // "Everyone came": only the tutees still scheduled, so a no-show stays one.
+    const markAttended = (s) => db.setSessionStatus(membersOf(s).filter((r) => r.status === 'scheduled').map((r) => r.id), 'completed');
+    const repeatText = (s) => (s.repeatWeeks === 2 ? 'Every other week' : s.repeatWeeks > 2 ? 'Every ' + s.repeatWeeks + ' weeks' : 'Weekly series');
 
     // Which sessions the calendar draws. A tutor's and a tutee's caches only
     // hold their own; an admin narrows everyone's by the tutor filter.
     const calTutor = me.role === 'tutor' ? me.id : me.role === 'admin' ? CAL.tutor : '';
-    const visible = db.getSessions({ tutorId: calTutor || undefined });
+    const visible = db.collapseSessions(db.getSessions({ tutorId: calTutor || undefined }));
     const tutorsSorted = db.getUsers().filter((u) => u.role === 'tutor').sort((a, b) => a.name.localeCompare(b.name));
     const tutorColor = (id) => {
       const i = tutorsSorted.findIndex((t) => t.id === id);
@@ -4911,10 +4978,12 @@ class Component extends DCLogic {
 
     // ---- event popover ----
     const POP = st.calPop;
-    const popS = POP ? db.getSession(POP.id) : null;
+    const popS = POP && db.getSession(POP.id) ? db.collapseSessions(db.getSessionGroup(POP.id))[0] : null;
     v.hasCalPop = !!popS;
+    v.popIsGroup = false; v.popMembers = [];
     if (popS) {
       const s = popS, stt = SST[s.status] || SST.scheduled;
+      const members = s.members, isGroup = members.length > 1;
       const setPop = (patch) => this.setState({ calPop: Object.assign({}, this.state.calPop, patch) });
       const act = (work, close) => () => {
         if (this.state.calPop && this.state.calPop.busy) return;
@@ -4924,13 +4993,14 @@ class Component extends DCLogic {
           (err) => setPop({ busy: false, err: (err && err.message) || 'That did not save.' })
         );
       };
-      const series = s.recurrenceId ? db.getSessions({}).filter((x) => x.recurrenceId === s.recurrenceId) : [];
-      const later = db.getSessionScope(s.id, 'future').length;
+      const series = s.recurrenceId ? db.collapseSessions(db.getSessions({}).filter((x) => x.recurrenceId === s.recurrenceId)) : [];
+      const later = db.collapseSessions(db.getSessionScope(s.id, 'future')).length;
       v.popClose = () => this.setState({ calPop: null });
       v.popStop = (e) => { if (e && e.stopPropagation) e.stopPropagation(); };
       v.popStatus = stt.label;
       v.popStatusStyle = 'background:' + stt.bg + ';color:' + stt.fg + ';border:1px solid ' + stt.edge;
-      v.popTitle = me.role === 'student' ? 'Session with ' + tutorName(s.tutorId) : personName(s.tuteeId);
+      v.popTitle = me.role === 'student' ? (s.groupId ? 'Group session with ' : 'Session with ') + tutorName(s.tutorId)
+        : isGroup ? 'Group session \u00b7 ' + members.length + ' tutees' : personName(s.tuteeId);
       v.popWhen = new Date(s.start).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
       v.popTime = this.fmtSpan(s) + ' (' + Math.round((s.end - s.start) / 60000) + ' min)';
       v.popTutorLine = me.role === 'admin' ? 'Tutor: ' + personName(s.tutorId) : '';
@@ -4942,12 +5012,14 @@ class Component extends DCLogic {
       v.popHasNotes = !!s.notes;
       v.popNotes = s.notes;
       v.popSeries = series.length > 1
-        ? 'Weekly series \u00b7 ' + (series.findIndex((x) => x.id === s.id) + 1) + ' of ' + series.length
+        ? repeatText(s) + ' \u00b7 ' + (series.findIndex((x) => x.members.some((m) => m.id === s.id)) + 1) + ' of ' + series.length
         : '';
       v.popHasSeries = !!v.popSeries;
       const ls = logState(s);
       v.popHasLogState = !!ls;
-      v.popLogState = ls ? (ls.done ? '\u2713 Session log submitted' : 'Log needed') : '';
+      v.popLogState = !ls ? ''
+        : ls.of > 1 ? (ls.done ? '\u2713 All ' + ls.of + ' session logs submitted' : ls.count + ' of ' + ls.of + ' session logs submitted')
+        : (ls.done ? '\u2713 Session log submitted' : 'Log needed');
       v.popLogStyle = ls && ls.done ? 'color:#1f7a44' : 'color:#8c1d18';
       v.popGoogle = this.googleCalendarHref(icsEvent(s));
       v.popErr = POP.err; v.popHasErr = !!POP.err;
@@ -4958,22 +5030,48 @@ class Component extends DCLogic {
       v.popCanCancelFuture = v.popIsScheduled && later > 1;
       v.popCancelFutureLabel = 'Cancel this and ' + plural(later - 1, 'later one');
       v.popEdit = () => openForm({ id: s.id });
-      v.popComplete = act(() => db.updateSessions(s.id, { status: 'completed' }, 'one'));
+      v.popCanNoShow = !isGroup;
+      v.popCompleteLabel = isGroup ? 'Mark everyone completed' : 'Mark completed';
+      v.popComplete = act(() => (isGroup ? markAttended(s) : db.updateSessions(s.id, { status: 'completed' }, 'one')));
       v.popNoShow = act(() => db.updateSessions(s.id, { status: 'no_show' }, 'one'));
       v.popReopen = act(() => db.updateSessions(s.id, { status: 'scheduled' }, 'one'));
       v.popCancel = act(() => db.updateSessions(s.id, { status: 'cancelled' }, 'one'), true);
       v.popCancelFuture = act(() => db.updateSessions(s.id, { status: 'cancelled' }, 'future'), true);
       v.popDelete = () => openDialog({
         kicker: 'Delete session',
-        title: personName(s.tuteeId) + ' \u00b7 ' + whenText(s),
-        body: 'Remove this session from the calendar altogether? Use Cancel instead if it was scheduled and called off.',
+        title: labelOf(s) + ' \u00b7 ' + whenText(s),
+        body: isGroup
+          ? 'Remove this group session from the calendar for all ' + members.length + ' tutees? Use Cancel instead if it was scheduled and called off.'
+          : 'Remove this session from the calendar altogether? Use Cancel instead if it was scheduled and called off.',
         lines: ['Any session log written for it is kept.'],
         confirmLabel: 'Delete',
         run: () => db.deleteSession(s.id).then(() => this.setState({ calPop: null }))
       });
-      v.popCanLog = me.role === 'tutor' && s.status !== 'cancelled' && s.start <= nowMs;
+      const from = route.name === 'students' ? 'students' : 'calendar';
+      v.popCanLog = me.role === 'tutor' && !isGroup && s.status !== 'cancelled' && s.start <= nowMs;
       v.popLogLabel = logLabel(s);
-      v.popLog = () => logFromSession(s, route.name === 'students' ? 'students' : 'calendar');
+      v.popLog = () => logFromSession(s, from);
+
+      // One line per tutee of a group: their own status and their own sheet.
+      v.popIsGroup = isGroup;
+      v.popMembers = isGroup ? members.map((m) => {
+        const mst = SST[m.status] || SST.scheduled, mls = rowLogState(m);
+        const to = (status) => act(() => db.setSessionStatus([m.id], status));
+        return {
+          name: personName(m.tuteeId),
+          statusLabel: mst.label,
+          statusStyle: 'background:' + mst.bg + ';color:' + mst.fg + ';border:1px solid ' + mst.edge + (m.status === 'cancelled' ? ';text-decoration:line-through' : ''),
+          logDone: !!(mls && mls.done), logNeeded: !!(mls && !mls.done),
+          canMark: canSchedule && m.status === 'scheduled' && m.start <= nowMs,
+          canCancel: canSchedule && m.status === 'scheduled' && m.start > nowMs,
+          canReopen: canSchedule && m.status !== 'scheduled' && s.status !== 'cancelled',
+          complete: to('completed'), noShow: to('no_show'), cancel: to('cancelled'), reopen: to('scheduled'),
+          canLog: me.role === 'tutor' && m.status !== 'cancelled' && m.start <= nowMs,
+          logLabel: logLabel(m),
+          log: () => logFromSession(m, from),
+          busy: !!POP.busy
+        };
+      }) : [];
     }
 
     // ---- create / edit form ----
@@ -4985,7 +5083,7 @@ class Component extends DCLogic {
       const editing = FM.id ? db.getSession(FM.id) : null;
       const minutes = FM.duration === 'custom' ? Math.round(Number(FM.custom)) : Number(FM.duration);
       v.fmKicker = editing ? 'Edit session' : 'New session';
-      v.fmTitle = editing ? personName(editing.tuteeId) + ' \u00b7 ' + whenText(editing) : 'Schedule a session';
+      v.fmTitle = editing ? labelOf(editing) + ' \u00b7 ' + whenText(editing) : 'Schedule a session';
       v.fmClose = () => { if (!FM.busy) this.setState({ calForm: null }); };
       v.fmStop = (e) => { if (e && e.stopPropagation) e.stopPropagation(); };
 
@@ -4995,20 +5093,32 @@ class Component extends DCLogic {
       v.fmTutorOpts = [{ id: '', label: 'Choose a tutor\u2026' }].concat(tutorsSorted.filter((t) => t.active || t.id === FM.tutorId).map((t) => ({ id: t.id, label: t.name + (t.active ? '' : ' (deactivated)') })));
       v.onFmTutor = (e) => {
         const tid = e.target.value;
-        const keep = db.getStudentsOf(tid).some((x) => x.id === this.state.calForm.tuteeId);
-        setFM({ tutorId: tid, tuteeId: keep ? this.state.calForm.tuteeId : '', err: '' });
+        const linked = db.getStudentsOf(tid).map((x) => x.id);
+        setFM({ tutorId: tid, tuteeIds: this.state.calForm.tuteeIds.filter((t) => linked.indexOf(t) >= 0), err: '' });
       };
+      // The tutor's active tutees, plus anyone already on the session who no
+      // longer is, so editing it does not silently drop them.
       const tutees = FM.tutorId ? db.getStudentsOf(FM.tutorId).filter((x) => x.active) : [];
-      if (FM.tuteeId && !tutees.some((x) => x.id === FM.tuteeId)) {
-        const cur = db.getUser(FM.tuteeId);
+      FM.tuteeIds.forEach((id) => {
+        if (tutees.some((x) => x.id === id)) return;
+        const cur = db.getUser(id);
         if (cur) tutees.push(cur);
-      }
+      });
       tutees.sort((x, y) => x.name.localeCompare(y.name));
-      v.fmTutee = FM.tuteeId;
-      v.fmTuteeOpts = [{ id: '', label: FM.tutorId ? (tutees.length ? 'Choose a tutee\u2026' : 'No tutees linked to this tutor') : 'Choose a tutor first' }]
-        .concat(tutees.map((x) => ({ id: x.id, label: x.name })));
-      v.fmNoTutor = !FM.tutorId;
-      v.onFmTutee = ff('tuteeId');
+      const picked = FM.tuteeIds.length;
+      v.fmTuteeOpts = tutees.map((x) => ({
+        id: x.id, label: x.name + (x.active ? '' : ' (deactivated)'),
+        on: FM.tuteeIds.indexOf(x.id) >= 0,
+        toggle: (e) => {
+          const cur = this.state.calForm.tuteeIds.filter((t) => t !== x.id);
+          setFM({ tuteeIds: e.target.checked ? cur.concat([x.id]) : cur, err: '' });
+        }
+      }));
+      v.fmRosterEmpty = !FM.tutorId || !tutees.length;
+      v.fmRosterEmptyText = FM.tutorId ? 'No tutees linked to this tutor.' : 'Choose a tutor first.';
+      v.fmRosterHint = picked > 1 ? 'Group session \u00b7 ' + picked + ' tutees. Each one gets their own status and session log.'
+        : tutees.length > 1 ? 'Tick more than one for a group session.' : '';
+      v.fmHasRosterHint = !!v.fmRosterHint;
       v.fmDate = FM.date; v.onFmDate = ff('date');
 
       // Every quarter hour from 6am to 10pm, marked where the tutor has said
@@ -5051,7 +5161,14 @@ class Component extends DCLogic {
       v.fmNoRepeat = !FM.repeat;
       v.onFmRepeat = (e) => setFM({ repeat: !!e.target.checked, err: '' });
       v.fmWeeks = FM.weeks; v.onFmWeeks = ff('weeks');
-      const laterCount = editing ? db.getSessionScope(editing.id, 'future').length : 0;
+      v.fmEvery = FM.every; v.onFmEvery = ff('every');
+      v.fmEveryOpts = [['1', 'every week'], ['2', 'every other week']].map(([id, label]) => ({ id: id, label: label }));
+      const count = Math.round(Number(FM.weeks)), every = Number(FM.every) || 1;
+      v.fmRepeatEnd = FM.repeat && FM.date && count >= 2 && count <= 26
+        ? 'Last one on ' + new Date(db.atLocal(FM.date, '12:00', 7 * every * (count - 1))).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+        : '';
+      v.fmHasRepeatEnd = !!v.fmRepeatEnd;
+      const laterCount = editing ? db.collapseSessions(db.getSessionScope(editing.id, 'future')).length : 0;
       v.fmHasScope = !!editing && laterCount > 1;
       v.fmScopeOne = FM.scope !== 'future'; v.fmScopeFuture = FM.scope === 'future';
       v.fmPickOne = () => setFM({ scope: 'one' });
@@ -5059,24 +5176,27 @@ class Component extends DCLogic {
       v.fmFutureLabel = 'This and all future in the series (' + laterCount + ')';
       v.fmErr = FM.err; v.fmHasErr = !!FM.err;
       v.fmBusy = FM.busy;
-      v.fmSaveLabel = editing ? 'Save changes' : (FM.repeat ? 'Schedule ' + (Number(FM.weeks) || 0) + ' sessions' : 'Schedule');
+      v.fmSaveLabel = editing ? 'Save changes'
+        : FM.repeat ? 'Schedule ' + (Number(FM.weeks) || 0) + (picked > 1 ? ' group sessions' : ' sessions')
+        : picked > 1 ? 'Schedule group session' : 'Schedule';
       v.fmSave = () => {
         if (FM.busy) return;
         if (!FM.tutorId) { setFM({ err: 'Choose a tutor.' }); return; }
-        if (!FM.tuteeId) { setFM({ err: 'Choose a tutee.' }); return; }
+        if (!picked) { setFM({ err: 'Choose at least one tutee.' }); return; }
+        if (picked > db.maxGroupSize) { setFM({ err: 'A group session holds up to ' + db.maxGroupSize + ' tutees.' }); return; }
         if (!FM.date || !FM.time) { setFM({ err: 'Choose a date and a start time.' }); return; }
         if (!(minutes >= 5 && minutes <= 720)) { setFM({ err: 'Enter a length between 5 and 720 minutes.' }); return; }
-        const weeks = FM.repeat ? Math.round(Number(FM.weeks)) : 1;
-        if (FM.repeat && !(weeks >= 2 && weeks <= 26)) { setFM({ err: 'Repeat for 2 to 26 weeks.' }); return; }
+        if (FM.repeat && !(count >= 2 && count <= 26)) { setFM({ err: 'Repeat for 2 to 26 sessions.' }); return; }
         setFM({ busy: true, err: '' });
         const work = editing
           ? db.updateSessions(editing.id, {
             date: FM.date, time: FM.time, minutes: minutes,
-            location: FM.location, notes: FM.notes, tutorId: FM.tutorId, tuteeId: FM.tuteeId
+            location: FM.location, notes: FM.notes, tutorId: FM.tutorId, tuteeIds: FM.tuteeIds
           }, FM.scope)
           : db.createSessions({
-            tutorId: FM.tutorId, tuteeId: FM.tuteeId, date: FM.date, time: FM.time,
-            minutes: minutes, location: FM.location, notes: FM.notes, weeks: weeks
+            tutorId: FM.tutorId, tuteeIds: FM.tuteeIds, date: FM.date, time: FM.time,
+            minutes: minutes, location: FM.location, notes: FM.notes,
+            count: FM.repeat ? count : 1, everyWeeks: FM.repeat ? every : 1
           });
         work.then(
           () => this.setState({ calForm: null }),
@@ -5103,27 +5223,32 @@ class Component extends DCLogic {
       const ws = this.calWeekStart(this.todayLocal());
       const from = db.atLocal(ws, '00:00'), to = db.atLocal(ws, '00:00', 7);
       const row = (s) => {
-        const stt = SST[s.status] || SST.scheduled, ls = logState(s);
+        const stt = SST[s.status] || SST.scheduled, ls = logState(s), group = isGroupOf(s);
         return {
-          when: whenText(s), who: personName(s.tuteeId), loc: s.location,
+          when: whenText(s), who: labelOf(s), loc: s.location,
+          isGroup: group, isSolo: !group,
+          completeLabel: group ? 'Everyone came' : 'Completed',
           statusLabel: stt.label,
           statusStyle: 'background:' + stt.bg + ';color:' + stt.fg + ';border:1px solid ' + stt.edge + (s.status === 'cancelled' ? ';text-decoration:line-through' : ''),
           hasLogState: !!ls, logDone: !!(ls && ls.done), logNeeded: !!(ls && !ls.done),
           canMark: s.status === 'scheduled' && s.start <= nowMs,
-          complete: quickStatus(s, 'completed'),
+          complete: group ? () => { markAttended(s).catch(() => {}); } : quickStatus(s, 'completed'),
           noShow: quickStatus(s, 'no_show'),
-          canLog: s.status !== 'cancelled' && s.start <= nowMs,
+          canLog: !group && s.status !== 'cancelled' && s.start <= nowMs,
           logLabel: logLabel(s),
           log: () => logFromSession(s, 'students'),
           open: () => openPop(s.id)
         };
       };
-      v.weekSessions = db.getSessions({ tutorId: me.id, from: from, to: to }).map(row);
+      v.weekSessions = db.collapseSessions(db.getSessions({ tutorId: me.id, from: from, to: to })).map(row);
       v.noWeekSessions = v.weekSessions.length === 0;
       // Before this week only: this week's own stragglers are already in the
       // list above with their buttons.
-      const stale = db.sessionsNeedingStatus(me.id).filter((s) => s.start < from);
-      const pending = db.sessionsNeedingStatus(me.id).length;
+      // Collapsed from the unmarked rows alone, so a group lists only the
+      // tutees still to mark.
+      const unmarkedOcc = db.collapseSessions(db.sessionsNeedingStatus(me.id));
+      const stale = unmarkedOcc.filter((s) => s.start < from);
+      const pending = unmarkedOcc.length;
       v.hasNeedsStatus = pending > 0;
       v.needsStatusText = plural(pending, 'past session') + ' still marked scheduled. Mark each one completed or a no-show.';
       v.olderNeedsStatus = stale.map(row);

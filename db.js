@@ -282,6 +282,8 @@
       notes: text(row.notes),
       status: SESSION_STATUSES.indexOf(row.status) >= 0 ? row.status : 'scheduled',
       recurrenceId: row.recurrence_id || '',
+      repeatWeeks: Number(row.repeat_weeks) || 0,
+      groupId: row.group_id || '',
       createdBy: row.created_by || ''
     });
   }
@@ -1524,17 +1526,22 @@
     location: orNull(s.location),
     notes: orNull(s.notes),
     status: s.status,
-    recurrence_id: s.recurrenceId || null
+    recurrence_id: s.recurrenceId || null,
+    repeat_weeks: s.repeatWeeks || null,
+    group_id: s.groupId || null
   });
 
   // The same test as the sessions_no_overlap constraint, run against the cache
   // first so the refusal can say which session is in the way. The constraint is
   // still what decides: an admin may have booked the slot a moment ago, into a
   // cache this tab has not reloaded.
-  function findClash(tutorId, start, end, ignore) {
+  // The rows of one group are the same session, so they never clash with each
+  // other.
+  function findClash(tutorId, start, end, ignore, groupId) {
     let hit = null;
     S.sessions.forEach((s) => {
       if (hit || s.tutorId !== tutorId || s.status === 'cancelled' || (ignore && ignore.has(s.id))) return;
+      if (groupId && s.groupId === groupId) return;
       if (s.start < end && start < s.end) hit = s;
     });
     return hit;
@@ -1542,8 +1549,48 @@
 
   const clashError = (s) => {
     const who = S.users.get(s.tuteeId);
-    return { message: 'That overlaps ' + (who ? who.name + '\u2019s' : 'another') + ' session on ' + fmtWhen(s.start) + '. A tutor can only be in one session at a time.' };
+    const whose = s.groupId ? 'a group' : who ? who.name + '\u2019s' : 'another';
+    return { message: 'That overlaps ' + whose + ' session on ' + fmtWhen(s.start) + '. A tutor can only be in one session at a time.' };
   };
+
+  const MAX_GROUP = 12;
+
+  // One occurrence of a session: the row itself, or every row of its group.
+  const sessionKey = (s) => s.groupId || s.id;
+  function groupOf(s) {
+    if (!s.groupId) return [s];
+    return Array.from(S.sessions.values()).filter((x) => x.groupId === s.groupId);
+  }
+
+  // What a group shows as one status: scheduled while anyone still is, then
+  // completed if anyone came, cancelled only when everyone was.
+  function groupStatus(rows) {
+    const has = (k) => rows.some((r) => r.status === k);
+    if (has('scheduled')) return 'scheduled';
+    if (has('completed')) return 'completed';
+    if (rows.every((r) => r.status === 'cancelled')) return 'cancelled';
+    return 'no_show';
+  }
+
+  const memberName = (r) => { const u = S.users.get(r.tuteeId); return u ? u.name : ''; };
+
+  // One entry per occurrence, for the screens that draw a session once however
+  // many tutees are in it. The entry is a copy of one member, with `members`
+  // (every row, by tutee name) and the group's status.
+  function collapseSessions(list) {
+    const byKey = new Map();
+    list.forEach((s) => {
+      const k = sessionKey(s);
+      if (!byKey.has(k)) byKey.set(k, []);
+      byKey.get(k).push(s);
+    });
+    return Array.from(byKey.values()).map((rows) => {
+      rows.sort((a, b) => memberName(a).localeCompare(memberName(b)) || String(a.id).localeCompare(String(b.id)));
+      return Object.assign({}, rows[0], { members: rows, status: rows.length > 1 ? groupStatus(rows) : rows[0].status });
+    }).sort((a, b) => a.start - b.start || String(a.id).localeCompare(String(b.id)));
+  }
+
+  const uniqIds = (ids) => Array.from(new Set((ids || []).filter(Boolean)));
 
   // 23P01 is exclusion_violation. The raw message names the constraint and
   // dumps two tstzranges, which means nothing to a tutor.
@@ -1554,33 +1601,38 @@
     return fail(where, error);
   }
 
-  // One weekly session becomes `weeks` concrete rows sharing a recurrence_id.
-  // All of them go in one insert, so a clash in week 6 leaves weeks 1–5
-  // unwritten rather than half a series on the calendar.
+  // A repeating session becomes `count` concrete rows sharing a recurrence_id,
+  // `everyWeeks` apart. A group puts one row per tutee into each occurrence,
+  // sharing a group_id. All of them go in one insert, so a clash in week 6
+  // leaves weeks 1–5 unwritten rather than half a series on the calendar.
   //
-  // spec: { tutorId, tuteeId, date, time, minutes, location, notes, weeks }
+  // spec: { tutorId, tuteeIds, date, time, minutes, location, notes, count, everyWeeks }
   async function createSessions(spec) {
     const minutes = Math.round(Number(spec.minutes));
-    const weeks = Math.round(Number(spec.weeks) || 1);
+    const count = Math.round(Number(spec.count) || 1);
+    const every = Math.round(Number(spec.everyWeeks) || 1);
+    const tuteeIds = uniqIds(spec.tuteeIds || [spec.tuteeId]);
     if (!(minutes >= 5 && minutes <= 720)) throw fail('createSessions', { message: 'A session must last between 5 minutes and 12 hours.' });
-    if (!(weeks >= 1 && weeks <= 26)) throw fail('createSessions', { message: 'A weekly repeat runs for 1 to 26 weeks.' });
-    if (!spec.tutorId || !spec.tuteeId) throw fail('createSessions', { message: 'Pick a tutor and a tutee.' });
+    if (!(count >= 1 && count <= 26)) throw fail('createSessions', { message: 'A repeating series has 1 to 26 sessions.' });
+    if (!(every >= 1 && every <= 4)) throw fail('createSessions', { message: 'A series repeats every 1 to 4 weeks.' });
+    if (!spec.tutorId || !tuteeIds.length) throw fail('createSessions', { message: 'Pick a tutor and at least one tutee.' });
+    if (tuteeIds.length > MAX_GROUP) throw fail('createSessions', { message: 'A group session holds up to ' + MAX_GROUP + ' tutees.' });
     if (isNaN(atLocal(spec.date, spec.time))) throw fail('createSessions', { message: 'Pick a date and a start time.' });
 
-    const recurrenceId = weeks > 1 ? uuid() : '';
+    const recurrenceId = count > 1 ? uuid() : '';
     const made = [];
-    for (let i = 0; i < weeks; i++) {
-      const start = atLocal(spec.date, spec.time, 7 * i);
-      made.push({
-        id: uuid(), tutorId: spec.tutorId, tuteeId: spec.tuteeId,
+    for (let i = 0; i < count; i++) {
+      const start = atLocal(spec.date, spec.time, 7 * every * i);
+      const groupId = tuteeIds.length > 1 ? uuid() : '';
+      const clash = findClash(spec.tutorId, start, start + minutes * 60000);
+      if (clash) throw fail('createSessions', clashError(clash));
+      tuteeIds.forEach((tid) => made.push({
+        id: uuid(), tutorId: spec.tutorId, tuteeId: tid,
         start: start, end: start + minutes * 60000,
         location: text(spec.location).trim(), notes: text(spec.notes).trim(),
-        status: 'scheduled', recurrenceId: recurrenceId, createdBy: S.meId
-      });
-    }
-    for (const s of made) {
-      const clash = findClash(s.tutorId, s.start, s.end);
-      if (clash) throw fail('createSessions', clashError(clash));
+        status: 'scheduled', recurrenceId: recurrenceId, repeatWeeks: count > 1 ? every : 0,
+        groupId: groupId, createdBy: S.meId
+      }));
     }
 
     made.forEach((s) => S.sessions.set(s.id, s));
@@ -1594,25 +1646,29 @@
     return made;
   }
 
-  // The sessions an edit reaches: this one, or this one and every later one in
-  // its series. "Later" is by start time, so a session moved out of order
-  // earlier is still judged by where it is now.
+  // The rows an edit reaches. 'self' is this row alone (one tutee's status in a
+  // group); 'one' is this occurrence, every tutee in it; 'future' is this
+  // occurrence and every later one in its series. "Later" is by start time, so
+  // a session moved out of order earlier is still judged by where it is now.
   function sessionScope(id, scope) {
     const s = S.sessions.get(id);
     if (!s) return [];
-    if (scope !== 'future' || !s.recurrenceId) return [s];
+    if (scope === 'self') return [s];
+    if (scope !== 'future' || !s.recurrenceId) return groupOf(s);
     return Array.from(S.sessions.values())
       .filter((x) => x.recurrenceId === s.recurrenceId && x.start >= s.start)
       .sort((a, b) => a.start - b.start);
   }
 
-  // patch: any of { date, time, minutes, location, notes, tutorId, tuteeId, status }
-  // scope: 'one' | 'future'
+  // patch: any of { date, time, minutes, location, notes, tutorId, tuteeIds, status }
+  // scope: 'self' | 'one' | 'future'
   //
   // Only what the patch changes relative to the session it was opened on is
   // carried to the rest of the series. Moving Tuesday's session to Wednesday
   // moves each later one a day as well; changing only the room leaves the time
-  // of a week that was individually rescheduled where it is.
+  // of a week that was individually rescheduled where it is. The same goes for
+  // the roster: adding a tutee adds them to every occurrence in scope, and
+  // removing one removes only them.
   async function updateSessions(id, patch, scope) {
     const base = S.sessions.get(id);
     if (!base) return [];
@@ -1628,8 +1684,15 @@
     }
     const changed = (key) => patch[key] != null && text(patch[key]).trim() !== text(base[key]).trim();
 
+    const want = scope === 'self' ? null : patch.tuteeIds ? uniqIds(patch.tuteeIds) : patch.tuteeId ? [patch.tuteeId] : null;
+    if (want && !want.length) throw fail('updateSessions', { message: 'A session needs at least one tutee.' });
+    if (want && want.length > MAX_GROUP) throw fail('updateSessions', { message: 'A group session holds up to ' + MAX_GROUP + ' tutees.' });
+    const had = groupOf(base).map((r) => r.tuteeId);
+    const adding = want ? want.filter((t) => had.indexOf(t) < 0) : [];
+    const dropping = want ? had.filter((t) => want.indexOf(t) < 0) : [];
+
     const before = targets.map((t) => Object.assign({}, t));
-    const next = targets.map((t) => {
+    let next = targets.map((t) => {
       const n = Object.assign({}, t);
       if (shift || newTime || newMinutes != null) {
         const minutes = newMinutes != null ? newMinutes : Math.round((t.end - t.start) / 60000);
@@ -1639,43 +1702,125 @@
       if (changed('location')) n.location = text(patch.location).trim();
       if (changed('notes')) n.notes = text(patch.notes).trim();
       if (patch.tutorId && patch.tutorId !== base.tutorId) n.tutorId = patch.tutorId;
-      if (patch.tuteeId && patch.tuteeId !== base.tuteeId) n.tuteeId = patch.tuteeId;
       if (patch.status && SESSION_STATUSES.indexOf(patch.status) >= 0) n.status = patch.status;
       return n;
     });
 
+    // Roster changes, one occurrence at a time. A tutee added to a past
+    // occurrence starts scheduled, and one added to a cancelled one starts
+    // cancelled with it. A dropped tutee's completed or no-show row stays: it is
+    // their attendance record, not a booking.
+    const removed = [];
+    const ungroup = new Set();
+    if (adding.length || dropping.length) {
+      const occ = new Map();
+      next.forEach((n) => { const k = sessionKey(n); if (!occ.has(k)) occ.set(k, []); occ.get(k).push(n); });
+      next = [];
+      const drops = (r) => dropping.indexOf(r.tuteeId) >= 0 && r.status !== 'completed' && r.status !== 'no_show';
+      occ.forEach((rows) => {
+        const keep = rows.filter((r) => !drops(r));
+        rows.filter(drops).forEach((r) => removed.push(r));
+        const like = keep[0] || rows[0];
+        const present = keep.map((r) => r.tuteeId);
+        const all = keep.length && keep.every((r) => r.status === 'cancelled');
+        adding.filter((t) => present.indexOf(t) < 0).forEach((tid) => keep.push(Object.assign({}, like, {
+          id: uuid(), tuteeId: tid, status: all ? 'cancelled' : 'scheduled', createdBy: S.meId
+        })));
+        if (!keep.length) return;
+        const groupId = keep.length > 1 ? (like.groupId || uuid()) : '';
+        keep.forEach((r) => {
+          if (!groupId && r.groupId) ungroup.add(r.id);
+          r.groupId = groupId;
+          next.push(r);
+        });
+      });
+    }
+    const removedIds = removed.map((r) => r.id);
+    const added = next.filter((n) => !S.sessions.has(n.id));
+
     const moving = new Set(targets.map((t) => t.id));
     for (const n of next) {
       if (n.status === 'cancelled') continue;
-      const clash = findClash(n.tutorId, n.start, n.end, moving);
+      const clash = findClash(n.tutorId, n.start, n.end, moving, n.groupId);
       if (clash) throw fail('updateSessions', clashError(clash));
     }
 
+    const undo = () => {
+      added.forEach((a) => S.sessions.delete(a.id));
+      before.forEach((b) => S.sessions.set(b.id, b));
+      notify();
+    };
     next.forEach((n) => S.sessions.set(n.id, n));
+    removedIds.forEach((rid) => S.sessions.delete(rid));
     notify();
     // One statement for the whole series, so the overlap constraint (deferred
     // to the end of the statement) sees every row in its new place at once.
-    const { error } = await sb.from('sessions').upsert(next.map(sessionRow));
-    if (error) {
-      before.forEach((b) => S.sessions.set(b.id, b));
-      notify();
-      throw sessionFail('updateSessions', error);
+    // Added tutees ride in the same upsert as inserts. A group shrinking to one
+    // tutee keeps its group_id until the dropped rows are gone, because those
+    // rows still sit at the same time and only the shared group_id lets them.
+    if (next.length) {
+      const rows = next.map((n) => sessionRow(ungroup.has(n.id) ? Object.assign({}, n, { groupId: before.find((b) => b.id === n.id).groupId }) : n));
+      const { error } = await sb.from('sessions').upsert(rows);
+      if (error) { undo(); throw sessionFail('updateSessions', error); }
+    }
+    if (removedIds.length) {
+      const { error } = await sb.from('sessions').delete().in('id', removedIds);
+      if (error) {
+        removed.forEach((r) => S.sessions.set(r.id, before.find((b) => b.id === r.id) || r));
+        ungroup.forEach((uid) => { const n = S.sessions.get(uid); if (n) S.sessions.set(uid, Object.assign({}, n, { groupId: before.find((b) => b.id === uid).groupId })); });
+        notify();
+        throw fail('updateSessions', error);
+      }
+    }
+    // A group of one is harmless if this last step fails: it clashes with
+    // nothing and draws as a single session.
+    if (ungroup.size) {
+      const { error } = await sb.from('sessions').upsert(next.filter((n) => ungroup.has(n.id)).map(sessionRow));
+      if (error) console.warn('[ppa] updateSessions: could not clear group_id', error);
     }
     return next;
   }
 
-  // A drag in the week view: same length, new start, this session only.
+  // Several rows to one status in one statement: "everyone came" on a group
+  // marks only the tutees still scheduled, so a no-show stays one.
+  async function setSessionStatus(ids, status) {
+    if (SESSION_STATUSES.indexOf(status) < 0) return [];
+    const rows = uniqIds(ids).map((rid) => S.sessions.get(rid)).filter(Boolean);
+    if (!rows.length) return [];
+    const before = rows.map((r) => Object.assign({}, r));
+    const next = rows.map((r) => Object.assign({}, r, { status: status }));
+    if (status !== 'cancelled') {
+      const moving = new Set(rows.map((r) => r.id));
+      for (const n of next) {
+        const clash = findClash(n.tutorId, n.start, n.end, moving, n.groupId);
+        if (clash) throw fail('setSessionStatus', clashError(clash));
+      }
+    }
+    next.forEach((n) => S.sessions.set(n.id, n));
+    notify();
+    const { error } = await sb.from('sessions').upsert(next.map(sessionRow));
+    if (error) {
+      before.forEach((b) => S.sessions.set(b.id, b));
+      notify();
+      throw sessionFail('setSessionStatus', error);
+    }
+    return next;
+  }
+
+  // A drag in the week view: same length, new start, this occurrence only.
   function moveSession(id, start) {
     return updateSessions(id, { date: localDate(start), time: localTime(start) }, 'one');
   }
 
+  // The whole occurrence: every tutee's row of a group.
   async function deleteSession(id) {
     const s = S.sessions.get(id);
     if (!s) return;
-    S.sessions.delete(id);
+    const rows = groupOf(s);
+    rows.forEach((r) => S.sessions.delete(r.id));
     notify();
-    const { error } = await sb.from('sessions').delete().eq('id', id);
-    if (error) { S.sessions.set(id, s); notify(); throw fail('deleteSession', error); }
+    const { error } = await sb.from('sessions').delete().in('id', rows.map((r) => r.id));
+    if (error) { rows.forEach((r) => S.sessions.set(r.id, r)); notify(); throw fail('deleteSession', error); }
   }
 
   // Sessions overlapping [from, to), earliest first. Either bound may be
@@ -1898,11 +2043,15 @@
 
     getSessions: sessionsIn,
     getSession: (id) => S.sessions.get(id) || null,
-    // The rest of this session's series from here on, itself included; one
-    // element for a session that is not part of one.
+    // The rows an edit with this scope reaches ('self' | 'one' | 'future').
     getSessionScope: sessionScope,
+    // Every row of this session's occurrence: one, or one per tutee of a group.
+    getSessionGroup: (id) => { const s = S.sessions.get(id); return s ? groupOf(s) : []; },
+    collapseSessions: collapseSessions,
+    maxGroupSize: MAX_GROUP,
     createSessions: createSessions,
     updateSessions: updateSessions,
+    setSessionStatus: setSessionStatus,
     moveSession: moveSession,
     deleteSession: deleteSession,
     sessionsNeedingStatus: needsStatus,

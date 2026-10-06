@@ -143,13 +143,22 @@ works in its own zone and stores UTC. `db.atLocal(date, 'HH:MM', plusDays)` is
 the one place local wall-clock times become instants, so a weekly 4pm stays
 4pm across a DST change.
 
-- **Series** are N concrete rows that share a `recurrence_id`. There is no
-  RRULE. `db.updateSessions(id, patch, 'one' | 'future')` applies to every
+- **Series** are N concrete rows that share a `recurrence_id`, `repeat_weeks`
+  (1 or 2 from the form) apart. There is no RRULE. `db.updateSessions(id, patch, 'one' | 'future')` applies to every
   session in scope only the fields the patch *changes* relative to the session
   it was opened on, so a week that was moved on its own keeps its time when
   only the room changes. The whole scope goes up in one upsert.
+- **Group sessions** (migration 011) are one row per tutee sharing a
+  `group_id`, same tutor and time. Each tutee keeps their own status and log,
+  and RLS still shows a tutee only their own row. `db.collapseSessions()` turns
+  rows into one entry per occurrence (with `members`) for every screen that
+  draws a session once. Scopes: `'self'` is one tutee's row, `'one'` the whole
+  occurrence, `'future'` the rest of the series. A `tuteeIds` patch adds or
+  removes tutees across the scope. `db.setSessionStatus(ids, status)` marks
+  several rows in one upsert ("Mark everyone completed" skips no-shows).
 - **Overlap guard** is the `sessions_no_overlap` exclusion constraint
-  (btree_gist, cancelled rows excluded, `deferrable initially immediate` so a
+  (btree_gist, rows of one group exempt from each other via
+  `coalesce(group_id, id) with <>`, cancelled rows excluded, `deferrable initially immediate` so a
   series can shift in one statement). `db.js` checks the cache first to name
   the clashing session; a `23P01` from Postgres is still mapped to a readable
   message.
