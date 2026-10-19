@@ -48,6 +48,8 @@ not there yet.
   The three newer ones share the admin check in `_shared/admin.ts`. Every one
   refuses a non-admin, a deactivated admin, the caller's own account, and any
   admin account. Deploy each with `supabase functions deploy <name>`.
+  The reminder functions (`send-reminders`, `session-action`,
+  `notification-prefs`) are not admin-only; see Reminders.
 
 ## Sidebar
 
@@ -211,6 +213,59 @@ Migration 012. Money is **integer cents** everywhere; `db.finance.parseMoney()`
   `session_finance`; the tab also reloads on entry, for sessions tutors
   completed elsewhere.
 - No tutee, tutor or parent visibility yet.
+
+## Reminders
+
+Migration 013. Email (Resend) and SMS (Twilio) a set time before each
+scheduled session, to the tutor and the tutee. No parent role exists yet, so
+parents get nothing; recipients are worked out per session row, so a parent
+would be one more recipient in `reminders_sync()` and `deliverOne()`.
+
+- **Where reminders go:** `notification_prefs` (one row per account, made by
+  the `profiles_make_prefs` trigger), *not* columns on `profiles`. RLS lets a
+  tutee read their tutor's profile and the other way round, and neither should
+  get the other's phone or address that way. Only the owner and admins read
+  it. The browser writes only `phone`, `reminder_email`, `reminder_sms` and
+  `reminder_lead_min` (column grants). `contact_email` changes through
+  `notification-prefs` (verification link → `session-action`) or through an
+  admin's `create-user` / `update-user`, which counts as vouched for.
+- **Never the login address for a tutor.** It is `username@tutors…` and
+  reaches nobody. A tutor has no contact email until one is set; a tutee's
+  starts as their login address, verified, and follows it when the admin
+  changes it, unless the tutee picked a different one. `isSyntheticEmail()`
+  refuses that domain at every step.
+- **Rows:** `session_reminders`, unique per (session, recipient, channel).
+  `send-reminders` runs every 5 minutes. It calls `reminders_sync()` (queue
+  pending rows for the next 48h, email always and SMS if it's on) and
+  `reminders_claim()` (stamp due rows so overlapping runs can't double-send),
+  then sends, and records `sent` / `failed` (retried up to 3 attempts) /
+  `skipped` + reason. The preferences are checked when a row is sent, so
+  "email off" leaves a skipped row with a reason. A group's tutor gets one
+  reminder per occurrence, hung off one member's row.
+- **Trigger `sessions_reminders_sync`:** cancelled / completed / no-show →
+  pending rows skipped ("Session …"); reopened → back to pending; moved →
+  requeued at the same lead. It's SECURITY DEFINER because tutors can't write
+  the table.
+- **Links:** HMAC tokens (`REMINDER_SIGNING_SECRET`) open the portal at
+  `#action=<token>`. The card outside every screen describes the action, and
+  the button confirms it, so a mail scanner following links changes nothing.
+  "Mark completed" works from the start time and expires 6h after sending;
+  verify links last 24h. `#log=<session id>` opens that session's log sheet
+  (after sign-in if needed). Supabase serves function HTML as plain text, which
+  is why the portal renders these and not the function.
+- **Scheduler:** pg_cron + pg_net in 013, posting with the secret key from
+  Vault (`project_url`, `service_role_key`). The fallback is
+  `.github/workflows/reminders.yml` (its schedule is commented out; it uses an
+  `x-cron-secret` header). Each run writes `reminder_settings.last_run`, and the
+  admin's Calendar → Reminders tab warns when that is over 15 minutes old.
+- **Deploy:** `send-reminders` and `session-action` with `--no-verify-jwt`
+  (a secret key is not a JWT; both check callers themselves),
+  `notification-prefs` normally. Secrets: `RESEND_API_KEY`,
+  `REMINDER_SIGNING_SECRET` (32+ chars, the same value for all three),
+  optional `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` (missing
+  → SMS rows skipped, never a crash), `CRON_SECRET` (fallback only),
+  `PORTAL_URL`, `REMINDER_TIMEZONE` (default America/Los_Angeles),
+  `REMINDER_FROM`.
 
 ## Conventions
 

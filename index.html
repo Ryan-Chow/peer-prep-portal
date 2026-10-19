@@ -17,11 +17,11 @@
      ten-minute cache: without this a returning tab can run a new index.html
      against an old db.js and call a function that does not exist yet. They
      move as one version because they are one layer. -->
-<script src="config.js?v=13"></script>
-<script src="supabaseClient.js?v=13"></script>
-<script src="importer.js?v=13"></script>
-<script src="db.js?v=13"></script>
-<script src="finance.js?v=13"></script>
+<script src="config.js?v=14"></script>
+<script src="supabaseClient.js?v=14"></script>
+<script src="importer.js?v=14"></script>
+<script src="db.js?v=14"></script>
+<script src="finance.js?v=14"></script>
 </head>
 <body>
 <x-dc>
@@ -778,6 +778,50 @@ textarea.input { min-height: 90px; resize: vertical; }
     <sc-if value="{{sCalendar}}" hint-placeholder-val="{{false}}">
       <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.55">{{calKicker}}</div>
       <h1 style="margin:4px 0 6px">Calendar</h1>
+      <sc-if value="{{calIsAdmin}}" hint-placeholder-val="{{false}}">
+        <div class="seg cal-tabs" style="display:inline-flex;margin:6px 0 14px">
+          <label class="seg-opt"><input type="radio" name="caltab" checked="{{calTabGrid}}" sc-camel-on-change="{{calPickGrid}}">Calendar</label>
+          <label class="seg-opt"><input type="radio" name="caltab" checked="{{calTabRem}}" sc-camel-on-change="{{calPickRem}}">Reminders</label>
+        </div>
+      </sc-if>
+      <sc-if value="{{calTabRem}}" hint-placeholder-val="{{false}}">
+        <sc-if value="{{remUnavailable}}" hint-placeholder-val="{{false}}">
+          <p style="margin:0 0 12px;font-size:14px;color:#8c1d18;border-left:2px solid #8c1d18;padding-left:10px">{{remUnavailableText}}</p>
+        </sc-if>
+        <sc-if value="{{remStale}}" hint-placeholder-val="{{false}}">
+          <div class="rem-stale" role="alert" style="border:1px solid #8c1d18;background:#fbe5e3;color:#8c1d18;padding:10px 14px;margin-bottom:12px;font-size:14px">{{remStaleText}}</div>
+        </sc-if>
+        <sc-if value="{{remHasNoEmail}}" hint-placeholder-val="{{false}}">
+          <div class="rem-noemail" style="border:1px solid #8a5a00;background:#fdf3dc;color:#5c3d00;padding:10px 14px;margin-bottom:12px;font-size:14px">{{remNoEmailText}}</div>
+        </sc-if>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+          <span style="font-size:13px;opacity:0.75;flex:1;min-width:200px">{{remLastRunText}}</span>
+          <button type="button" class="btn btn-ghost" disabled="{{remBusy}}" sc-camel-on-click="{{remReload}}">Refresh</button>
+          <button type="button" class="btn btn-secondary" disabled="{{remBusy}}" sc-camel-on-click="{{remRunNow}}">Run now</button>
+        </div>
+        <sc-if value="{{remHasMsg}}" hint-placeholder-val="{{false}}"><p style="margin:0 0 12px;font-size:13px;border-left:2px solid var(--color-accent);padding-left:10px">{{remMsg}}</p></sc-if>
+        <sc-if value="{{remEmpty}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:14px;opacity:0.65">No reminders yet. Each run queues them for the scheduled sessions of the next 48 hours.</p></sc-if>
+        <div style="overflow-x:auto">
+          <sc-raw-table class="table rem-table">
+            <sc-raw-thead><sc-raw-tr><sc-raw-th>Recipient</sc-raw-th><sc-raw-th>Channel</sc-raw-th><sc-raw-th>Session</sc-raw-th><sc-raw-th>Scheduled</sc-raw-th><sc-raw-th>Sent</sc-raw-th><sc-raw-th>Status</sc-raw-th><sc-raw-th>Error</sc-raw-th><sc-raw-th></sc-raw-th></sc-raw-tr></sc-raw-thead>
+            <sc-raw-tbody>
+              <sc-for list="{{remRows}}" as="r" hint-placeholder-count="3">
+                <sc-raw-tr>
+                  <sc-raw-td>{{r.recipient}}<div style="font-size:12px;opacity:0.55">{{r.role}}</div></sc-raw-td>
+                  <sc-raw-td>{{r.channel}}</sc-raw-td>
+                  <sc-raw-td style="font-size:13px">{{r.session}}</sc-raw-td>
+                  <sc-raw-td style="white-space:nowrap;font-size:13px">{{r.scheduled}}</sc-raw-td>
+                  <sc-raw-td style="white-space:nowrap;font-size:13px">{{r.sent}}</sc-raw-td>
+                  <sc-raw-td><span class="tag" style="{{r.statusStyle}}">{{r.status}}</span></sc-raw-td>
+                  <sc-raw-td style="font-size:12px;max-width:260px">{{r.error}}</sc-raw-td>
+                  <sc-raw-td style="text-align:right"><sc-if value="{{r.canResend}}" hint-placeholder-val="{{false}}"><button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" disabled="{{r.busy}}" sc-camel-on-click="{{r.resend}}">Resend</button></sc-if></sc-raw-td>
+                </sc-raw-tr>
+              </sc-for>
+            </sc-raw-tbody>
+          </sc-raw-table>
+        </div>
+      </sc-if>
+      <sc-if value="{{calTabGrid}}" hint-placeholder-val="{{true}}">
       <p style="margin:0 0 20px;font-size:14px;opacity:0.65">Times are shown in {{calTz}}.</p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
         <button type="button" class="btn btn-secondary" sc-camel-on-click="{{calToday}}">Today</button>
@@ -834,6 +878,7 @@ textarea.input { min-height: 90px; resize: vertical; }
             <button type="button" class="btn btn-secondary" sc-camel-on-click="{{avAdd}}">Add block</button>
           </div>
         </div>
+      </sc-if>
       </sc-if>
     </sc-if>
 
@@ -1369,6 +1414,7 @@ textarea.input { min-height: 90px; resize: vertical; }
           <div class="card-kicker">New tutor</div>
           <div class="field"><label>Name</label><input class="input" value="{{tName}}" sc-camel-on-change="{{onTName}}"></div>
           <div class="field"><label>Username</label><input class="input" value="{{tUsername}}" sc-camel-on-change="{{onTUsername}}"></div>
+          <div class="field"><label>Contact email</label><input class="input" type="email" placeholder="Where their reminders go" value="{{tContact}}" sc-camel-on-change="{{onTContact}}"></div>
           <div class="field" style="max-width:160px"><label>PIN</label><input class="input" sc-camel-input-mode="numeric" value="{{tPin}}" sc-camel-on-change="{{onTPin}}"></div>
           <button type="button" class="btn btn-primary blueprint" sc-camel-on-click="{{createTutor}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Create tutor</button>
           <sc-if value="{{hasTMsg}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;border-left:2px solid var(--color-accent);padding-left:10px">{{tMsg}}</p></sc-if>
@@ -1409,12 +1455,12 @@ textarea.input { min-height: 90px; resize: vertical; }
       <h2 style="margin:0 0 12px">Tutors</h2>
       <div style="overflow-x:auto">
         <sc-raw-table class="table">
-          <sc-raw-thead><sc-raw-tr><sc-raw-th>Name</sc-raw-th><sc-raw-th>Username</sc-raw-th><sc-raw-th>Tutees</sc-raw-th><sc-raw-th></sc-raw-th></sc-raw-tr></sc-raw-thead>
+          <sc-raw-thead><sc-raw-tr><sc-raw-th>Name</sc-raw-th><sc-raw-th>Username</sc-raw-th><sc-raw-th>Contact email</sc-raw-th><sc-raw-th>Tutees</sc-raw-th><sc-raw-th></sc-raw-th></sc-raw-tr></sc-raw-thead>
           <sc-raw-tbody>
             <sc-for list="{{tutorRows}}" as="t" hint-placeholder-count="2">
               <sc-raw-tr>
-                <sc-raw-td><span style="{{t.nameStyle}}">{{t.name}}</span><sc-if value="{{t.inactive}}" hint-placeholder-val="{{false}}"> <span class="tag tag-neutral" style="margin-left:6px">Deactivated</span></sc-if></sc-raw-td>
-                <sc-raw-td>{{t.username}}</sc-raw-td><sc-raw-td>{{t.count}}</sc-raw-td>
+                <sc-raw-td><span style="{{t.nameStyle}}">{{t.name}}</span><sc-if value="{{t.inactive}}" hint-placeholder-val="{{false}}"> <span class="tag tag-neutral" style="margin-left:6px">Deactivated</span></sc-if><sc-if value="{{t.noEmail}}" hint-placeholder-val="{{false}}"> <span class="tag tag-noemail" style="margin-left:6px;border:1px solid #b3261e;background:#fbe5e3;color:#8c1d18" title="No contact email: this tutor gets no email reminders">No email</span></sc-if></sc-raw-td>
+                <sc-raw-td>{{t.username}}</sc-raw-td><sc-raw-td class="text-muted">{{t.contact}}</sc-raw-td><sc-raw-td>{{t.count}}</sc-raw-td>
                 <sc-raw-td style="text-align:right;white-space:nowrap">
                   <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" sc-camel-on-click="{{t.edit}}">Edit</button>
                   <sc-if value="{{t.inactive}}" hint-placeholder-val="{{false}}"><button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" disabled="{{t.busy}}" sc-camel-on-click="{{t.reactivate}}">Reactivate</button></sc-if>
@@ -1829,6 +1875,7 @@ textarea.input { min-height: 90px; resize: vertical; }
         <sc-if value="{{popHasNotes}}" hint-placeholder-val="{{false}}"><div style="font-size:13px;white-space:pre-wrap;opacity:0.8">{{popNotes}}</div></sc-if>
         <sc-if value="{{popHasSeries}}" hint-placeholder-val="{{false}}"><div style="font-size:12px;opacity:0.6">{{popSeries}}</div></sc-if>
         <sc-if value="{{popHasLogState}}" hint-placeholder-val="{{false}}"><div style="{{popLogStyle}};font-size:13px">{{popLogState}}</div></sc-if>
+        <sc-if value="{{popHasBell}}" hint-placeholder-val="{{false}}"><div class="cal-pop-bell" style="display:flex;align-items:center;gap:6px;font-size:13px;{{popBellStyle}}">{{popBellIcon}}<span>{{popBell}}</span></div></sc-if>
         <sc-if value="{{popHasErr}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:13px;color:#8c1d18;border-left:2px solid #8c1d18;padding-left:10px">{{popErr}}</p></sc-if>
         <div style="display:flex;gap:6px;flex-wrap:wrap;border-top:1px solid var(--color-neutral-300);padding-top:10px">
           <sc-if value="{{popCanLog}}" hint-placeholder-val="{{false}}">
@@ -1960,6 +2007,9 @@ textarea.input { min-height: 90px; resize: vertical; }
           <div class="field"><label for="ue-username">Username</label><input id="ue-username" class="input" value="{{ueUsername}}" sc-camel-on-change="{{onUeUsername}}">
             <span style="font-size:12px;opacity:0.6;margin-top:4px">{{ueUsernameHint}}</span>
           </div>
+          <div class="field"><label for="ue-contact">Contact email</label><input id="ue-contact" class="input" type="email" placeholder="Where their reminders go" value="{{ueContact}}" sc-camel-on-change="{{onUeContact}}">
+            <span style="font-size:12px;opacity:0.6;margin-top:4px">{{ueContactHint}}</span>
+          </div>
           <div class="field"><label>Tutees</label>
             <sc-if value="{{ueNoTutees}}" hint-placeholder-val="{{false}}"><span style="font-size:13px;opacity:0.65">No active tutees yet.</span></sc-if>
             <div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto">
@@ -2027,6 +2077,62 @@ textarea.input { min-height: 90px; resize: vertical; }
     </div>
   </sc-if>
 
+  <sc-if value="{{hasNotif}}" hint-placeholder-val="{{false}}">
+    <div style="position:fixed;inset:0;background:rgba(24,26,30,0.5);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50" sc-camel-on-click="{{nfClose}}">
+      <div class="card blueprint nf-card" role="dialog" aria-modal="true" aria-label="Notifications" style="max-width:480px;width:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;background:var(--color-neutral-100);max-height:92vh;overflow:auto" sc-camel-on-click="{{nfStop}}">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div class="card-kicker">Notifications</div>
+        <div class="card-title">Session reminders</div>
+        <sc-if value="{{nfUnavailable}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:14px;opacity:0.75">{{nfUnavailableText}}</p></sc-if>
+        <sc-if value="{{nfReady}}" hint-placeholder-val="{{false}}">
+          <div class="field"><label for="nf-new">Contact email</label>
+            <div class="nf-current" style="font-size:14px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              <span>{{nfCurrent}}</span>
+              <sc-if value="{{nfVerified}}" hint-placeholder-val="{{false}}"><span class="tag" style="border:1px solid #1f7a44;color:#155d33;background:#e2f3e8">Verified</span></sc-if>
+              <sc-if value="{{nfUnverified}}" hint-placeholder-val="{{false}}"><span class="tag" style="border:1px solid #8a5a00;color:#5c3d00;background:#fdf3dc">Not verified</span></sc-if>
+            </div>
+            <sc-if value="{{nfNoContact}}" hint-placeholder-val="{{false}}"><span style="font-size:13px;color:#8c1d18;margin-top:4px">{{nfNoContactText}}</span></sc-if>
+            <sc-if value="{{nfHasPending}}" hint-placeholder-val="{{false}}">
+              <span class="nf-pending" style="font-size:13px;color:#5c3d00;margin-top:4px">{{nfPendingText}} <a href="#" sc-camel-on-click="{{nfCancelPending}}">Cancel</a></span>
+            </sc-if>
+            <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+              <input id="nf-new" class="input" type="email" style="flex:1;min-width:180px" placeholder="{{nfNewPlaceholder}}" value="{{nfNewEmail}}" sc-camel-on-change="{{onNfNewEmail}}">
+              <button type="button" class="btn btn-secondary" disabled="{{nfBusy}}" sc-camel-on-click="{{nfVerify}}">Send link</button>
+            </div>
+            <span style="font-size:12px;opacity:0.6;margin-top:4px">We email a link to the new address. Reminders switch to it once you open the link.</span>
+          </div>
+          <label style="display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer"><input type="checkbox" name="nfEmail" checked="{{nfEmail}}" sc-camel-on-change="{{onNfEmail}}">Email me before each session</label>
+          <label style="display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer"><input type="checkbox" name="nfSms" checked="{{nfSms}}" sc-camel-on-change="{{onNfSms}}">Text me before each session</label>
+          <div class="field"><label for="nf-phone">Mobile number</label><input id="nf-phone" class="input" type="tel" sc-camel-auto-complete="tel" placeholder="+14155550123" value="{{nfPhone}}" sc-camel-on-change="{{onNfPhone}}">
+            <span style="font-size:12px;opacity:0.6;margin-top:4px">With a + and the country code: +1 for the US and Canada.</span>
+          </div>
+          <div class="field" style="max-width:260px"><label for="nf-lead">Remind me</label>
+            <sc-raw-select id="nf-lead" class="input" value="{{nfLead}}" sc-camel-on-change="{{onNfLead}}">
+              <sc-for list="{{nfLeadOpts}}" as="o"><option value="{{o.id}}">{{o.label}}</option></sc-for>
+            </sc-raw-select>
+          </div>
+          <sc-if value="{{nfHasTest}}" hint-placeholder-val="{{false}}">
+            <div class="nf-test" style="display:flex;flex-direction:column;gap:2px;font-size:13px;border-left:2px solid var(--color-accent);padding-left:10px">
+              <sc-for list="{{nfTestLines}}" as="l" hint-placeholder-count="2"><div style="{{l.style}}">{{l.text}}</div></sc-for>
+            </div>
+          </sc-if>
+        </sc-if>
+        <sc-if value="{{nfHasMsg}}" hint-placeholder-val="{{false}}"><p class="nf-msg" style="margin:0;font-size:13px;border-left:2px solid var(--color-accent);padding-left:10px">{{nfMsg}}</p></sc-if>
+        <sc-if value="{{nfHasErr}}" hint-placeholder-val="{{false}}"><p class="nf-err" style="margin:0;font-size:13px;color:#8c1d18;border-left:2px solid #8c1d18;padding-left:10px">{{nfErr}}</p></sc-if>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <sc-if value="{{nfReady}}" hint-placeholder-val="{{false}}">
+            <button type="button" class="btn btn-ghost" disabled="{{nfBusy}}" sc-camel-on-click="{{nfTest}}">Send me a test reminder</button>
+          </sc-if>
+          <span style="flex:1"></span>
+          <button type="button" class="btn btn-ghost" sc-camel-on-click="{{nfClose}}">Close</button>
+          <sc-if value="{{nfReady}}" hint-placeholder-val="{{false}}">
+            <button type="button" class="btn btn-primary blueprint" disabled="{{nfBusy}}" sc-camel-on-click="{{nfSave}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Save</button>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
   <sc-if value="{{hasDialog}}" hint-placeholder-val="{{false}}">
     <div style="position:fixed;inset:0;background:rgba(24,26,30,0.5);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50" sc-camel-on-click="{{dlgCancel}}">
       <div class="card blueprint" style="max-width:460px;width:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;background:var(--color-neutral-100)" sc-camel-on-click="{{dlgStop}}">
@@ -2051,6 +2157,25 @@ textarea.input { min-height: 90px; resize: vertical; }
 <!-- Outside every sc-if on purpose. Rendered inside the problem screen, the
      Desmos iframe would unmount on Next and take the tutee's working with it;
      out here React keeps the same DOM node across every route change. -->
+<sc-if value="{{hasLinkAction}}" hint-placeholder-val="{{false}}">
+  <div style="position:fixed;inset:0;background:rgba(24,26,30,0.5);display:flex;align-items:center;justify-content:center;padding:20px;z-index:60" sc-camel-on-click="{{laClose}}">
+    <div class="card blueprint la-card" role="dialog" aria-modal="true" aria-label="{{laKicker}}" style="max-width:440px;width:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;background:var(--color-neutral-100)" sc-camel-on-click="{{laStop}}">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <div class="card-kicker">{{laKicker}}</div>
+      <div class="card-title">{{laTitle}}</div>
+      <sc-if value="{{laHasNote}}" hint-placeholder-val="{{false}}"><p style="margin:0;font-size:14px;opacity:0.8">{{laNote}}</p></sc-if>
+      <sc-if value="{{laIsDone}}" hint-placeholder-val="{{false}}"><p class="la-done" style="margin:0;font-size:14px;color:#155d33;border-left:2px solid #1f7a44;padding-left:10px">{{laDone}}</p></sc-if>
+      <sc-if value="{{laHasErr}}" hint-placeholder-val="{{false}}"><p class="la-err" style="margin:0;font-size:14px;color:#8c1d18;border-left:2px solid #8c1d18;padding-left:10px">{{laErr}}</p></sc-if>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" class="btn btn-ghost" sc-camel-on-click="{{laClose}}">Close</button>
+        <sc-if value="{{laCanConfirm}}" hint-placeholder-val="{{false}}">
+          <button type="button" class="btn btn-primary blueprint" disabled="{{laBusy}}" sc-camel-on-click="{{laConfirm}}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>{{laConfirmLabel}}</button>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
 <div class="calc-mount">{{calcLayer}}</div>
 <div class="lb-mount">{{lightboxLayer}}</div>
 
@@ -2102,7 +2227,7 @@ class Component extends DCLogic {
     problem: { choice: '', free: '' },
     lib: { subject: 'All' },
     assign: this.blankAssign(),
-    admin: { tName: '', tUsername: '', tPin: '', tMsg: '', sName: '', sEmail: '', sPin: '', sMsg: '', mTitle: '', mSubject: '', uMsg: '', busy: {} },
+    admin: { tName: '', tUsername: '', tContact: '', tPin: '', tMsg: '', sName: '', sEmail: '', sPin: '', sMsg: '', mTitle: '', mSubject: '', uMsg: '', busy: {} },
     editor: { title: '', subject: '', editing: null, msg: '' },
     imp: this.blankImport(),
     // One confirmation dialog serves every destructive action; the object in
@@ -2145,7 +2270,11 @@ class Component extends DCLogic {
     // like the session sheets: nothing reaches db until Save.
     userEdit: null,
     userDel: null,
-    nameEdit: null
+    nameEdit: null,
+    // Anyone but an admin: their reminder settings, buffered until Save.
+    notif: null,
+    // An emailed link being acted on (#action=…), signed in or not.
+    linkAction: null
   };
 
   // Seeded from the same saved read as state.calc, so the window opens where it
@@ -2166,6 +2295,12 @@ class Component extends DCLogic {
       this._off = window.db.onChange(() => {
         const me = window.db.me();
         const at = this.state.route.name;
+        if (me && this._pendingLog) {
+          const id = this._pendingLog;
+          this._pendingLog = null;
+          if (at === 'login') this.setState({ login: this.blankLogin() });
+          if (window.db.getSession(id)) { this.openLogLink(id); return; }
+        }
         if (me && at === 'login') this.setState({ route: this.homeRoute(me.role), login: this.blankLogin() });
         else if (!me && at !== 'login') {
           // Signing out takes the calculator with it. Leaving it mounted would
@@ -2179,6 +2314,7 @@ class Component extends DCLogic {
       });
       // Idempotent — db already kicked this off at load time.
       window.db.init();
+      this.readHashLink();
     };
     boot();
     // Escape shuts the topmost thing that is open: the full-size figure first,
@@ -2189,17 +2325,88 @@ class Component extends DCLogic {
       else if (this.state.navOpen) { e.preventDefault(); this.setNavOpen(false); }
     };
     document.addEventListener('keydown', this._onKey);
+    this._onHash = () => { if (window.db) this.readHashLink(); };
+    window.addEventListener('hashchange', this._onHash);
   }
   componentWillUnmount() {
     if (this._kt) clearInterval(this._kt);
     if (this._off) this._off();
     if (this._onKey) document.removeEventListener('keydown', this._onKey);
+    if (this._onHash) window.removeEventListener('hashchange', this._onHash);
     this.syncShell(false);
   }
 
   // Admin is named explicitly so an unrecognised role can never fall through
   // into the admin console.
   homeRoute(role) { return { name: role === 'tutor' ? 'students' : role === 'admin' ? 'users' : 'dash' }; }
+
+  // Reminder emails link here as #log=<session id> (sign in, then open that
+  // session's log) or #action=<signed token> (session-action, signed in or
+  // not). Read once and wiped, so a reload does not replay it.
+  readHashLink() {
+    const m = /^#(log|action)=([A-Za-z0-9._-]+)$/.exec(window.location.hash || '');
+    if (!m) return;
+    try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) { window.location.hash = ''; }
+    if (m[1] === 'action') {
+      this.setState({ linkAction: { token: m[2], busy: true, info: null, err: '', done: '' } }, () => this.runLinkAction(false));
+      return;
+    }
+    const db = window.db;
+    if (db.me() && db.getSession(m[2])) this.openLogLink(m[2]);
+    else this._pendingLog = m[2];
+  }
+
+  runLinkAction(confirm) {
+    const LA = this.state.linkAction;
+    if (!LA) return;
+    const merge = (patch) => { const now = this.state.linkAction; if (now && now.token === LA.token) this.setState({ linkAction: Object.assign({}, now, patch) }); };
+    merge({ busy: true, err: '' });
+    window.db.reminders.linkAction(LA.token, confirm).then(
+      (out) => merge({ busy: false, info: out, done: out.state === 'done' ? (out.message || 'Done.') : '' }),
+      (err) => merge({ busy: false, err: (err && err.message) || 'That link did not work.' })
+    );
+  }
+
+  // Straight to the log sheet once the session has started; before that, or
+  // for a group (one sheet per tutee), to the session on the calendar.
+  openLogLink(id) {
+    const db = window.db, me = db.me(), s = db.getSession(id);
+    if (!me || !s || me.role === 'student') return;
+    const cal = Object.assign({}, this.state.cal, { tab: 'grid', anchor: db.localDate(s.start) });
+    if (me.role === 'tutor' && s.start <= Date.now() && s.status !== 'cancelled' && db.getSessionGroup(id).length <= 1) {
+      this.setState({ cal: cal }, () => this.openSessionLog(s, 'calendar'));
+    } else {
+      this.setState({ route: { name: 'calendar' }, cal: cal, calPop: { id: id, busy: false, err: '' } });
+    }
+  }
+
+  // The log sheet for a calendar session: the existing one if there is one,
+  // otherwise a new sheet with the tutee, date, length and session filled in.
+  openSessionLog(s, from) {
+    const db = window.db, log = db.getLogForSession(s.id);
+    if (log && log.status === 'submitted') {
+      this.setState({ route: { name: 'logs', tuteeId: s.tuteeId }, calPop: null });
+      return;
+    }
+    const buf = this.blankSLog(s.tuteeId, log ? log.id : '');
+    if (!log) {
+      buf.sessionDate = db.localDate(s.start);
+      buf.duration = Math.round((s.end - s.start) / 60000) + ' min';
+    }
+    if (!buf.sessionId) buf.sessionId = s.id;
+    this.setState({ route: { name: 'logForm', tuteeId: s.tuteeId, logId: log ? log.id : '', from: from }, slog: buf, calPop: null });
+  }
+
+  openNotif() {
+    const p = window.db.reminders.myPrefs();
+    this.setState({
+      navOpen: false,
+      notif: {
+        newEmail: '', email: p ? p.email : true, sms: p ? p.sms : false, phone: p ? p.phone : '',
+        lead: String(p ? p.leadMin : 60), busy: false, err: '', msg: '', test: null
+      }
+    });
+  }
   blankLogin() { return { tab: 'student', email: '', pin: '', err: '', busy: false, username: '', secret: '' }; }
   // text     what is in the textarea
   // docs     ppaImport.parse() output, or null before a preview exists
@@ -2462,6 +2669,7 @@ class Component extends DCLogic {
     if (u && u.role === 'tutor') db.getStudentsOf(id).forEach((s) => { tutees[s.id] = true; });
     return {
       id: id, role: u ? u.role : '', name: u ? u.name : '', email: u ? u.email : '', username: u ? u.username : '',
+      contact: (db.reminders.prefsOf(id) || {}).contactEmail || '',
       pin: '', tutorId: tutor ? tutor.id : '', tutees: tutees, busy: false, err: ''
     };
   }
@@ -2864,19 +3072,20 @@ class Component extends DCLogic {
     close: ['M6 6l12 12', 'M18 6L6 18'],
     logout: ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'M16 17l5-5-5-5', 'M21 12H9'],
     edit: ['M4 20h4L19 9l-4-4L4 16z', 'M13.5 6.5l4 4'],
+    bell: ['M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.94 1.94 0 0 0 3.4 0'],
     finance: ['M12 2v20', 'M16.5 6.5C16 5 14.3 4 12 4c-2.8 0-4.5 1.4-4.5 3.3 0 4.4 9 2.4 9 7.2C16.5 16.6 14.6 18 12 18c-2.5 0-4.3-1.1-4.8-2.8']
   };
 
-  icon(name) {
+  icon(name, px) {
     const R = React;
     return R.createElement('svg', {
-      className: 'sb-icon', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8,
+      className: 'sb-icon', style: px ? { width: px + 'px', height: px + 'px' } : undefined, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8,
       strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true', focusable: 'false'
     }, (Component.ICONS[name] || []).map((d, i) => R.createElement('path', { key: i, d: d })));
   }
 
   // links: [{ name, label, icon, badge }]; active: the route name to light.
-  renderSidebar(me, links, active, go, roleLabel, onEditName) {
+  renderSidebar(me, links, active, go, roleLabel, onEditName, onNotifications) {
     const R = React, collapsed = this.state.sbCollapsed;
     const items = links.map((l) => {
       const cur = l.name === active;
@@ -2904,6 +3113,10 @@ class Component extends DCLogic {
       R.createElement('div', { className: 'sb-foot' },
         R.createElement('div', { className: 'sb-hello', title: me.name }, 'Hello, ' + me.name + ' \u00b7 ' + roleLabel),
         R.createElement('div', { className: 'sb-foot-row' },
+          onNotifications ? R.createElement('button', {
+            type: 'button', className: 'btn btn-ghost sb-notif', 'data-tip': 'Notifications', 'aria-label': 'Notifications',
+            style: { padding: '4px 8px', fontSize: '12px', position: 'relative', display: 'inline-flex', alignItems: 'center', gap: '6px' }, onClick: onNotifications
+          }, this.icon('bell'), R.createElement('span', { className: 'sb-foot-text' }, 'Notifications')) : null,
           onEditName ? R.createElement('button', {
             type: 'button', className: 'btn btn-ghost', 'data-tip': 'Edit name', 'aria-label': 'Edit your name',
             style: { padding: '4px 8px', fontSize: '12px', position: 'relative', display: 'inline-flex', alignItems: 'center', gap: '6px' }, onClick: onEditName
@@ -2973,7 +3186,8 @@ class Component extends DCLogic {
   // view    'week' | 'month'
   // anchor  any local date inside the week or month on screen
   // tutor   the admin's filter: '' for every tutor
-  blankCal() { return { view: 'week', anchor: this.todayLocal(), tutor: '', err: '' }; }
+  // tab     an admin's 'grid' | 'reminders'
+  blankCal() { return { view: 'week', anchor: this.todayLocal(), tutor: '', err: '', tab: 'grid', remBusy: {}, remMsg: '', remRunning: false }; }
   blankAvailForm() { return { weekday: '2', start: '15:00', end: '18:00' }; }
 
   // The create/edit form. `init` is { id } to edit a session, or any of
@@ -3011,6 +3225,101 @@ class Component extends DCLogic {
   }
 
   fmtClock(ms) { return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); }
+  fmtStamp(ms) { return ms ? new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '\u2014'; }
+
+  static REMINDER_STATUS = {
+    pending: { label: 'Pending', style: 'background:#e3eefb;color:#1b4a80;border:1px solid #2f6fb5' },
+    sent:    { label: 'Sent',    style: 'background:#e2f3e8;color:#155d33;border:1px solid #1f7a44' },
+    failed:  { label: 'Failed',  style: 'background:#fbe5e3;color:#8c1d18;border:1px solid #b3261e' },
+    skipped: { label: 'Skipped', style: 'background:#ededee;color:#6b6b6e;border:1px solid #8a8a8d' }
+  };
+  // Five-minute cadence, so fifteen minutes is three runs missed in a row.
+  static SCHEDULER_STALE_MS = 15 * 60000;
+
+  // The popover's one line about reminders. A tutor or tutee sees their own;
+  // an admin sees the whole occurrence counted up.
+  reminderBell(sessionId, me) {
+    const db = window.db;
+    if (!db.reminders.ready()) return null;
+    const rows = db.reminders.forSession(sessionId).filter((r) => me.role === 'admin' || r.recipientId === me.id);
+    if (!rows.length) return null;
+    const sent = rows.filter((r) => r.status === 'sent').sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0));
+    const pending = rows.filter((r) => r.status === 'pending').sort((a, b) => a.scheduledFor - b.scheduledFor);
+    const failed = rows.filter((r) => r.status === 'failed');
+    if (me.role === 'admin') {
+      const parts = [['sent', sent.length], ['pending', pending.length], ['failed', failed.length], ['skipped', rows.length - sent.length - pending.length - failed.length]]
+        .filter(([, n]) => n).map(([k, n]) => n + ' ' + k);
+      return { text: 'Reminders: ' + parts.join(' \u00b7 ') + (sent.length ? ' (last sent ' + this.fmtClock(sent[0].sentAt) + ')' : ''), style: failed.length ? 'color:#8c1d18' : 'opacity:0.75' };
+    }
+    if (sent.length) return { text: 'Reminder sent ' + this.fmtClock(sent[0].sentAt), style: 'color:#155d33' };
+    if (pending.length) return { text: 'Reminder pending \u00b7 goes out around ' + this.fmtClock(pending[0].scheduledFor), style: 'opacity:0.75' };
+    if (failed.length) return { text: 'Reminder failed to send', style: 'color:#8c1d18' };
+    return { text: 'No reminder: ' + (rows[0].error || 'skipped'), style: 'opacity:0.65' };
+  }
+
+  // The admin's Calendar → Reminders tab.
+  reminderVals(CAL, setCal) {
+    const db = window.db, RM = db.reminders, v = {};
+    const nameOf = (id) => { const u = id && db.getUser(id); return u ? u.name : 'Deleted account'; };
+    v.remUnavailable = !RM.ready();
+    v.remUnavailableText = 'Reminders are not set up on this project yet: run migration 013, then deploy send-reminders. (' + (RM.error() || 'not loaded') + ')';
+    const last = RM.lastRun();
+    const lastAt = last ? Date.parse(last.finished_at || last.at) : 0;
+    const age = lastAt ? Date.now() - lastAt : Infinity;
+    v.remStale = RM.ready() && age > Component.SCHEDULER_STALE_MS;
+    v.remStaleText = !lastAt
+      ? 'The reminder scheduler has never run, so no reminders are going out. Check the send-reminders cron job (migration 013) or the GitHub Actions fallback.'
+      : 'The reminder scheduler last ran ' + Math.round(age / 60000) + ' minutes ago (' + this.fmtStamp(lastAt) + '). It should run every five minutes, so reminders are not going out.';
+    v.remLastRunText = lastAt
+      ? 'Last run ' + this.fmtStamp(lastAt) + ' (' + (last.source || 'scheduler') + '): ' + (last.sent || 0) + ' sent, ' + (last.failed || 0) + ' failed, ' + (last.skipped || 0) + ' skipped.'
+      : 'No run recorded yet.';
+    const missing = db.getUsers().filter((u) => u.role === 'tutor' && u.active && !((RM.prefsOf(u.id) || {}).contactEmail))
+      .map((u) => u.name).sort((a, b) => a.localeCompare(b));
+    v.remHasNoEmail = RM.ready() && missing.length > 0;
+    v.remNoEmailText = (missing.length === 1 ? '1 tutor has no contact email and gets' : missing.length + ' tutors have no contact email and get') + ' no email reminders: '
+      + missing.join(', ') + '. Add one on the Users tab, or ask them to under Notifications.';
+    v.remBusy = !!CAL.remRunning;
+    v.remMsg = CAL.remMsg; v.remHasMsg = !!CAL.remMsg;
+    const done = (msg) => setCal({ remRunning: false, remMsg: msg });
+    v.remReload = () => { setCal({ remRunning: true, remMsg: '' }); RM.reload().then(() => done('')); };
+    v.remRunNow = () => {
+      setCal({ remRunning: true, remMsg: '' });
+      RM.runNow().then(
+        (out) => done('Ran: ' + (out.claimed || 0) + ' due, ' + (out.sent || 0) + ' sent, ' + (out.failed || 0) + ' failed, ' + (out.skipped || 0) + ' skipped.'),
+        (err) => done((err && err.message) || 'The run failed.')
+      );
+    };
+    const list = RM.list();
+    v.remEmpty = RM.ready() && !list.length;
+    const now = Date.now();
+    v.remRows = list.map((r) => {
+      const s = db.getSession(r.sessionId), st = Component.REMINDER_STATUS[r.status] || Component.REMINDER_STATUS.pending;
+      const who = db.getUser(r.recipientId);
+      const busy = !!(CAL.remBusy || {})[r.id];
+      const setBusy = (on) => { const b = Object.assign({}, this.state.cal.remBusy || {}); if (on) b[r.id] = true; else delete b[r.id]; return b; };
+      return {
+        recipient: nameOf(r.recipientId),
+        role: who ? (s && s.tutorId === r.recipientId ? 'tutor' : who.role === 'student' ? 'tutee' : who.role) : '',
+        channel: r.channel === 'sms' ? 'SMS' : r.channel === 'email' ? 'Email' : r.channel,
+        session: (s ? nameOf(s.tutorId) + ' \u2192 ' + nameOf(s.tuteeId) + ' \u00b7 ' : '') + this.fmtStamp(r.sessionStartsAt),
+        scheduled: this.fmtStamp(r.scheduledFor),
+        sent: r.sentAt ? this.fmtStamp(r.sentAt) : '\u2014',
+        status: st.label, statusStyle: st.style,
+        error: r.error || '',
+        canResend: !!s && s.status === 'scheduled' && r.sessionStartsAt > now,
+        busy: busy,
+        resend: () => {
+          if (busy) return;
+          setCal({ remBusy: setBusy(true), remMsg: '' });
+          RM.resend(r.id).then(
+            (out) => setCal({ remBusy: setBusy(false), remMsg: nameOf(r.recipientId) + ': ' + out.status + (out.error ? ' \u2014 ' + out.error : '') + '.' }),
+            (err) => setCal({ remBusy: setBusy(false), remMsg: (err && err.message) || 'Could not resend that.' })
+          );
+        }
+      };
+    });
+    return v;
+  }
   fmtSpan(s) { return this.fmtClock(s.start) + ' \u2013 ' + this.fmtClock(s.end); }
 
   // An RFC 5545 file of the given sessions. UTC throughout (the trailing Z),
@@ -3346,6 +3655,25 @@ class Component extends DCLogic {
     this.syncShell(v.isApp);
     v.lightboxLayer = this.renderLightbox();
     v.sidebarEl = null;
+
+    // ---- an emailed link (#action=…) ----
+    const LA = st.linkAction;
+    v.hasLinkAction = !!LA;
+    if (LA) {
+      const info = LA.info || {};
+      v.laKicker = info.kind === 'verify' ? 'Confirm your email' : info.kind === 'complete' ? 'Mark session completed' : 'Email link';
+      v.laTitle = info.what || (LA.busy ? 'Checking the link…' : 'This link cannot be used');
+      v.laNote = !LA.done && info.state !== 'ready' && info.message ? info.message : '';
+      v.laHasNote = !!v.laNote;
+      v.laDone = LA.done; v.laIsDone = !!LA.done;
+      v.laErr = LA.err; v.laHasErr = !!LA.err;
+      v.laBusy = !!LA.busy;
+      v.laCanConfirm = !LA.done && info.state === 'ready';
+      v.laConfirmLabel = LA.busy ? 'Working…' : (info.label || 'Confirm');
+      v.laConfirm = () => { if (!this.state.linkAction || !this.state.linkAction.busy) this.runLinkAction(true); };
+      v.laClose = () => this.setState({ linkAction: null });
+      v.laStop = (e) => { if (e && e.stopPropagation) e.stopPropagation(); };
+    }
     if (!me) return v;
 
     // ---- app shell ----
@@ -3386,7 +3714,8 @@ class Component extends DCLogic {
       activeTab,
       (name) => (name ? go(name)() : this.setState({ route: this.homeRoute(me.role) })),
       v.roleLabel,
-      me.role === 'tutor' ? () => this.setState({ nameEdit: { value: me.name, busy: false, err: '' } }) : null);
+      me.role === 'tutor' ? () => this.setState({ nameEdit: { value: me.name, busy: false, err: '' } }) : null,
+      me.role !== 'admin' ? () => this.openNotif() : null);
 
     // Both viewer screens need a context; a route the caller may not see, or
     // one whose data has gone, shows nothing rather than half a screen.
@@ -3462,6 +3791,8 @@ class Component extends DCLogic {
       v.ueTutorOpts = [{ id: '', label: 'Unassigned' }].concat(activeTutors.map((t) => ({ id: t.id, label: t.name })),
         curTutor && !curTutor.active ? [{ id: curTutor.id, label: curTutor.name + ' (deactivated)' }] : []);
       v.ueUsername = UE.username; v.onUeUsername = fu('username');
+      v.ueContact = UE.contact; v.onUeContact = fu('contact');
+      v.ueContactHint = 'Where their session reminders go. Their sign-in address is not an inbox, so with this blank they get none.';
       v.ueUsernameHint = 'They sign in with \u201c' + (String(UE.username).trim().toLowerCase() || '\u2026') + '\u201d. Changing it changes their login.';
       // Deactivated tutees are offered only if already linked, so saving
       // without touching them does not quietly drop them.
@@ -3505,6 +3836,9 @@ class Component extends DCLogic {
           const want = Object.keys(cur.tutees).filter((k) => cur.tutees[k]).sort();
           const had = db.getStudentsOf(cur.id).map((x) => x.id).sort();
           if (want.join() !== had.join()) patch.tuteeIds = want;
+          const contact = String(cur.contact || '').trim().toLowerCase();
+          if (contact && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contact)) { setUE({ err: 'Enter a valid contact email, or leave it blank.' }); return; }
+          if (contact !== ((db.reminders.prefsOf(cur.id) || {}).contactEmail || '')) patch.contactEmail = contact;
         }
         const pin = cur.pin.trim();
         if (pin && pin.length < 4) { setUE({ err: 'A PIN needs at least 4 characters.' }); return; }
@@ -3600,6 +3934,88 @@ class Component extends DCLogic {
           () => this.setState({ nameEdit: null }),
           (err) => setNE({ busy: false, err: (err && err.message) || 'That did not save.' })
         );
+      };
+    }
+
+    // ---- my notifications (tutors and tutees) ----
+    const NF = st.notif;
+    v.hasNotif = !!NF && me.role !== 'admin';
+    if (v.hasNotif) {
+      const RM = db.reminders, P = RM.myPrefs();
+      const setNF = (patch) => this.setState({ notif: Object.assign({}, this.state.notif, patch) });
+      const say = (patch) => setNF(Object.assign({ err: '', msg: '' }, patch));
+      v.nfReady = RM.ready() && !!P;
+      v.nfUnavailable = !v.nfReady;
+      v.nfUnavailableText = 'Reminders are not switched on for this site yet. An admin needs to run migration 013.';
+      v.nfCurrent = P && P.contactEmail ? P.contactEmail : 'None yet';
+      v.nfVerified = !!(P && P.verified);
+      v.nfUnverified = !!(P && P.contactEmail && !P.verified);
+      v.nfNoContact = !(P && P.contactEmail);
+      v.nfNoContactText = me.role === 'tutor'
+        ? 'Your sign-in username is not an inbox, so email reminders cannot reach you until you add an address.'
+        : 'Add an address to get email reminders.';
+      v.nfHasPending = !!(P && P.pendingEmail);
+      v.nfPendingText = P && P.pendingEmail ? 'Waiting for you to open the link sent to ' + P.pendingEmail + ' (it works for 24 hours).' : '';
+      v.nfNewPlaceholder = P && P.contactEmail ? 'A different address' : 'you@example.com';
+      v.nfNewEmail = NF.newEmail; v.onNfNewEmail = (e) => say({ newEmail: e.target.value });
+      v.nfEmail = !!NF.email; v.onNfEmail = (e) => say({ email: !!e.target.checked });
+      v.nfSms = !!NF.sms; v.onNfSms = (e) => say({ sms: !!e.target.checked });
+      v.nfPhone = NF.phone; v.onNfPhone = (e) => say({ phone: e.target.value });
+      v.nfLead = NF.lead; v.onNfLead = (e) => say({ lead: e.target.value });
+      v.nfLeadOpts = RM.leadChoices.map((m) => ({ id: String(m), label: (m === 60 ? '1 hour' : m === 120 ? '2 hours' : m + ' minutes') + ' before' }));
+      v.nfErr = NF.err; v.nfHasErr = !!NF.err;
+      v.nfMsg = NF.msg; v.nfHasMsg = !!NF.msg;
+      v.nfBusy = !!NF.busy;
+      v.nfClose = () => { if (!(this.state.notif && this.state.notif.busy)) this.setState({ notif: null }); };
+      v.nfStop = stopProp;
+      const testStyle = { sent: 'color:#155d33', failed: 'color:#8c1d18', skipped: 'opacity:0.75' };
+      v.nfHasTest = !!NF.test;
+      v.nfTestLines = NF.test ? [['email', 'Email'], ['sms', 'Text']].filter(([k]) => NF.test[k]).map(([k, label]) => ({
+        text: label + ': ' + NF.test[k].status + ' — ' + NF.test[k].detail,
+        style: testStyle[NF.test[k].status] || ''
+      })) : [];
+      // Resolves true when something was written, false when nothing changed.
+      const save = () => {
+        const cur = this.state.notif, prefs = RM.myPrefs();
+        if (!cur || !prefs) return Promise.resolve(false);
+        const phone = String(cur.phone || '').replace(/[\s().-]/g, '');
+        if (phone && !/^\+[1-9][0-9]{6,14}$/.test(phone)) return Promise.reject(new Error('Enter your mobile number with a + and the country code, like +14155550123.'));
+        if (cur.sms && !phone) return Promise.reject(new Error('Add a mobile number to get text reminders.'));
+        const patch = {};
+        if (cur.email !== prefs.email) patch.email = cur.email;
+        if (cur.sms !== prefs.sms) patch.sms = cur.sms;
+        if (phone !== prefs.phone) patch.phone = phone;
+        if (Number(cur.lead) !== prefs.leadMin) patch.leadMin = Number(cur.lead);
+        if (!Object.keys(patch).length) return Promise.resolve(false);
+        return RM.savePrefs(patch).then(() => { setNF({ phone: phone }); return true; });
+      };
+      const fail = (err) => setNF({ busy: false, err: (err && err.message) || 'That did not save.' });
+      v.nfSave = () => {
+        if (this.state.notif.busy) return;
+        say({ busy: true });
+        save().then((changed) => setNF({ busy: false, msg: changed ? 'Saved.' : 'Nothing to save.' }), fail);
+      };
+      v.nfTest = () => {
+        if (this.state.notif.busy) return;
+        say({ busy: true, test: null });
+        save().then(() => RM.sendTest()).then((out) => setNF({ busy: false, test: out }), fail);
+      };
+      v.nfVerify = () => {
+        const cur = this.state.notif;
+        if (cur.busy) return;
+        const email = String(cur.newEmail || '').trim().toLowerCase();
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { say({ err: 'Enter a valid email address.' }); return; }
+        say({ busy: true });
+        RM.requestVerification(email).then(
+          () => setNF({ busy: false, newEmail: '', msg: 'Link sent to ' + email + '. Until you open it, reminders keep going where they go now.' }),
+          fail
+        );
+      };
+      v.nfCancelPending = (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        if (this.state.notif.busy) return;
+        say({ busy: true });
+        RM.cancelPendingEmail().then(() => setNF({ busy: false }), fail);
       };
     }
 
@@ -4270,16 +4686,19 @@ class Component extends DCLogic {
       v.tName = AD.tName; v.onTName = F('admin', 'tName');
       v.tUsername = AD.tUsername; v.onTUsername = F('admin', 'tUsername');
       v.tPin = AD.tPin; v.onTPin = F('admin', 'tPin');
+      v.tContact = AD.tContact; v.onTContact = F('admin', 'tContact');
       const setAdmin = (patch) => this.setState({ admin: Object.assign({}, this.state.admin, patch) });
       v.createTutor = () => {
         const A2 = this.state.admin;
         if (!(A2.tName.trim() && A2.tUsername.trim() && A2.tPin.trim())) { setAdmin({ tMsg: 'Name, username and PIN are all required.' }); return; }
-        const uname = A2.tUsername.trim(), pin = A2.tPin.trim();
+        const uname = A2.tUsername.trim(), pin = A2.tPin.trim(), contact = A2.tContact.trim().toLowerCase();
+        if (contact && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contact)) { setAdmin({ tMsg: 'That contact email does not look right. Leave it blank to add one later.' }); return; }
         setAdmin({ tMsg: 'Creating \u201c' + uname + '\u201d\u2026' });
-        db.createUser({ role: 'tutor', name: A2.tName.trim(), username: uname, pin: pin }).then(
+        db.createUser({ role: 'tutor', name: A2.tName.trim(), username: uname, pin: pin, contactEmail: contact }).then(
           // Supabase only stores the hash, so this is the last time the PIN
           // can be shown — the roster below cannot read it back.
-          () => setAdmin({ tName: '', tUsername: '', tPin: '', tMsg: 'Tutor \u201c' + uname + '\u201d created. PIN is ' + pin + ' \u2014 note it now, it cannot be shown again.' }),
+          () => setAdmin({ tName: '', tUsername: '', tContact: '', tPin: '', tMsg: 'Tutor \u201c' + uname + '\u201d created. PIN is ' + pin + ' \u2014 note it now, it cannot be shown again.'
+            + (contact ? '' : ' They get no email reminders until a contact email is added.') }),
           (err) => setAdmin({ tMsg: err.message || 'Could not create that tutor.' })
         );
       };
@@ -4328,9 +4747,17 @@ class Component extends DCLogic {
       });
       // username is nullable in profiles (admins created by hand have none),
       // so render a dash rather than an empty cell.
-      v.tutorRows = tutors.map((t) => Object.assign({
-        name: t.name || '—', username: t.username || '—', count: db.getStudentsOf(t.id).length
-      }, rowActions(t)));
+      // The badge only once reminders have loaded, so a project without 013
+      // does not flag every tutor.
+      const remReady = db.reminders.ready();
+      v.tutorRows = tutors.map((t) => {
+        const prefs = db.reminders.prefsOf(t.id);
+        return Object.assign({
+          name: t.name || '—', username: t.username || '—', count: db.getStudentsOf(t.id).length,
+          contact: prefs && prefs.contactEmail ? prefs.contactEmail + (prefs.verified ? '' : ' (unconfirmed)') : '—',
+          noEmail: remReady && !(prefs && prefs.contactEmail)
+        }, rowActions(t));
+      });
       // A deactivated tutor is not offered as a new link; one already linked
       // stays visible in that tutee's select, named as deactivated.
       v.studentRows = db.getUsers().filter((u) => u.role === 'student').map((s) => {
@@ -4930,22 +5357,7 @@ class Component extends DCLogic {
     });
     const openPop = (id) => this.setState({ calPop: { id: id, busy: false, err: '' } });
     const openForm = (init) => this.setState({ calForm: this.blankCalForm(init), calPop: null });
-    // The log sheet for a calendar session: the existing one if there is one,
-    // otherwise a new sheet with the tutee, date, length and session filled in.
-    const logFromSession = (s, from) => {
-      const log = db.getLogForSession(s.id);
-      if (log && log.status === 'submitted') {
-        this.setState({ route: { name: 'logs', tuteeId: s.tuteeId }, calPop: null });
-        return;
-      }
-      const buf = this.blankSLog(s.tuteeId, log ? log.id : '');
-      if (!log) {
-        buf.sessionDate = db.localDate(s.start);
-        buf.duration = Math.round((s.end - s.start) / 60000) + ' min';
-      }
-      if (!buf.sessionId) buf.sessionId = s.id;
-      this.setState({ route: { name: 'logForm', tuteeId: s.tuteeId, logId: log ? log.id : '', from: from }, slog: buf, calPop: null });
-    };
+    const logFromSession = (s, from) => this.openSessionLog(s, from);
     const logLabel = (s) => {
       const log = db.getLogForSession(s.id);
       return !log ? 'Log session' : log.status === 'submitted' ? 'View log' : 'Finish log';
@@ -4992,6 +5404,11 @@ class Component extends DCLogic {
         v.calTitle = new Date(db.atLocal(a, '12:00')).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
       }
       v.calIsAdmin = me.role === 'admin';
+      v.calTabRem = v.calIsAdmin && CAL.tab === 'reminders';
+      v.calTabGrid = !v.calTabRem;
+      v.calPickGrid = () => setCal({ tab: 'grid' });
+      v.calPickRem = () => { setCal({ tab: 'reminders', remMsg: '' }); db.reminders.reload(); };
+      if (v.calTabRem) Object.assign(v, this.reminderVals(CAL, setCal));
       v.calTutor = CAL.tutor;
       v.calTutorOpts = [{ id: '', label: 'All tutors' }].concat(tutorsSorted.map((t) => ({ id: t.id, label: t.name })));
       v.onCalTutor = (e) => setCal({ tutor: e.target.value });
@@ -5103,6 +5520,10 @@ class Component extends DCLogic {
         : ls.of > 1 ? (ls.done ? '\u2713 All ' + ls.of + ' session logs submitted' : ls.count + ' of ' + ls.of + ' session logs submitted')
         : (ls.done ? '\u2713 Session log submitted' : 'Log needed');
       v.popLogStyle = ls && ls.done ? 'color:#1f7a44' : 'color:#8c1d18';
+      const bell = this.reminderBell(s.id, me);
+      v.popHasBell = !!bell;
+      v.popBell = bell ? bell.text : ''; v.popBellStyle = bell ? bell.style : '';
+      v.popBellIcon = bell ? this.icon('bell', 16) : null;
       v.popGoogle = this.googleCalendarHref(icsEvent(s));
       v.popErr = POP.err; v.popHasErr = !!POP.err;
       v.popBusy = !!POP.busy;

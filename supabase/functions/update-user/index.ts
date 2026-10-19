@@ -7,6 +7,8 @@
 //   pin            a new PIN (the account's password)
 //   tutor_id       tutees: '' unlinks, a tutor's id links (one tutor per tutee)
 //   tutee_ids      tutors: the complete list of their tutees
+//   contact_email  where reminders go ('' clears it). An admin typing it in
+//                  vouches for it, as for a tutee's login, so it is verified
 //   active         false bans the account in auth and marks the profile; true
 //                  undoes both
 // Fields left out are left alone.
@@ -88,6 +90,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
   }
 
+  let contactEmail: string | null | undefined;
+  if (has('contact_email')) {
+    const c = String(body.contact_email ?? '').trim().toLowerCase();
+    if (c && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(c)) return json({ error: 'Enter a valid contact email, or leave it blank.' }, 400);
+    if (c.endsWith('@' + TUTOR_EMAIL_DOMAIN.toLowerCase())) {
+      return json({ error: 'That is a tutor sign-in address, not an inbox. Use an address they read.' }, 400);
+    }
+    contactEmail = c || null;
+  }
+
   let tutorLink: string | null | undefined;
   if (has('tutor_id')) {
     if (target.role !== 'tutee') return json({ error: 'Only a tutee has a tutor.' }, 400);
@@ -132,6 +144,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (Object.keys(profilePatch).length) {
     const { error } = await admin.from('profiles').update(profilePatch).eq('id', target.id);
     if (error) return json({ error: 'The sign-in details changed but the profile did not: ' + error.message }, 500);
+  }
+
+  // A tutee whose reminders went to their old login address follows it to
+  // the new one; a separate address they chose stays put.
+  if (profilePatch.email && target.role === 'tutee' && contactEmail === undefined) {
+    const { error } = await admin.from('notification_prefs')
+      .update({ contact_email: profilePatch.email, contact_email_verified_at: new Date().toISOString() })
+      .eq('profile_id', target.id).eq('contact_email', (target.email ?? '').toLowerCase());
+    if (error) return json({ error: 'Saved, but moving their reminder address failed: ' + error.message }, 500);
+  }
+
+  if (contactEmail !== undefined) {
+    const { error } = await admin.from('notification_prefs').update({
+      contact_email: contactEmail,
+      contact_email_verified_at: contactEmail ? new Date().toISOString() : null,
+      pending_email: null, pending_email_sent_at: null,
+    }).eq('profile_id', target.id);
+    if (error) return json({ error: 'Saved, but the contact email did not: ' + error.message }, 500);
   }
 
   // tutor_tutees has a unique index on tutee_id, so a tutee is moved by

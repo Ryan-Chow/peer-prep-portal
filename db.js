@@ -60,6 +60,8 @@
     // Admin only. `loaded` stays false (with `error`) on a project without
     // migration 012, so the Finance tab can say why it is empty.
     fin: newFin(),
+    // Migration 013. Quietly empty (with `error`) on a project without it.
+    rem: newRem(),
     loaded: false,
     // True until the first getSession() (and any profile load it triggers)
     // settles. The UI shows a neutral splash rather than flashing the login
@@ -74,6 +76,10 @@
       rates: { tutee: new Map(), tutor: new Map() },
       settings: { timezone: 'UTC', quickCategories: [] }
     };
+  }
+
+  function newRem() {
+    return { loaded: false, error: '', prefs: new Map(), rows: new Map(), lastRun: null };
   }
 
   const uiRole = (r) => (r === 'tutee' ? 'student' : r);
@@ -91,6 +97,7 @@
     S.errors.clear(); S.sprofiles.clear(); S.logs.clear();
     S.sessions.clear(); S.avail.clear();
     S.fin = newFin();
+    S.rem = newRem();
     S.links = [];
     S.loaded = false;
   }
@@ -503,6 +510,7 @@
       if (profRes.data.role === 'tutee') await loadTutee(user.id);
       else if (profRes.data.role === 'tutor') await loadTutor(user.id);
       else { await loadAdmin(); await loadFinance(); }
+      await loadReminders();
 
       S.loaded = true;
       return S.users.get(S.meId);
@@ -1191,6 +1199,7 @@
     const body = { kind: kind, display_name: u.name, pin: u.pin };
     if (kind === 'tutor') {
       body.username = u.username;
+      if (u.contactEmail) body.contact_email = u.contactEmail;
     } else {
       body.email = u.email;
       if (u.tutorId) body.tutor_id = u.tutorId;
@@ -1208,7 +1217,8 @@
     await callFn('create-user', { action: 'set_pin', user_id: userId, pin: pin }, 'Could not set the PIN');
   }
 
-  // patch: any of { name, email, username, pin, tutorId, tuteeIds }. Only the
+  // patch: any of { name, email, username, pin, tutorId, tuteeIds,
+  // contactEmail }. Only the
   // keys present are sent, and the function leaves the rest alone. A reload
   // follows because the change can move links, rename, and readdress at once.
   async function updateUser(userId, patch) {
@@ -1219,6 +1229,7 @@
     if (patch.pin) body.pin = patch.pin;
     if (patch.tutorId !== undefined) body.tutor_id = patch.tutorId || '';
     if (patch.tuteeIds !== undefined) body.tutee_ids = patch.tuteeIds;
+    if (patch.contactEmail !== undefined) body.contact_email = patch.contactEmail || '';
     // Reloaded even on failure: the function writes auth, then the profile,
     // then the links, and a refusal part-way leaves the earlier steps done.
     try {
@@ -1657,6 +1668,7 @@
       throw sessionFail('createSessions', error);
     }
     financeTouched();
+    remindersTouched();
     return made;
   }
 
@@ -1793,6 +1805,7 @@
       if (error) console.warn('[ppa] updateSessions: could not clear group_id', error);
     }
     financeTouched();
+    remindersTouched();
     return next;
   }
 
@@ -1820,6 +1833,7 @@
       throw sessionFail('setSessionStatus', error);
     }
     financeTouched();
+    remindersTouched();
     return next;
   }
 
@@ -1838,6 +1852,7 @@
     const { error } = await sb.from('sessions').delete().in('id', rows.map((r) => r.id));
     if (error) { rows.forEach((r) => S.sessions.set(r.id, r)); notify(); throw fail('deleteSession', error); }
     financeTouched();
+    remindersTouched();
   }
 
   // Sessions overlapping [from, to), earliest first. Either bound may be
@@ -2272,6 +2287,175 @@
 
   // ---- public API (synchronous reads, same shapes as the old mock) --------
 
+  // ---- reminders (migration 013) -------------------------------------------
+  //
+  // notification_prefs is the caller's own row (every row, for an admin), and
+  // session_reminders what RLS returns: a person's own reminders, or everyone's
+  // for an admin. send-reminders writes both server-side; the browser writes
+  // only the switches, the lead time and the phone.
+
+  const LEAD_CHOICES = [30, 60, 120];
+  const REMINDER_LIST_MAX = 200;
+  const E164 = /^\+[1-9][0-9]{6,14}$/;
+  const msOrNull = (v) => (v ? Date.parse(v) : null);
+
+  function putPrefs(row) {
+    S.rem.prefs.set(row.profile_id, {
+      profileId: row.profile_id,
+      contactEmail: text(row.contact_email),
+      verified: !!(row.contact_email && row.contact_email_verified_at),
+      pendingEmail: text(row.pending_email),
+      pendingSentAt: msOrNull(row.pending_email_sent_at),
+      phone: text(row.phone),
+      email: row.reminder_email !== false,
+      sms: !!row.reminder_sms,
+      leadMin: Number(row.reminder_lead_min) || 60
+    });
+  }
+
+  function putReminder(row) {
+    S.rem.rows.set(row.id, {
+      id: row.id,
+      sessionId: row.session_id,
+      recipientId: row.recipient_id,
+      channel: row.channel,
+      scheduledFor: msOrNull(row.scheduled_for),
+      sessionStartsAt: msOrNull(row.session_starts_at),
+      sentAt: msOrNull(row.sent_at),
+      status: row.status,
+      error: text(row.error),
+      attempts: Number(row.attempts) || 0,
+      updatedAt: msOrNull(row.updated_at)
+    });
+  }
+
+  // No toast on failure, unlike rows(): a project that has not run 013 yet
+  // would otherwise complain on every load about a feature it does not have.
+  async function quiet(query) {
+    const res = await query;
+    if (res.error) throw res.error;
+    return res.data || [];
+  }
+
+  async function loadReminders() {
+    const me = S.users.get(S.meId);
+    if (!me) return;
+    const admin = me.role === 'admin';
+    const since = new Date(Date.now() - 14 * DAY_MS).toISOString();
+    try {
+      const [prefs, upcoming, recent, last] = await Promise.all([
+        admin ? quiet(sb.from('notification_prefs').select('*').order('profile_id').range(0, 4999))
+          : quiet(sb.from('notification_prefs').select('*').eq('profile_id', S.meId)),
+        quiet(sb.from('session_reminders').select('*').gte('session_starts_at', since).order('session_starts_at').order('id').range(0, 1999)),
+        admin ? quiet(sb.from('session_reminders').select('*').order('updated_at', { ascending: false }).order('id').range(0, REMINDER_LIST_MAX - 1)) : NO_ROWS,
+        admin ? quiet(sb.from('reminder_settings').select('*').eq('key', 'last_run')) : NO_ROWS
+      ]);
+      S.rem.prefs.clear(); S.rem.rows.clear();
+      prefs.forEach(putPrefs);
+      upcoming.forEach(putReminder);
+      recent.forEach(putReminder);
+      S.rem.lastRun = last[0] && last[0].value ? last[0].value : null;
+      S.rem.error = '';
+      S.rem.loaded = true;
+    } catch (err) {
+      S.rem.error = (err && err.message) || 'Reminders could not be loaded.';
+      S.rem.loaded = false;
+    }
+  }
+
+  // Cancelling or moving a session changes its queued reminders server-side
+  // (the sessions_reminders_sync trigger), so the bell rereads after a write.
+  let remTimer = null;
+  function remindersTouched() {
+    if (!S.rem.loaded) return;
+    clearTimeout(remTimer);
+    remTimer = setTimeout(() => { loadReminders().then(notify); }, 400);
+  }
+
+  // patch: any of { email, sms, phone, leadMin }. Optimistic, like every
+  // other write here.
+  async function savePrefs(patch) {
+    const cur = S.rem.prefs.get(S.meId);
+    if (!cur) throw fail('savePrefs', { message: 'Notification settings are not set up yet. Ask an admin to run migration 013.' });
+    const next = Object.assign({}, cur);
+    const cols = {};
+    if (patch.email !== undefined) { next.email = !!patch.email; cols.reminder_email = next.email; }
+    if (patch.sms !== undefined) { next.sms = !!patch.sms; cols.reminder_sms = next.sms; }
+    if (patch.phone !== undefined) {
+      const phone = String(patch.phone || '').replace(/[\s().-]/g, '');
+      if (phone && !E164.test(phone)) throw fail('savePrefs', { message: 'Enter the phone number in international form, like +14155550123.' });
+      next.phone = phone; cols.phone = phone || null;
+    }
+    if (patch.leadMin !== undefined) {
+      const lead = Number(patch.leadMin);
+      if (LEAD_CHOICES.indexOf(lead) < 0) throw fail('savePrefs', { message: 'Pick 30, 60 or 120 minutes.' });
+      next.leadMin = lead; cols.reminder_lead_min = lead;
+    }
+    if (next.sms && !next.phone) throw fail('savePrefs', { message: 'Add a phone number to get text reminders.' });
+    if (!Object.keys(cols).length) return;
+    S.rem.prefs.set(S.meId, next);
+    notify();
+    const { error } = await sb.from('notification_prefs').update(cols).eq('profile_id', S.meId);
+    if (error) { S.rem.prefs.set(S.meId, cur); notify(); throw fail('savePrefs', error); }
+  }
+
+  async function requestVerification(email) {
+    const out = await callFn('notification-prefs', { action: 'request_verification', email: email }, 'Could not send the verification email');
+    const cur = S.rem.prefs.get(S.meId);
+    if (cur) S.rem.prefs.set(S.meId, Object.assign({}, cur, { pendingEmail: out.pending_email || email, pendingSentAt: Date.now() }));
+    notify();
+  }
+
+  async function cancelPendingEmail() {
+    await callFn('notification-prefs', { action: 'cancel_pending' }, 'Could not cancel that');
+    const cur = S.rem.prefs.get(S.meId);
+    if (cur) S.rem.prefs.set(S.meId, Object.assign({}, cur, { pendingEmail: '', pendingSentAt: null }));
+    notify();
+  }
+
+  const sendTestReminder = () => callFn('send-reminders', { action: 'test' }, 'Could not send a test');
+
+  async function resendReminder(id) {
+    try {
+      return await callFn('send-reminders', { action: 'resend', reminder_id: id }, 'Could not resend that reminder');
+    } finally {
+      await loadReminders();
+      notify();
+    }
+  }
+
+  async function runRemindersNow() {
+    try {
+      return await callFn('send-reminders', { action: 'run' }, 'Could not run the reminders');
+    } finally {
+      await loadReminders();
+      notify();
+    }
+  }
+
+  // An emailed link (#action=…). No session needed: the signed token is the
+  // authority, which is the point of a link that works from a phone's inbox.
+  // confirm false only describes what it would do.
+  async function linkAction(token, confirm) {
+    const res = await fetch(cfg.SUPABASE_URL + '/functions/v1/session-action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: cfg.SUPABASE_ANON_KEY },
+      body: JSON.stringify({ token: token, confirm: !!confirm })
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(out.error || ('That link did not work (' + res.status + ').'));
+    if (confirm && S.loaded) load().then(notify);
+    return out;
+  }
+
+  // Every reminder for this session's occurrence: a group's tutor reminder
+  // hangs off one member's row, so the whole group is searched.
+  function remindersForSession(id) {
+    const s = S.sessions.get(id);
+    const ids = new Set(s ? groupOf(s).map((r) => r.id) : [id]);
+    return Array.from(S.rem.rows.values()).filter((r) => ids.has(r.sessionId));
+  }
+
   window.db = {
     init: init,
     auth: auth,
@@ -2461,6 +2645,28 @@
       fmtMoney: fmtMoney,
       paymentStatuses: PAYMENT_STATUSES,
       payoutStatuses: PAYOUT_STATUSES
+    },
+
+    reminders: {
+      ready: () => S.rem.loaded,
+      error: () => S.rem.error,
+      reload: () => loadReminders().then(notify),
+      myPrefs: () => S.rem.prefs.get(S.meId) || null,
+      prefsOf: (id) => S.rem.prefs.get(id) || null,
+      savePrefs: savePrefs,
+      requestVerification: requestVerification,
+      cancelPendingEmail: cancelPendingEmail,
+      sendTest: sendTestReminder,
+      // Newest change first, capped the way the admin tab shows it.
+      list: () => Array.from(S.rem.rows.values())
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+        .slice(0, REMINDER_LIST_MAX),
+      forSession: remindersForSession,
+      lastRun: () => S.rem.lastRun,
+      resend: resendReminder,
+      runNow: runRemindersNow,
+      linkAction: linkAction,
+      leadChoices: LEAD_CHOICES
     },
 
     getAvailability: availabilityOf,

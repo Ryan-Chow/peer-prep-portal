@@ -36,6 +36,7 @@ interface Payload {
   display_name?: string;
   tutor_id?: string;
   user_id?: string;
+  contact_email?: string;
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -114,6 +115,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   let email: string;
   let password: string;
   let username: string | null = null;
+  // Where a tutor's reminders go. Their sign-in address is synthetic, so this
+  // is the only real one; a tutee's login address is copied by a trigger.
+  let contactEmail = '';
 
   if (kind === 'tutor') {
     username = (body.username ?? '').trim().toLowerCase();
@@ -123,6 +127,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
     if (password.length < 4) return json({ error: 'PIN must be at least 4 characters.' }, 400);
     email = `${username}@${TUTOR_EMAIL_DOMAIN}`;
+    contactEmail = (body.contact_email ?? '').trim().toLowerCase();
+    if (contactEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contactEmail)) {
+      return json({ error: 'Enter a valid contact email, or leave it blank.' }, 400);
+    }
+    if (contactEmail.endsWith('@' + TUTOR_EMAIL_DOMAIN.toLowerCase())) {
+      return json({ error: 'That is a tutor sign-in address, not an inbox. Use an address they read.' }, 400);
+    }
   } else {
     email = (body.email ?? '').trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: 'A valid email is required.' }, 400);
@@ -149,7 +160,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const id = created.user.id;
 
-  // The profiles row itself is written by the on_auth_user_created trigger.
+  // The profiles row itself is written by the on_auth_user_created trigger,
+  // and its notification_prefs row by profiles_make_prefs (migration 013).
+  if (contactEmail) {
+    const { error: prefsErr } = await admin.from('notification_prefs')
+      .update({ contact_email: contactEmail, contact_email_verified_at: new Date().toISOString() })
+      .eq('profile_id', id);
+    if (prefsErr) return json({ id, warning: `Account created, but the contact email did not save: ${prefsErr.message}` }, 207);
+  }
+
   if (kind === 'tutee' && body.tutor_id) {
     const { error: linkErr } = await admin
       .from('tutor_tutees')

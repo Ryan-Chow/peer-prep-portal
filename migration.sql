@@ -1,353 +1,380 @@
--- Peer Prep Academy — migration 012: finance (admin only).
+-- Peer Prep Academy — migration 013: session reminders.
 --
--- Run once in the SQL editor, after 011_group_and_biweekly_sessions.sql.
--- Safe to re-run.
+-- Run once in the SQL editor, after 012_finance.sql. Safe to re-run.
 --
---   * tutee_rates / tutor_rates: hourly rates with an effective date. A new
---     rate is a new row, so a change never rewrites a session already priced.
---   * session_finance: what one completed session billed and paid out. Made by
---     a trigger when a session is marked completed, editable afterwards.
---   * ledger: income and expenses not tied to a session.
---   * finance_settings: the business time zone (which local day a session
---     falls on) and the ledger's quick-add categories.
+--   * notification_prefs: one row per account. Where reminders go (a verified
+--     contact email, a phone) and which ones the person wants.
+--   * session_reminders: one row per (session, recipient, channel), queued up
+--     to 48 hours ahead by send-reminders and marked sent / failed / skipped.
+--   * reminder_settings: the scheduler's heartbeat (last_run), for the admin
+--     banner.
+--   * pg_cron + pg_net: call send-reminders every five minutes.
 --
--- Money is integer cents everywhere. Every table here is admin-only: tutors
--- and tutees have no policy at all, the helper functions are not executable by
--- them, and no view reads these tables.
+-- BEFORE RUNNING, put two secrets in Vault (SQL editor, once):
+--
+--   select vault.create_secret('https://<project-ref>.supabase.co', 'project_url');
+--   select vault.create_secret('<secret key, sb_secret_…>', 'service_role_key');
+--
+-- The secret key is under Project Settings → API Keys → Secret keys. To change
+-- one later: select vault.update_secret(id, '<new value>') with the id from
+-- vault.secrets. Then deploy the functions (see CLAUDE.md, Reminders).
 
 -- ---------------------------------------------------------------------------
--- Tables
+-- notification_prefs
 -- ---------------------------------------------------------------------------
 
-create table if not exists public.finance_settings (
+-- Not columns on profiles: a tutee can read their tutor's profiles row and a
+-- tutor their tutees', and neither should get the other's phone number or
+-- personal address that way. This table is the owner's and the admins' only.
+--
+-- contact_email is the only address reminders ever use. A tutor signs in with
+-- a synthetic username@tutors… address that reaches nobody, so a tutor has
+-- none until they or an admin set one. pending_email is an address waiting on
+-- its verification link; the old one keeps working until the link is used.
+create table if not exists public.notification_prefs (
+  profile_id                uuid primary key references public.profiles (id) on delete cascade,
+  contact_email             text check (contact_email is null or (contact_email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' and char_length(contact_email) <= 254)),
+  contact_email_verified_at timestamptz,
+  pending_email             text check (pending_email is null or (pending_email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' and char_length(pending_email) <= 254)),
+  pending_email_sent_at     timestamptz,
+  phone                     text check (phone is null or phone ~ '^\+[1-9][0-9]{6,14}$'),
+  reminder_email            boolean not null default true,
+  reminder_sms              boolean not null default false,
+  reminder_lead_min         integer not null default 60 check (reminder_lead_min between 15 and 1440),
+  last_test_at              timestamptz,
+  updated_at                timestamptz not null default now()
+);
+
+drop trigger if exists notification_prefs_touch on public.notification_prefs;
+create trigger notification_prefs_touch
+  before update on public.notification_prefs
+  for each row execute function public.touch_updated_at();
+
+-- Every account has a row, so the browser only ever updates (an upsert would
+-- need an UPDATE grant on the key). A tutee's login address is a real inbox
+-- the admin typed in, so it starts as their verified contact address.
+create or replace function public.profiles_make_prefs()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.notification_prefs (profile_id, contact_email, contact_email_verified_at)
+  values (
+    new.id,
+    case when new.role = 'tutee' then nullif(lower(btrim(new.email)), '') end,
+    case when new.role = 'tutee' and nullif(btrim(new.email), '') is not null then now() end
+  )
+  on conflict (profile_id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_make_prefs on public.profiles;
+create trigger profiles_make_prefs
+  after insert on public.profiles
+  for each row execute function public.profiles_make_prefs();
+
+insert into public.notification_prefs (profile_id, contact_email, contact_email_verified_at)
+select p.id,
+       case when p.role = 'tutee' then nullif(lower(btrim(u.email)), '') end,
+       case when p.role = 'tutee' and nullif(btrim(u.email), '') is not null then now() end
+  from public.profiles p
+  left join auth.users u on u.id = p.id
+on conflict (profile_id) do nothing;
+
+alter table public.notification_prefs enable row level security;
+revoke all on public.notification_prefs from anon;
+
+drop policy if exists notification_prefs_select on public.notification_prefs;
+create policy notification_prefs_select on public.notification_prefs for select to authenticated
+using (profile_id = auth.uid() or public.get_my_role() = 'admin');
+
+drop policy if exists notification_prefs_update_own on public.notification_prefs;
+create policy notification_prefs_update_own on public.notification_prefs for update to authenticated
+using (profile_id = auth.uid())
+with check (profile_id = auth.uid());
+
+drop policy if exists notification_prefs_active_only on public.notification_prefs;
+create policy notification_prefs_active_only on public.notification_prefs as restrictive for all to authenticated
+using ((select public.am_active())) with check ((select public.am_active()));
+
+-- The switches and the phone only. contact_email changes through the
+-- notification-prefs function (a verification link) or an admin's update-user.
+revoke insert, update, delete on public.notification_prefs from authenticated;
+grant select on public.notification_prefs to authenticated;
+grant update (phone, reminder_email, reminder_sms, reminder_lead_min) on public.notification_prefs to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- session_reminders
+-- ---------------------------------------------------------------------------
+
+-- session_starts_at is the start time the row was queued for. A session moved
+-- after its reminder went out is a different reminder, and the sessions
+-- trigger below requeues it.
+--
+-- A group's tutor gets one reminder per occurrence, not one per tutee: their
+-- row hangs off one member's session row, and moves to another member's if
+-- that one is cancelled.
+create table if not exists public.session_reminders (
+  id                uuid primary key default gen_random_uuid(),
+  session_id        uuid not null references public.sessions (id) on delete cascade,
+  recipient_id      uuid not null references public.profiles (id) on delete cascade,
+  channel           text not null check (channel in ('email', 'sms', 'push')),
+  scheduled_for     timestamptz not null,
+  session_starts_at timestamptz not null,
+  sent_at           timestamptz,
+  status            text not null default 'pending' check (status in ('pending', 'sent', 'failed', 'skipped')),
+  error             text,
+  attempts          integer not null default 0,
+  claimed_at        timestamptz,
+  provider_id       text,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now(),
+  unique (session_id, recipient_id, channel)
+);
+
+create index if not exists session_reminders_due_idx on public.session_reminders (scheduled_for) where status in ('pending', 'failed');
+create index if not exists session_reminders_recipient_idx on public.session_reminders (recipient_id, scheduled_for);
+create index if not exists session_reminders_updated_idx on public.session_reminders (updated_at desc);
+
+drop trigger if exists session_reminders_touch on public.session_reminders;
+create trigger session_reminders_touch
+  before update on public.session_reminders
+  for each row execute function public.touch_updated_at();
+
+alter table public.session_reminders enable row level security;
+revoke all on public.session_reminders from anon;
+
+-- Everyone reads their own; admins read all and may delete. Nothing in the
+-- browser inserts or updates: send-reminders writes with the service role,
+-- and "Resend" goes through it.
+drop policy if exists session_reminders_select on public.session_reminders;
+create policy session_reminders_select on public.session_reminders for select to authenticated
+using (recipient_id = auth.uid() or public.get_my_role() = 'admin');
+
+drop policy if exists session_reminders_admin_delete on public.session_reminders;
+create policy session_reminders_admin_delete on public.session_reminders for delete to authenticated
+using (public.get_my_role() = 'admin');
+
+drop policy if exists session_reminders_active_only on public.session_reminders;
+create policy session_reminders_active_only on public.session_reminders as restrictive for all to authenticated
+using ((select public.am_active())) with check ((select public.am_active()));
+
+revoke insert, update on public.session_reminders from authenticated;
+grant select, delete on public.session_reminders to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- reminder_settings
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.reminder_settings (
   key        text primary key,
   value      jsonb not null,
   updated_at timestamptz not null default now()
 );
 
--- The zone decides which day an evening session belongs to (7pm Pacific is
--- already tomorrow in UTC). Change it on the Finance tab's Rates section.
-insert into public.finance_settings (key, value)
-values ('quick_categories', '["Ads", "Software", "Materials", "Referral bonus", "Refund", "Package prepayment"]'::jsonb),
-       ('timezone', '"America/Los_Angeles"'::jsonb)
-on conflict (key) do nothing;
+alter table public.reminder_settings enable row level security;
+revoke all on public.reminder_settings from anon;
 
-create table if not exists public.tutee_rates (
-  id                uuid primary key default gen_random_uuid(),
-  tutee_id          uuid not null references public.profiles (id) on delete cascade,
-  hourly_rate_cents integer not null check (hourly_rate_cents between 0 and 10000000),
-  effective_from    date not null,
-  created_by        uuid references public.profiles (id) on delete set null default auth.uid(),
-  created_at        timestamptz not null default now(),
-  unique (tutee_id, effective_from)
-);
+drop policy if exists reminder_settings_admin_select on public.reminder_settings;
+create policy reminder_settings_admin_select on public.reminder_settings for select to authenticated
+using (public.get_my_role() = 'admin');
 
-create table if not exists public.tutor_rates (
-  id                uuid primary key default gen_random_uuid(),
-  tutor_id          uuid not null references public.profiles (id) on delete cascade,
-  hourly_rate_cents integer not null check (hourly_rate_cents between 0 and 10000000),
-  effective_from    date not null,
-  created_by        uuid references public.profiles (id) on delete set null default auth.uid(),
-  created_at        timestamptz not null default now(),
-  unique (tutor_id, effective_from)
-);
+drop policy if exists reminder_settings_active_only on public.reminder_settings;
+create policy reminder_settings_active_only on public.reminder_settings as restrictive for all to authenticated
+using ((select public.am_active())) with check ((select public.am_active()));
 
--- Its own id rather than session_id as the key: deleting a calendar entry, or
--- an account, must not take the money record with it. session_id is unique,
--- so a session still has at most one row.
-create table if not exists public.session_finance (
-  id                  uuid primary key default gen_random_uuid(),
-  session_id          uuid unique references public.sessions (id) on delete set null,
-  tutee_id            uuid references public.profiles (id) on delete set null,
-  tutor_id            uuid references public.profiles (id) on delete set null,
-  session_date        date not null,
-  duration_min        integer not null check (duration_min between 0 and 1440),
-  billed_cents        integer not null default 0 check (billed_cents between 0 and 100000000),
-  paid_to_tutor_cents integer not null default 0 check (paid_to_tutor_cents between 0 and 100000000),
-  extra_cost_cents    integer not null default 0 check (extra_cost_cents between 0 and 100000000),
-  extra_cost_note     text,
-  payment_status      text not null default 'unpaid' check (payment_status in ('unpaid', 'paid', 'waived', 'comped')),
-  paid_on             date,
-  payout_status       text not null default 'owed' check (payout_status in ('owed', 'paid')),
-  payout_on           date,
-  notes               text,
-  -- A rate was missing when the row was priced, so an amount is a placeholder 0.
-  rate_missing        boolean not null default false,
-  -- Set when an admin types the payout by hand, so re-splitting a group's pay
-  -- leaves it alone.
-  tutor_pay_locked    boolean not null default false,
-  created_at          timestamptz not null default now(),
-  updated_at          timestamptz not null default now()
-);
-
-create index if not exists session_finance_date_idx on public.session_finance (session_date);
-create index if not exists session_finance_tutee_idx on public.session_finance (tutee_id);
-create index if not exists session_finance_tutor_idx on public.session_finance (tutor_id);
-
-create table if not exists public.ledger (
-  id           uuid primary key default gen_random_uuid(),
-  date         date not null default current_date,
-  kind         text not null check (kind in ('income', 'expense')),
-  category     text not null check (length(btrim(category)) between 1 and 60),
-  amount_cents integer not null check (amount_cents between 1 and 100000000),
-  counterparty text,
-  tutee_id     uuid references public.profiles (id) on delete set null,
-  tutor_id     uuid references public.profiles (id) on delete set null,
-  note         text,
-  receipt_url  text check (receipt_url is null or receipt_url ~ '^https://[^[:space:]"''<>\\@]+$'),
-  created_by   uuid references public.profiles (id) on delete set null default auth.uid(),
-  created_at   timestamptz not null default now(),
-  updated_at   timestamptz not null default now()
-);
-
-create index if not exists ledger_date_idx on public.ledger (date);
-
-drop trigger if exists session_finance_touch on public.session_finance;
-create trigger session_finance_touch
-  before update on public.session_finance
-  for each row execute function public.touch_updated_at();
-
-drop trigger if exists ledger_touch on public.ledger;
-create trigger ledger_touch
-  before update on public.ledger
-  for each row execute function public.touch_updated_at();
+revoke insert, update, delete on public.reminder_settings from authenticated;
+grant select on public.reminder_settings to authenticated;
 
 -- ---------------------------------------------------------------------------
--- RLS: admin only, and only while active
+-- Keeping queued reminders in step with their session
 -- ---------------------------------------------------------------------------
 
-do $$
-declare
-  t text;
-begin
-  foreach t in array array['finance_settings', 'tutee_rates', 'tutor_rates', 'session_finance', 'ledger'] loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('revoke all on public.%I from anon', t);
-    execute format('drop policy if exists %I on public.%I', t || '_admin_all', t);
-    execute format(
-      'create policy %I on public.%I for all to authenticated '
-      'using (public.get_my_role() = ''admin'') with check (public.get_my_role() = ''admin'')',
-      t || '_admin_all', t);
-    execute format('drop policy if exists %I on public.%I', t || '_active_only', t);
-    execute format(
-      'create policy %I on public.%I as restrictive for all to authenticated '
-      'using ((select public.am_active())) with check ((select public.am_active()))',
-      t || '_active_only', t);
-  end loop;
-end;
-$$;
-
--- ---------------------------------------------------------------------------
--- Pricing helpers. Not executable by any client role: they read rates, and
--- the trigger below calls them as the table owner.
--- ---------------------------------------------------------------------------
-
--- The business's own day for an instant. A zone Postgres does not know falls
--- back to UTC rather than failing the status change that called it.
-create or replace function public.finance_local_date(p_at timestamptz)
-returns date
-language plpgsql
-stable
-security definer
-set search_path = public
-as $$
-declare
-  tz text;
-begin
-  select value #>> '{}' into tz from public.finance_settings where key = 'timezone';
-  if tz is null or not exists (select 1 from pg_timezone_names where name = tz) then
-    tz := 'UTC';
-  end if;
-  return (p_at at time zone tz)::date;
-end;
-$$;
-
-create or replace function public.finance_rate(p_kind text, p_person uuid, p_on date)
-returns integer
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select case p_kind
-    when 'tutee' then (select hourly_rate_cents from public.tutee_rates
-                       where tutee_id = p_person and effective_from <= p_on
-                       order by effective_from desc limit 1)
-    when 'tutor' then (select hourly_rate_cents from public.tutor_rates
-                       where tutor_id = p_person and effective_from <= p_on
-                       order by effective_from desc limit 1)
-  end;
-$$;
-
--- The tutor's pay for one row. A group pays the tutor once for the hour,
--- split across the tutees who came (completed rows), the odd cents going to
--- the lowest ids so the shares always add up to the whole.
-create or replace function public.finance_tutor_share(p_session uuid)
-returns integer
-language plpgsql
-stable
-security definer
-set search_path = public
-as $$
-declare
-  s public.sessions;
-  minutes numeric;
-  rate integer;
-  total integer;
-  n integer;
-  pos integer;
-begin
-  select * into s from public.sessions where id = p_session;
-  if not found then return null; end if;
-  rate := public.finance_rate('tutor', s.tutor_id, public.finance_local_date(s.starts_at));
-  if rate is null then return null; end if;
-  minutes := extract(epoch from (s.ends_at - s.starts_at)) / 60;
-  total := round(rate * minutes / 60);
-  if s.group_id is null then return total; end if;
-  select count(*), count(*) filter (where id < s.id) into n, pos
-  from public.sessions where group_id = s.group_id and status = 'completed';
-  if n = 0 then return total; end if;
-  return total / n + case when pos < total % n then 1 else 0 end;
-end;
-$$;
-
--- Re-divides the tutor's pay across a group's finance rows after the set of
--- tutees who came changed. Rows already paid out or typed in by hand keep
--- their amount.
-create or replace function public.finance_resplit_group(p_group uuid)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  r record;
-  share integer;
-begin
-  if p_group is null then return; end if;
-  for r in
-    select f.id, f.session_id from public.session_finance f
-    join public.sessions s on s.id = f.session_id
-    where s.group_id = p_group and s.status = 'completed'
-      and f.payout_status = 'owed' and not f.tutor_pay_locked
-  loop
-    share := public.finance_tutor_share(r.session_id);
-    if share is not null then
-      update public.session_finance set paid_to_tutor_cents = share where id = r.id and paid_to_tutor_cents <> share;
-    end if;
-  end loop;
-end;
-$$;
-
--- A completed session gets its finance row, priced at the rates in effect on
--- its day. Leaving completed removes the row only while nothing has happened
--- to it (unpaid, payout owed); otherwise the record stays for the admin.
-create or replace function public.sessions_finance_sync()
+-- SECURITY DEFINER because a tutor cancelling or moving a session has no
+-- write access to session_reminders. Skip reasons for a session's own state
+-- all start with "Session ", which is how reopening finds them again.
+create or replace function public.sessions_reminders_sync()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  d date;
-  minutes integer;
-  bill_rate integer;
-  pay integer;
+  other uuid;
 begin
-  if tg_op <> 'DELETE' and new.status = 'completed'
-     and (tg_op = 'INSERT' or old.status is distinct from 'completed') then
-    d := public.finance_local_date(new.starts_at);
-    minutes := round(extract(epoch from (new.ends_at - new.starts_at)) / 60);
-    bill_rate := public.finance_rate('tutee', new.tutee_id, d);
-    pay := public.finance_tutor_share(new.id);
-    insert into public.session_finance
-      (session_id, tutee_id, tutor_id, session_date, duration_min, billed_cents, paid_to_tutor_cents, rate_missing)
-    values
-      (new.id, new.tutee_id, new.tutor_id, d, minutes,
-       coalesce(round(bill_rate * minutes / 60.0), 0), coalesce(pay, 0),
-       bill_rate is null or pay is null)
-    on conflict (session_id) do nothing;
-  end if;
-
-  if tg_op = 'UPDATE' and old.status = 'completed' and new.status <> 'completed' then
-    delete from public.session_finance
-    where session_id = new.id and payment_status = 'unpaid' and payout_status = 'owed';
-  end if;
-
-  if tg_op = 'DELETE' then
-    perform public.finance_resplit_group(old.group_id);
-  elsif tg_op = 'INSERT' then
-    perform public.finance_resplit_group(new.group_id);
-  elsif old.status is distinct from new.status or old.group_id is distinct from new.group_id then
-    perform public.finance_resplit_group(new.group_id);
-    if old.group_id is distinct from new.group_id then
-      perform public.finance_resplit_group(old.group_id);
+  if new.status <> 'scheduled' and old.status = 'scheduled' then
+    -- The group's tutor reminder moves to a tutee who is still coming.
+    if new.group_id is not null then
+      select id into other
+        from public.sessions
+       where group_id = new.group_id and id <> new.id and status = 'scheduled'
+       order by id
+       limit 1;
+      if other is not null then
+        update public.session_reminders
+           set session_id = other
+         where session_id = new.id and recipient_id = new.tutor_id;
+      end if;
     end if;
+    update public.session_reminders
+       set status = 'skipped',
+           error = case new.status when 'cancelled' then 'Session cancelled'
+                                   when 'completed' then 'Session marked completed'
+                                   else 'Session marked no-show' end,
+           claimed_at = null
+     where session_id = new.id and status in ('pending', 'failed');
+  elsif new.status = 'scheduled' and old.status <> 'scheduled' and new.starts_at > now() then
+    update public.session_reminders
+       set status = 'pending', error = null, attempts = 0, claimed_at = null
+     where session_id = new.id and status = 'skipped' and error like 'Session %';
+  end if;
+
+  if new.starts_at is distinct from old.starts_at and new.status = 'scheduled' and new.starts_at > now() then
+    update public.session_reminders r
+       set scheduled_for = new.starts_at - (r.session_starts_at - r.scheduled_for),
+           session_starts_at = new.starts_at,
+           status = 'pending', sent_at = null, error = null, attempts = 0, claimed_at = null, provider_id = null
+     where r.session_id = new.id;
   end if;
   return null;
 end;
 $$;
 
-drop trigger if exists sessions_finance_sync on public.sessions;
-create trigger sessions_finance_sync
-  after insert or update or delete on public.sessions
-  for each row execute function public.sessions_finance_sync();
+drop trigger if exists sessions_reminders_sync on public.sessions;
+create trigger sessions_reminders_sync
+  after update of status, starts_at on public.sessions
+  for each row execute function public.sessions_reminders_sync();
 
--- Re-prices the given finance rows from the current rate tables and their
--- sessions: what the Rates tab runs after rates are filled in for rows that
--- were priced without one. Admin only.
-create or replace function public.finance_recalculate(p_ids uuid[])
+-- ---------------------------------------------------------------------------
+-- What send-reminders calls (service role only)
+-- ---------------------------------------------------------------------------
+
+-- Queues a pending row for every scheduled session in the next 48 hours, for
+-- its tutor (once per occurrence) and its tutee, on email always and on SMS
+-- when the recipient turned it on. Whether a row is actually sent is decided
+-- when it falls due, against the preferences at that moment, so turning email
+-- off leaves a skipped row with the reason rather than nothing at all.
+create or replace function public.reminders_sync(p_now timestamptz default now())
 returns integer
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  r record;
-  bill_rate integer;
-  pay integer;
-  n integer := 0;
+  queued integer;
 begin
-  if not public.am_active() or public.get_my_role() is distinct from 'admin' then
-    raise exception 'Only an admin can recalculate finance rows.' using errcode = '42501';
-  end if;
-  for r in
-    select f.id, f.session_id, f.tutee_id, f.session_date, f.duration_min, f.tutor_pay_locked, f.payout_status, f.paid_to_tutor_cents
-    from public.session_finance f where f.id = any(p_ids)
-  loop
-    bill_rate := public.finance_rate('tutee', r.tutee_id, r.session_date);
-    pay := case when r.session_id is null or r.tutor_pay_locked or r.payout_status = 'paid' then r.paid_to_tutor_cents
-                else public.finance_tutor_share(r.session_id) end;
-    update public.session_finance set
-      billed_cents = coalesce(round(bill_rate * r.duration_min / 60.0), billed_cents),
-      paid_to_tutor_cents = coalesce(pay, paid_to_tutor_cents),
-      rate_missing = bill_rate is null or pay is null
-    where id = r.id;
-    n := n + 1;
-  end loop;
-  return n;
+  update public.session_reminders
+     set status = 'skipped', error = 'Session started before the reminder went out', claimed_at = null
+   where status in ('pending', 'failed') and session_starts_at <= p_now;
+
+  with upcoming as (
+    select s.*
+      from public.sessions s
+     where s.status = 'scheduled'
+       and s.starts_at > p_now
+       and s.starts_at <= p_now + interval '48 hours'
+  ), tutor_rows as (
+    select distinct on (u.tutor_id, coalesce(u.group_id, u.id))
+           u.id as session_id, u.tutor_id as recipient_id, u.starts_at, coalesce(u.group_id, u.id) as occ
+      from upcoming u
+     order by u.tutor_id, coalesce(u.group_id, u.id), u.id
+  ), wanted as (
+    select * from tutor_rows
+    union all
+    select u.id, u.tutee_id, u.starts_at, coalesce(u.group_id, u.id) from upcoming u
+  ), rows_in as (
+    select w.session_id, w.recipient_id, c.channel, w.starts_at, w.occ,
+           w.starts_at - make_interval(mins => coalesce(np.reminder_lead_min, 60)) as scheduled_for
+      from wanted w
+      join public.profiles p on p.id = w.recipient_id and p.active
+      left join public.notification_prefs np on np.profile_id = w.recipient_id
+     cross join lateral (
+       select 'email'::text as channel
+       union all
+       select 'sms' where coalesce(np.reminder_sms, false)
+     ) c
+  )
+  insert into public.session_reminders (session_id, recipient_id, channel, scheduled_for, session_starts_at, status)
+  select r.session_id, r.recipient_id, r.channel, r.scheduled_for, r.starts_at, 'pending'
+    from rows_in r
+   where not exists (
+     select 1
+       from public.session_reminders x
+       join public.sessions s2 on s2.id = x.session_id
+      where x.recipient_id = r.recipient_id
+        and x.channel = r.channel
+        and x.session_id <> r.session_id
+        and coalesce(s2.group_id, s2.id) = r.occ
+   )
+  on conflict (session_id, recipient_id, channel) do update
+     set scheduled_for = excluded.scheduled_for
+   where public.session_reminders.status = 'pending'
+     and public.session_reminders.claimed_at is null
+     and public.session_reminders.scheduled_for is distinct from excluded.scheduled_for;
+  get diagnostics queued = row_count;
+  return queued;
 end;
 $$;
 
-revoke execute on function public.finance_local_date(timestamptz) from public, anon, authenticated;
-revoke execute on function public.finance_rate(text, uuid, date) from public, anon, authenticated;
-revoke execute on function public.finance_tutor_share(uuid) from public, anon, authenticated;
-revoke execute on function public.finance_resplit_group(uuid) from public, anon, authenticated;
-revoke execute on function public.sessions_finance_sync() from public, anon, authenticated;
-revoke execute on function public.finance_recalculate(uuid[]) from public, anon;
-grant execute on function public.finance_recalculate(uuid[]) to authenticated;
+-- Takes the rows that are due (up to five minutes early, so a five-minute
+-- cadence never sends late) and stamps them claimed, so two overlapping runs
+-- cannot both send one. A claim older than ten minutes is a run that died
+-- part-way and is taken again; a failed row is retried up to three attempts.
+create or replace function public.reminders_claim(p_now timestamptz default now(), p_limit integer default 100)
+returns setof public.session_reminders
+language sql
+security definer
+set search_path = public
+as $$
+  update public.session_reminders r
+     set claimed_at = p_now, attempts = r.attempts + 1
+   where r.id in (
+     select id
+       from public.session_reminders
+      where (status = 'pending' or (status = 'failed' and attempts < 3))
+        and scheduled_for <= p_now + interval '5 minutes'
+        and session_starts_at > p_now
+        and (claimed_at is null or claimed_at < p_now - interval '10 minutes')
+      order by scheduled_for
+      limit p_limit
+      for update skip locked
+   )
+  returning r.*;
+$$;
 
--- Sessions already marked completed before this migration get their rows now,
--- priced at whatever rates exist (none yet, on a first run: rate_missing).
-insert into public.session_finance
-  (session_id, tutee_id, tutor_id, session_date, duration_min, billed_cents, paid_to_tutor_cents, rate_missing)
-select s.id, s.tutee_id, s.tutor_id, public.finance_local_date(s.starts_at),
-       round(extract(epoch from (s.ends_at - s.starts_at)) / 60),
-       coalesce(round(public.finance_rate('tutee', s.tutee_id, public.finance_local_date(s.starts_at))
-                      * extract(epoch from (s.ends_at - s.starts_at)) / 3600), 0),
-       coalesce(public.finance_tutor_share(s.id), 0),
-       public.finance_rate('tutee', s.tutee_id, public.finance_local_date(s.starts_at)) is null
-         or public.finance_tutor_share(s.id) is null
-from public.sessions s
-where s.status = 'completed'
-on conflict (session_id) do nothing;
+revoke execute on function public.reminders_sync(timestamptz) from public, anon, authenticated;
+revoke execute on function public.reminders_claim(timestamptz, integer) from public, anon, authenticated;
+grant execute on function public.reminders_sync(timestamptz) to service_role;
+grant execute on function public.reminders_claim(timestamptz, integer) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- Scheduling: pg_cron → pg_net → send-reminders, every five minutes
+-- ---------------------------------------------------------------------------
+
+-- The fallback, if pg_cron is not available, is .github/workflows/reminders.yml.
+-- Use one or the other: both at once only doubles the calls (the claim step
+-- keeps it from doubling the mail). To stop this one:
+--   select cron.unschedule('send-reminders');
+create extension if not exists pg_cron;
+create extension if not exists pg_net with schema extensions;
+
+-- cron.schedule with an existing job name replaces that job, so this is safe
+-- to re-run.
+select cron.schedule(
+  'send-reminders',
+  '*/5 * * * *',
+  $cron$
+  select net.http_post(
+    url := (select decrypted_secret from vault.decrypted_secrets where name = 'project_url') || '/functions/v1/send-reminders',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'service_role_key')
+    ),
+    body := jsonb_build_object('source', 'pg_cron'),
+    timeout_milliseconds := 30000
+  );
+  $cron$
+);

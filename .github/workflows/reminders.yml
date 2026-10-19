@@ -1,0 +1,49 @@
+# Fallback scheduler for session reminders.
+#
+# The default is pg_cron (migrations/013_session_reminders.sql), which calls
+# send-reminders every five minutes from inside the database. Use this only if
+# pg_cron is not available on your plan, and then turn that job off so the two
+# do not both run:  select cron.unschedule('send-reminders');
+#
+# To switch this on:
+#   1. Pick a long random value and set it as a function secret:
+#        supabase secrets set CRON_SECRET=<value>
+#   2. In GitHub → Settings → Secrets and variables → Actions, add
+#        SUPABASE_FUNCTIONS_URL  https://<project-ref>.supabase.co/functions/v1
+#        REMINDERS_CRON_SECRET   the same <value>
+#   3. Uncomment the `schedule:` block below and push.
+#
+# GitHub runs scheduled workflows late under load (often 5–15 minutes), and the
+# Reminders tab's banner will say so if a run is missed for 15 minutes. "Run
+# workflow" on the Actions tab triggers one by hand either way.
+
+name: Session reminders
+
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: '*/5 * * * *'
+
+concurrency:
+  group: session-reminders
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Call send-reminders
+        env:
+          FUNCTIONS_URL: ${{ secrets.SUPABASE_FUNCTIONS_URL }}
+          CRON_SECRET: ${{ secrets.REMINDERS_CRON_SECRET }}
+        run: |
+          if [ -z "$FUNCTIONS_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "SUPABASE_FUNCTIONS_URL and REMINDERS_CRON_SECRET must both be set." >&2
+            exit 1
+          fi
+          curl --fail-with-body --silent --show-error --max-time 60 \
+            -X POST "$FUNCTIONS_URL/send-reminders" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: $CRON_SECRET" \
+            -d '{"source":"github-actions"}'
